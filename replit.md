@@ -29,8 +29,9 @@ A React-based employee time tracking app — check in/out, view session history 
 
 - Uses `@lovable.dev/vite-tanstack-config` preset which bundles TanStack Start, Tailwind, React, tsconfig paths, and Cloudflare build plugin — do NOT add those manually
 - Port overridden to 5000 with `host: "0.0.0.0"` and `allowedHosts: true` for Replit proxy compatibility
-- Deployed as a static site (`dist/client` output dir from TanStack Start build)
-- `wrangler.jsonc` is present for Cloudflare Workers compatibility but not used in Replit dev mode
+- Build produces a Cloudflare Workers bundle (`dist/server/`) + client assets (`dist/client/`)
+- `serve.js` wraps the Cloudflare Worker output with a plain Node.js HTTP server so it can be deployed on Replit autoscale — this is the production entry point
+- `wrangler.jsonc` is present for Cloudflare Workers compatibility but not used in Replit dev/prod mode
 
 ## Product
 
@@ -47,3 +48,4 @@ _Populate as you build_
 - `@tanstack/react-start` requires Node.js >= 22.12.0 — use `nodejs-22` module
 - The Lovable vite config defaults to port 8080; the override in `vite.config.ts` forces port 5000
 - Do not add duplicate plugins (tanstackStart, viteReact, tailwindcss, tsConfigPaths, cloudflare) — they are already included by the Lovable preset
+- The build does NOT produce an `index.html`, so static deployment will always fail — use autoscale with `node serve.js`
