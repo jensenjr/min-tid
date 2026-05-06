@@ -116,6 +116,7 @@ export default function PunchClock() {
   const [, setTick] = useState(0);
   const [view, setView] = useState<"clock" | "history" | "share">("clock");
   const [addModal, setAddModal] = useState(false);
+  const [addForDate, setAddForDate] = useState<string | null>(null);
   const [editSession, setEditSession] = useState<Session | null>(null);
   const [shareText, setShareText] = useState("");
   const [shared, setShared] = useState(false);
@@ -400,6 +401,12 @@ export default function PunchClock() {
                             />
                           ))}
                         </div>
+                        <button
+                          onClick={() => setAddForDate(date)}
+                          className="pc-press mt-3 w-full flex items-center justify-center gap-1.5 py-2.5 rounded-[14px] border border-dashed border-pc-line text-pc-muted text-[13px] font-semibold hover:border-pc-orange hover:text-pc-orange transition-colors"
+                        >
+                          <span className="text-[16px] leading-none">+</span> Lägg till tid
+                        </button>
                       </div>
                     );
                   })}
@@ -460,11 +467,20 @@ export default function PunchClock() {
         />
       )}
 
-      {/* Add time modal */}
+      {/* Add time modal (clock tab) */}
       {addModal && (
         <SessionModal
           onClose={() => setAddModal(false)}
           onSave={(s) => { setSessions(prev => [...prev, s]); setAddModal(false); }}
+        />
+      )}
+
+      {/* Add time modal (history tab — pre-fills date) */}
+      {addForDate && (
+        <SessionModal
+          defaultDate={addForDate}
+          onClose={() => setAddForDate(null)}
+          onSave={(s) => { setSessions(prev => [...prev, s]); setAddForDate(null); }}
         />
       )}
 
@@ -616,10 +632,12 @@ function NavItem({ active, onClick, label, icon }: { active: boolean; onClick: (
 // ─── Session Modal (Add & Edit) ────────────────────────────────
 function SessionModal({
   session,
+  defaultDate,
   onClose,
   onSave,
 }: {
   session?: Session;
+  defaultDate?: string;
   onClose: () => void;
   onSave: (s: Session) => void;
 }) {
@@ -627,7 +645,7 @@ function SessionModal({
 
   const initDate = session
     ? new Date(session.checkIn).toISOString().slice(0, 10)
-    : todayStr();
+    : (defaultDate ?? todayStr());
   const initStart = session
     ? new Date(session.checkIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })
     : "";
