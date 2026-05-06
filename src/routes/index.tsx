@@ -1,26 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
+import PunchClock from "@/components/PunchClock";
 
 export const Route = createFileRoute("/")({
-  component: Index,
+  component: PunchClock,
+  head: () => ({
+    meta: [
+      { title: "Tidrapport – Dalslands Sparbank" },
+      { name: "description", content: "Enkel tidsregistrering för anställda. Stämpla in, stämpla ut, dela rapport." },
+      { name: "viewport", content: "width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" },
+      { name: "theme-color", content: "#ff5f00" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "default" },
+      { name: "apple-mobile-web-app-title", content: "Tidrapport" },
+    ],
+  }),
 });
-
-// IMPORTANT: Replace this placeholder. For sites with multiple pages (About, Services, Contact, etc.),
-// create separate route files (about.tsx, services.tsx, contact.tsx) — don't put all pages in this file.
-function PlaceholderIndex() {
-  return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
-    </div>
-  );
-}
-
-function Index() {
-  return <PlaceholderIndex />;
-}
