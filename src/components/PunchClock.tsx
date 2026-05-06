@@ -350,7 +350,7 @@ export default function PunchClock() {
                       <SessionRow
                         key={s.id}
                         session={s}
-                        label={`Pass ${i + 1}${s.manual ? " ✏️" : ""}`}
+                        index={i}
                         onEdit={() => handleEditSession(s)}
                         onDelete={() => handleDeleteSession(s.id)}
                       />
@@ -390,12 +390,11 @@ export default function PunchClock() {
                         </div>
                         {ld && <div className="text-[12px] text-pc-orange-deep mb-2 font-semibold">🥪 -45min lunch avdragen</div>}
                         <div className="space-y-0.5 pt-2 border-t border-pc-line">
-                          {daySessions.map(s => (
+                          {daySessions.map((s, i) => (
                             <SessionRow
                               key={s.id}
                               session={s}
-                              label={`${fmtTime(s.checkIn)} → ${s.checkOut ? fmtTime(s.checkOut) : "pågår"}${s.manual ? " ✏️" : ""}`}
-                              sublabel={fmtDur((((s.checkOut ?? now()) - s.checkIn) / 60000))}
+                              index={i}
                               onEdit={() => handleEditSession(s)}
                               onDelete={() => handleDeleteSession(s.id)}
                             />
@@ -484,25 +483,38 @@ export default function PunchClock() {
 // ─── Session Row ───────────────────────────────────────────────
 function SessionRow({
   session,
-  label,
-  sublabel,
+  index,
   onEdit,
   onDelete,
 }: {
   session: Session;
-  label: string;
-  sublabel?: string;
+  index: number;
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  const dur = fmtDur(((session.checkOut ?? now()) - session.checkIn) / 60000);
+  const timeRange = session.checkOut
+    ? `${fmtTime(session.checkIn)} → ${fmtTime(session.checkOut)}`
+    : `${fmtTime(session.checkIn)} → pågår`;
+
   return (
-    <div className="flex items-center justify-between py-1.5 gap-2">
+    <div className="flex items-center gap-2 py-1.5">
       <div className="flex-1 min-w-0">
-        <span className="text-[14px] font-semibold text-pc-ink tabular-nums">{label}</span>
-        {sublabel && <span className="text-[12px] text-pc-muted ml-2 tabular-nums">{sublabel}</span>}
+        <div className="flex items-center gap-1.5">
+          <span className="text-[14px] font-bold text-pc-ink">
+            Pass {index + 1}
+          </span>
+          {session.manual && <span className="text-[11px] text-pc-muted">✏️</span>}
+        </div>
+        <div className="flex items-center gap-2 mt-0.5">
+          <span className="text-[13px] text-pc-muted tabular-nums font-medium">{timeRange}</span>
+          {session.checkOut && (
+            <span className="text-[12px] text-pc-orange-deep font-semibold tabular-nums">{dur}</span>
+          )}
+        </div>
       </div>
       <div className="flex items-center gap-1 shrink-0">
-        {!session.checkOut ? null : (
+        {session.checkOut && (
           <button
             onClick={onEdit}
             className="w-8 h-8 flex items-center justify-center rounded-xl text-pc-muted hover:text-pc-orange hover:bg-pc-peach transition-colors"
