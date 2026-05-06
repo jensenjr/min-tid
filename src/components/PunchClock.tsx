@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 const LUNCH_MINUTES = 45;
 const LUNCH_THRESHOLD_HOURS = 5;
 const STORAGE_KEY = "punchclock_v2";
+const SHORT_SESSION_THRESHOLD_MS = 60 * 1000;
 
 // ─── Helpers ──────────────────────────────────────────────────
 function now() { return Date.now(); }
@@ -11,8 +12,7 @@ function todayStr() { return new Date().toISOString().slice(0, 10); }
 
 function fmtTime(ms: number | null | undefined) {
   if (!ms) return "--:--";
-  const d = new Date(ms);
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
 function fmtDur(minutes: number, showLunch = false) {
@@ -54,8 +54,7 @@ function groupByDate(sessions: Session[]) {
 }
 
 function fmtDateLabel(dateStr: string) {
-  const d = new Date(dateStr + "T12:00:00");
-  return d.toLocaleDateString("sv-SE", { weekday: "long", day: "numeric", month: "long" });
+  return new Date(dateStr + "T12:00:00").toLocaleDateString("sv-SE", { weekday: "long", day: "numeric", month: "long" });
 }
 
 function buildShareText(sessions: Session[], name: string) {
@@ -86,9 +85,28 @@ function load(): { name: string; sessions: Session[] } {
 }
 
 function save(data: { name: string; sessions: Session[] }) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch {
-    /* ignore */
-  }
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch { /* ignore */ }
+}
+
+// ─── Icons ────────────────────────────────────────────────────
+function IconEdit() {
+  return (
+    <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+    </svg>
+  );
+}
+
+function IconTrash() {
+  return (
+    <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 6 5 6 21 6" />
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+      <path d="M10 11v6M14 11v6" />
+      <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+    </svg>
+  );
 }
 
 // ─── Main App ─────────────────────────────────────────────────
@@ -98,13 +116,15 @@ export default function PunchClock() {
   const [, setTick] = useState(0);
   const [view, setView] = useState<"clock" | "history" | "share">("clock");
   const [addModal, setAddModal] = useState(false);
+  const [editSession, setEditSession] = useState<Session | null>(null);
   const [shareText, setShareText] = useState("");
   const [shared, setShared] = useState(false);
   const [editingName, setEditingName] = useState(false);
+  const [shortWarn, setShortWarn] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const t = setInterval(() => setTick(x => x + 1), 30000);
+    const t = setInterval(() => setTick(x => x + 1), 10000);
     return () => clearInterval(t);
   }, []);
 
@@ -127,9 +147,12 @@ export default function PunchClock() {
 
   function handlePunch() {
     if (isIn && activeSession) {
-      setSessions(prev => prev.map(s =>
-        s.id === activeSession.id ? { ...s, checkOut: now() } : s
-      ));
+      const elapsed = now() - activeSession.checkIn;
+      if (elapsed < SHORT_SESSION_THRESHOLD_MS) {
+        setShortWarn(true);
+        return;
+      }
+      doCheckOut();
     } else {
       setSessions(prev => [...prev, {
         id: crypto.randomUUID(),
@@ -140,6 +163,33 @@ export default function PunchClock() {
     }
   }
 
+  function doCheckOut() {
+    if (!activeSession) return;
+    setSessions(prev => prev.map(s =>
+      s.id === activeSession.id ? { ...s, checkOut: now() } : s
+    ));
+    setShortWarn(false);
+  }
+
+  function doDiscardShort() {
+    if (!activeSession) return;
+    setSessions(prev => prev.filter(s => s.id !== activeSession.id));
+    setShortWarn(false);
+  }
+
+  function handleDeleteSession(id: string) {
+    setSessions(prev => prev.filter(s => s.id !== id));
+  }
+
+  function handleEditSession(session: Session) {
+    setEditSession(session);
+  }
+
+  function handleSaveEdit(updated: Session) {
+    setSessions(prev => prev.map(s => s.id === updated.id ? updated : s));
+    setEditSession(null);
+  }
+
   function handleShare() {
     const txt = buildShareText(sessions, name);
     setShareText(txt);
@@ -148,10 +198,7 @@ export default function PunchClock() {
   }
 
   async function doCopy() {
-    try {
-      await navigator.clipboard.writeText(shareText);
-      setShared(true);
-    } catch { /* ignore */ }
+    try { await navigator.clipboard.writeText(shareText); setShared(true); } catch { /* ignore */ }
   }
 
   async function doNativeShare() {
@@ -187,10 +234,16 @@ export default function PunchClock() {
         @keyframes pcSheet { from { transform: translateY(100%); } to { transform: translateY(0); } }
         .pc-overlay { animation: pcOverlay 0.25s ease; }
         @keyframes pcOverlay { from { opacity: 0; } to { opacity: 1; } }
+        .pc-input {
+          width: 100%; padding: 14px 16px; border-radius: 16px;
+          border: 1px solid #ece6df; font-size: 16px; outline: none;
+          margin-bottom: 16px; background: #fdf6ee; font-weight: 600;
+          color: #2d1717;
+        }
+        .pc-input:focus { border-color: #ff5f00; background: #fff; }
       `}</style>
 
       <div className="mx-auto max-w-[480px] min-h-screen flex flex-col relative pb-[88px]">
-        {/* Status bar safe area */}
         <div className="h-[env(safe-area-inset-top,0px)]" />
 
         {/* Header */}
@@ -254,9 +307,9 @@ export default function PunchClock() {
                   >
                     <svg viewBox="0 0 24 24" className="w-9 h-9" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                       {isIn ? (
-                        <><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" /></>
+                        <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" />
                       ) : (
-                        <><polygon points="6 4 20 12 6 20 6 4" fill="currentColor" /></>
+                        <polygon points="6 4 20 12 6 20 6 4" fill="currentColor" />
                       )}
                     </svg>
                     <span className="text-[19px] tracking-tight">{isIn ? "Checka ut" : "Checka in"}</span>
@@ -292,14 +345,15 @@ export default function PunchClock() {
                   </div>
                 )}
                 {todaySessions.length > 0 && (
-                  <div className="mt-4 pt-4 border-t border-pc-line space-y-2">
+                  <div className="mt-4 pt-4 border-t border-pc-line space-y-1">
                     {todaySessions.map((s, i) => (
-                      <div key={s.id} className="flex justify-between text-[14px]">
-                        <span className="text-pc-muted font-medium">Pass {i + 1}{s.manual ? " ✏️" : ""}</span>
-                        <span className="font-semibold tabular-nums">
-                          {fmtTime(s.checkIn)} → {s.checkOut ? fmtTime(s.checkOut) : <span className="text-pc-orange">pågår</span>}
-                        </span>
-                      </div>
+                      <SessionRow
+                        key={s.id}
+                        session={s}
+                        label={`Pass ${i + 1}${s.manual ? " ✏️" : ""}`}
+                        onEdit={() => handleEditSession(s)}
+                        onDelete={() => handleDeleteSession(s.id)}
+                      />
                     ))}
                   </div>
                 )}
@@ -327,22 +381,24 @@ export default function PunchClock() {
                 {Object.entries(groupByDate(sessions))
                   .sort((a, b) => b[0].localeCompare(a[0]))
                   .map(([date, daySessions]) => {
-                    const { net, lunchDeducted } = computeDayMinutes(daySessions);
+                    const { net, lunchDeducted: ld } = computeDayMinutes(daySessions);
                     return (
                       <div key={date} className="bg-white rounded-[20px] p-4 border border-pc-line shadow-[0_2px_12px_rgba(81,43,43,0.04)]">
                         <div className="flex justify-between items-baseline mb-2">
                           <div className="font-bold text-[15px] capitalize">{fmtDateLabel(date)}</div>
                           <div className="font-extrabold text-pc-orange text-[15px] tabular-nums">{fmtDur(net)}</div>
                         </div>
-                        {lunchDeducted && <div className="text-[12px] text-pc-orange-deep mb-2 font-semibold">🥪 -45min lunch avdragen</div>}
-                        <div className="space-y-1 pt-2 border-t border-pc-line">
+                        {ld && <div className="text-[12px] text-pc-orange-deep mb-2 font-semibold">🥪 -45min lunch avdragen</div>}
+                        <div className="space-y-0.5 pt-2 border-t border-pc-line">
                           {daySessions.map(s => (
-                            <div key={s.id} className="flex justify-between text-[13px] py-1">
-                              <span className="text-pc-ink/80 font-medium tabular-nums">
-                                {fmtTime(s.checkIn)} → {s.checkOut ? fmtTime(s.checkOut) : "pågår"}{s.manual ? " ✏️" : ""}
-                              </span>
-                              <span className="text-pc-muted tabular-nums">{fmtDur((((s.checkOut ?? now()) - s.checkIn) / 60000))}</span>
-                            </div>
+                            <SessionRow
+                              key={s.id}
+                              session={s}
+                              label={`${fmtTime(s.checkIn)} → ${s.checkOut ? fmtTime(s.checkOut) : "pågår"}${s.manual ? " ✏️" : ""}`}
+                              sublabel={fmtDur((((s.checkOut ?? now()) - s.checkIn) / 60000))}
+                              onEdit={() => handleEditSession(s)}
+                              onDelete={() => handleDeleteSession(s.id)}
+                            />
                           ))}
                         </div>
                       </div>
@@ -396,14 +452,133 @@ export default function PunchClock() {
         </nav>
       </div>
 
-      {addModal && <AddTimeModal onClose={() => setAddModal(false)} onSave={(s) => {
-        setSessions(prev => [...prev, s]);
-        setAddModal(false);
-      }} />}
+      {/* Short session warning */}
+      {shortWarn && activeSession && (
+        <ShortSessionWarning
+          elapsed={now() - activeSession.checkIn}
+          onStop={doDiscardShort}
+          onCancel={() => setShortWarn(false)}
+        />
+      )}
+
+      {/* Add time modal */}
+      {addModal && (
+        <SessionModal
+          onClose={() => setAddModal(false)}
+          onSave={(s) => { setSessions(prev => [...prev, s]); setAddModal(false); }}
+        />
+      )}
+
+      {/* Edit session modal */}
+      {editSession && (
+        <SessionModal
+          session={editSession}
+          onClose={() => setEditSession(null)}
+          onSave={handleSaveEdit}
+        />
+      )}
     </div>
   );
 }
 
+// ─── Session Row ───────────────────────────────────────────────
+function SessionRow({
+  session,
+  label,
+  sublabel,
+  onEdit,
+  onDelete,
+}: {
+  session: Session;
+  label: string;
+  sublabel?: string;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between py-1.5 gap-2">
+      <div className="flex-1 min-w-0">
+        <span className="text-[14px] font-semibold text-pc-ink tabular-nums">{label}</span>
+        {sublabel && <span className="text-[12px] text-pc-muted ml-2 tabular-nums">{sublabel}</span>}
+      </div>
+      <div className="flex items-center gap-1 shrink-0">
+        {!session.checkOut ? null : (
+          <button
+            onClick={onEdit}
+            className="w-8 h-8 flex items-center justify-center rounded-xl text-pc-muted hover:text-pc-orange hover:bg-pc-peach transition-colors"
+            aria-label="Redigera pass"
+          >
+            <IconEdit />
+          </button>
+        )}
+        <button
+          onClick={onDelete}
+          className="w-8 h-8 flex items-center justify-center rounded-xl text-pc-muted hover:text-red-500 hover:bg-red-50 transition-colors"
+          aria-label="Ta bort pass"
+        >
+          <IconTrash />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Short Session Warning ─────────────────────────────────────
+function ShortSessionWarning({
+  elapsed,
+  onStop,
+  onCancel,
+}: {
+  elapsed: number;
+  onStop: () => void;
+  onCancel: () => void;
+}) {
+  const secs = Math.floor(elapsed / 1000);
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center pc-overlay" style={{ background: "rgba(45,23,23,0.55)" }} onClick={onCancel}>
+      <div
+        className="pc-sheet bg-white w-full max-w-[480px] rounded-t-[28px] px-6 pt-6"
+        style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)" }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="w-10 h-1 bg-pc-line rounded-full mx-auto mb-5" />
+
+        <div className="w-14 h-14 rounded-2xl bg-amber-100 flex items-center justify-center mb-4 mx-auto">
+          <svg viewBox="0 0 24 24" className="w-7 h-7 text-amber-600" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+        </div>
+
+        <div className="text-center mb-2">
+          <div className="font-extrabold text-[20px] tracking-tight mb-2">Ingen tid registreras</div>
+          <div className="text-[14px] text-pc-muted leading-relaxed">
+            Du har bara stämplat in i <span className="font-bold text-pc-ink">{secs} sekunder</span>.
+            Pass kortare än 1 minut sparas inte.
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 mt-6">
+          <button
+            onClick={onCancel}
+            className="pc-press py-4 rounded-[16px] bg-pc-bg border border-pc-line font-bold text-[15px] text-pc-ink"
+          >
+            Avbryt
+          </button>
+          <button
+            onClick={onStop}
+            className="pc-press py-4 rounded-[16px] bg-pc-orange text-white font-bold text-[15px] shadow-[0_8px_20px_-8px_rgba(255,95,0,0.6)]"
+          >
+            Stoppa klockan
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Stat ──────────────────────────────────────────────────────
 function Stat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
     <div className="bg-pc-apricot rounded-2xl px-4 py-3">
@@ -413,6 +588,7 @@ function Stat({ label, value, accent }: { label: string; value: string; accent?:
   );
 }
 
+// ─── Nav Item ─────────────────────────────────────────────────
 function NavItem({ active, onClick, label, icon }: { active: boolean; onClick: () => void; label: string; icon: React.ReactNode }) {
   return (
     <button
@@ -425,10 +601,31 @@ function NavItem({ active, onClick, label, icon }: { active: boolean; onClick: (
   );
 }
 
-function AddTimeModal({ onClose, onSave }: { onClose: () => void; onSave: (s: Session) => void }) {
-  const [date, setDate] = useState(todayStr());
-  const [startTime, setStartTime] = useState("");
-  const [endTime, setEndTime] = useState("");
+// ─── Session Modal (Add & Edit) ────────────────────────────────
+function SessionModal({
+  session,
+  onClose,
+  onSave,
+}: {
+  session?: Session;
+  onClose: () => void;
+  onSave: (s: Session) => void;
+}) {
+  const isEdit = !!session;
+
+  const initDate = session
+    ? new Date(session.checkIn).toISOString().slice(0, 10)
+    : todayStr();
+  const initStart = session
+    ? new Date(session.checkIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })
+    : "";
+  const initEnd = session?.checkOut
+    ? new Date(session.checkOut).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })
+    : "";
+
+  const [date, setDate] = useState(initDate);
+  const [startTime, setStartTime] = useState(initStart);
+  const [endTime, setEndTime] = useState(initEnd);
   const [err, setErr] = useState("");
 
   function handleSave() {
@@ -436,7 +633,12 @@ function AddTimeModal({ onClose, onSave }: { onClose: () => void; onSave: (s: Se
     const checkIn = new Date(`${date}T${startTime}`).getTime();
     const checkOut = endTime ? new Date(`${date}T${endTime}`).getTime() : null;
     if (checkOut && checkOut <= checkIn) { setErr("Sluttid måste vara efter starttid."); return; }
-    onSave({ id: crypto.randomUUID(), checkIn, checkOut, manual: true });
+    onSave({
+      id: session?.id ?? crypto.randomUUID(),
+      checkIn,
+      checkOut,
+      manual: true,
+    });
   }
 
   const previewMs = startTime && endTime
@@ -447,10 +649,20 @@ function AddTimeModal({ onClose, onSave }: { onClose: () => void; onSave: (s: Se
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center pc-overlay" style={{ background: "rgba(45,23,23,0.55)" }} onClick={onClose}>
-      <div className="pc-sheet bg-white w-full max-w-[480px] rounded-t-[28px] px-6 pt-6" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)" }} onClick={e => e.stopPropagation()}>
+      <div
+        className="pc-sheet bg-white w-full max-w-[480px] rounded-t-[28px] px-6 pt-6"
+        style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)" }}
+        onClick={e => e.stopPropagation()}
+      >
         <div className="w-10 h-1 bg-pc-line rounded-full mx-auto mb-5" />
-        <div className="font-extrabold text-[22px] tracking-tight mb-1">Lägg till tid</div>
-        <div className="text-[13px] text-pc-muted mb-6">Välj datum, start och sluttid. Lunchen dras automatiskt om du jobbat mer än 5h.</div>
+        <div className="font-extrabold text-[22px] tracking-tight mb-1">
+          {isEdit ? "Redigera pass" : "Lägg till tid"}
+        </div>
+        <div className="text-[13px] text-pc-muted mb-6">
+          {isEdit
+            ? "Ändra start- och sluttid för detta pass."
+            : "Välj datum, start och sluttid. Lunchen dras automatiskt om du jobbat mer än 5h."}
+        </div>
 
         <Label>Datum</Label>
         <input type="date" value={date} onChange={e => setDate(e.target.value)} className="pc-input" />
@@ -466,8 +678,10 @@ function AddTimeModal({ onClose, onSave }: { onClose: () => void; onSave: (s: Se
             <div className="font-extrabold text-pc-orange-deep mb-0.5 text-[15px]">
               Netto: {fmtDur(previewNet)}
             </div>
-            {previewLunch && <div className="text-pc-orange-deep/80">🥪 45min lunch dras av (mer än 5h)</div>}
-            {!previewLunch && <div className="text-pc-muted">Ingen lunchavdrag (under 5h)</div>}
+            {previewLunch
+              ? <div className="text-pc-orange-deep/80">🥪 45min lunch dras av (mer än 5h)</div>
+              : <div className="text-pc-muted">Ingen lunchavdrag (under 5h)</div>
+            }
           </div>
         )}
 
@@ -478,19 +692,9 @@ function AddTimeModal({ onClose, onSave }: { onClose: () => void; onSave: (s: Se
             Avbryt
           </button>
           <button onClick={handleSave} className="pc-press py-4 rounded-[16px] bg-pc-orange text-white font-bold text-[15px] shadow-[0_8px_20px_-8px_rgba(255,95,0,0.6)]">
-            Spara
+            {isEdit ? "Spara ändringar" : "Spara"}
           </button>
         </div>
-
-        <style>{`
-          .pc-input {
-            width: 100%; padding: 14px 16px; border-radius: 16px;
-            border: 1px solid #ece6df; font-size: 16px; outline: none;
-            margin-bottom: 16px; background: #fdf6ee; font-weight: 600;
-            color: #2d1717;
-          }
-          .pc-input:focus { border-color: #ff5f00; background: #fff; }
-        `}</style>
       </div>
     </div>
   );
