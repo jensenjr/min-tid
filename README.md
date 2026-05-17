@@ -52,7 +52,26 @@ Then open `http://localhost:5173`.
 
 ## Deployment
 
-The app targets Cloudflare Workers. Deploy with:
+### Coolify / Docker (recommended for self-hosting)
+
+A [`Dockerfile`](Dockerfile) is included. The build produces a standard Node.js server via [`serve.js`](serve.js).
+
+In Coolify:
+1. Create a new **Resource → Docker** service pointing at this repo.
+2. Set the **port** to `3000` (the container's default).
+3. Optionally set the `PORT` environment variable to override the port.
+4. Deploy — Coolify will build the image and start the container automatically.
+
+To build and run locally with Docker:
+
+```bash
+docker build -t min-tid .
+docker run -p 3000:3000 min-tid
+```
+
+Then open `http://localhost:3000`.
+
+### Cloudflare Workers
 
 ```bash
 npx wrangler deploy
