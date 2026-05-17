@@ -1,11 +1,15 @@
 import { useState, useEffect, useRef } from "react";
-import Onboarding from "./Onboarding";
+import Onboarding, { type OnboardingResult } from "./Onboarding";
 import AbsenceModal, { type AbsenceEntry, type AbsenceCategory, ABSENCE_META } from "./AbsenceModal";
 import QuickScheduleModal from "./QuickScheduleModal";
+import SettingsModal from "./SettingsModal";
+import {
+  type WeekSchedule, type DayKey,
+  DEFAULT_SCHEDULE, dayKeyOf, applyLunch, weeklyNetMin, fmtMin,
+  migrateNormHours,
+} from "../lib/schedule";
 
 // ─── Constants ────────────────────────────────────────────────
-const LUNCH_MINUTES = 45;
-const LUNCH_THRESHOLD_HOURS = 5;
 const STORAGE_KEY = "punchclock_v2";
 const SHORT_SESSION_THRESHOLD_MS = 60 * 1000;
 
@@ -15,7 +19,7 @@ type HistoryFilter = "week" | "lastweek" | "month" | "all";
 
 type StorageShape = {
   name: string;
-  normHours: number;
+  schedule: WeekSchedule;
   department?: string;
   onboardingDone: boolean;
   sessions: Session[];
@@ -38,21 +42,15 @@ function fmtDur(minutes: number) {
   return h > 0 ? `${h}h ${m}min` : `${m}min`;
 }
 
-function applyLunchRule(rawMinutes: number) {
-  if (rawMinutes > LUNCH_THRESHOLD_HOURS * 60) {
-    return { net: rawMinutes - LUNCH_MINUTES, lunchDeducted: true };
-  }
-  return { net: rawMinutes, lunchDeducted: false };
-}
-
-function computeDayMinutes(sessions: Session[]) {
+function computeDayMinutes(sessions: Session[], dateStr: string, schedule: WeekSchedule) {
+  const cfg = schedule[dayKeyOf(new Date(dateStr + "T12:00:00"))];
   let raw = 0;
   for (const s of sessions) {
     const end = s.checkOut ?? now();
     raw += (end - s.checkIn) / 60000;
   }
-  const { net, lunchDeducted } = applyLunchRule(raw);
-  return { raw, net, lunchDeducted };
+  const { net, lunchDeducted } = applyLunch(raw, cfg);
+  return { raw, net, lunchDeducted, cfg };
 }
 
 // ─── Week helpers ─────────────────────────────────────────────
@@ -96,10 +94,12 @@ function groupByDate(sessions: Session[]) {
   return map;
 }
 
-function computeWeekNet(sessions: Session[]): number {
+function computeWeekNet(sessions: Session[], schedule: WeekSchedule): number {
   const byDate = groupByDate(sessions);
   let total = 0;
-  for (const ds of Object.values(byDate)) total += computeDayMinutes(ds).net;
+  for (const [date, ds] of Object.entries(byDate)) {
+    total += computeDayMinutes(ds, date, schedule).net;
+  }
   return total;
 }
 
@@ -125,11 +125,6 @@ function getAbsencesForDate(absences: AbsenceEntry[], date: string): AbsenceEntr
   return absences.filter(a => a.startDate <= date && a.endDate >= date);
 }
 
-function absenceLabel(a: AbsenceEntry): string {
-  const meta = ABSENCE_META[a.category];
-  return `${meta.emoji} ${meta.label}`;
-}
-
 function absenceDateRangeLabel(a: AbsenceEntry): string {
   if (a.startDate === a.endDate) return fmtDateLabel(a.startDate);
   const s = new Date(a.startDate + "T12:00:00").toLocaleDateString("sv-SE", { day: "numeric", month: "short" });
@@ -137,7 +132,7 @@ function absenceDateRangeLabel(a: AbsenceEntry): string {
   return `${s} – ${e}`;
 }
 
-// ─── Filter helper ────────────────────────────────────────────
+// ─── Filter helpers ───────────────────────────────────────────
 function filterSessions(sessions: Session[], filter: HistoryFilter): Session[] {
   const ref = new Date();
   if (filter === "all") return sessions;
@@ -183,16 +178,14 @@ function filterAbsences(absences: AbsenceEntry[], filter: HistoryFilter): Absenc
 }
 
 // ─── Share text ───────────────────────────────────────────────
-function buildShareText(sessions: Session[], absences: AbsenceEntry[], name: string, normHours: number) {
-  const weeklyNorm = normHours * 5 * 60;
+function buildShareText(sessions: Session[], absences: AbsenceEntry[], name: string, schedule: WeekSchedule) {
+  const wNorm = weeklyNetMin(schedule);
   const completed = sessions.filter(s => s.checkOut !== null);
 
-  // Collect all dates (from sessions + absences)
   const dateSet = new Set<string>();
   for (const s of completed) dateSet.add(new Date(s.checkIn).toISOString().slice(0, 10));
   for (const a of absences) expandAbsenceDates(a).forEach(d => dateSet.add(d));
 
-  // Group all dates by week
   const weekMap: Record<string, Set<string>> = {};
   for (const d of dateSet) {
     const wk = weekKey(new Date(d + "T12:00:00"));
@@ -208,15 +201,14 @@ function buildShareText(sessions: Session[], absences: AbsenceEntry[], name: str
   for (const wMon of weeks) {
     const wDates = [...weekMap[wMon]].sort();
     const wSessions = wDates.flatMap(d => byDate[d] ?? []);
-    const wNet = computeWeekNet(wSessions);
+    const wNet = computeWeekNet(wSessions, schedule);
     grandNet += wNet;
-    const wh = Math.floor(wNet / 60), wm = Math.round(wNet % 60);
-    const diff = wNet - weeklyNorm;
+    const diff = wNet - wNorm;
     const diffStr = diff >= 0
-      ? `+${Math.floor(diff / 60)}h ${Math.round(diff % 60)}min`
-      : `−${Math.floor(Math.abs(diff) / 60)}h ${Math.round(Math.abs(diff) % 60)}min`;
+      ? `+${fmtMin(diff)}`
+      : `−${fmtMin(Math.abs(diff))}`;
     lines.push(`── ${weekRangeLabel(wMon)} ──`);
-    lines.push(`Totalt: ${wh}h ${wm}min  (${diffStr} mot norm)\n`);
+    lines.push(`Totalt: ${fmtMin(wNet)}  (${diffStr} mot norm)\n`);
 
     for (const d of wDates) {
       const ds = byDate[d] ?? [];
@@ -224,22 +216,18 @@ function buildShareText(sessions: Session[], absences: AbsenceEntry[], name: str
       if (ds.length === 0 && da.length === 0) continue;
 
       if (ds.length > 0) {
-        const { net, lunchDeducted } = computeDayMinutes(ds);
-        const dh = Math.floor(net / 60), dm = Math.round(net % 60);
-        lines.push(`  ${fmtDateLabel(d)}: ${dh}h ${dm}min${lunchDeducted ? " (lunch -45min)" : ""}`);
+        const { net, lunchDeducted, cfg } = computeDayMinutes(ds, d, schedule);
+        lines.push(`  ${fmtDateLabel(d)}: ${fmtMin(net)}${lunchDeducted ? ` (lunch -${cfg.lunchMinutes}min)` : ""}`);
         for (const s of ds) {
           lines.push(`    ${fmtTime(s.checkIn)} → ${fmtTime(s.checkOut)}${s.manual ? " ✏️" : ""}`);
         }
       } else {
-        // absence-only day
         const a = da[0];
-        const meta = ABSENCE_META[a.category];
         if (a.startDate === d) {
-          // only show on start date to avoid duplicates
+          const meta = ABSENCE_META[a.category];
           lines.push(`  ${a.startDate === a.endDate ? fmtDateLabel(d) : absenceDateRangeLabel(a)}: ${meta.emoji} ${meta.label}`);
         }
       }
-      // Absences on a day that also has sessions
       if (ds.length > 0) {
         for (const a of da) {
           const meta = ABSENCE_META[a.category];
@@ -250,7 +238,7 @@ function buildShareText(sessions: Session[], absences: AbsenceEntry[], name: str
     lines.push("");
   }
 
-  lines.push(`Total: ${Math.floor(grandNet / 60)}h ${Math.round(grandNet % 60)}min`);
+  lines.push(`Total: ${fmtMin(grandNet)}`);
   lines.push(`\nGenererat ${new Date().toLocaleString("sv-SE")}`);
   return lines.join("\n");
 }
@@ -259,17 +247,22 @@ function buildShareText(sessions: Session[], absences: AbsenceEntry[], name: str
 function load(): StorageShape {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : {};
+    const p = raw ? JSON.parse(raw) : {};
+    // Migrate old normHours → schedule
+    let schedule: WeekSchedule = p.schedule ?? null;
+    if (!schedule) {
+      schedule = p.normHours ? migrateNormHours(p.normHours) : DEFAULT_SCHEDULE;
+    }
     return {
-      name: parsed.name ?? "",
-      normHours: parsed.normHours ?? 8,
-      department: parsed.department,
-      onboardingDone: parsed.onboardingDone ?? false,
-      sessions: parsed.sessions ?? [],
-      absences: parsed.absences ?? [],
+      name: p.name ?? "",
+      schedule,
+      department: p.department,
+      onboardingDone: p.onboardingDone ?? false,
+      sessions: p.sessions ?? [],
+      absences: p.absences ?? [],
     };
   } catch {
-    return { name: "", normHours: 8, onboardingDone: false, sessions: [], absences: [] };
+    return { name: "", schedule: DEFAULT_SCHEDULE, onboardingDone: false, sessions: [], absences: [] };
   }
 }
 
@@ -294,6 +287,15 @@ function IconTrash() {
       <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
       <path d="M10 11v6M14 11v6" />
       <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+    </svg>
+  );
+}
+
+function IconGear() {
+  return (
+    <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
     </svg>
   );
 }
@@ -326,9 +328,9 @@ function IconCalendarX() {
 // ─── Main App ─────────────────────────────────────────────────
 export default function PunchClock() {
   const [name, setName] = useState("");
-  const [normHours, setNormHours] = useState(8);
+  const [schedule, setSchedule] = useState<WeekSchedule>(DEFAULT_SCHEDULE);
   const [department, setDepartment] = useState<string | undefined>();
-  const [onboardingDone, setOnboardingDone] = useState(true); // default true until loaded
+  const [onboardingDone, setOnboardingDone] = useState(true);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [absences, setAbsences] = useState<AbsenceEntry[]>([]);
   const [, setTick] = useState(0);
@@ -337,13 +339,12 @@ export default function PunchClock() {
   const [addModal, setAddModal] = useState(false);
   const [absenceModal, setAbsenceModal] = useState(false);
   const [scheduleModal, setScheduleModal] = useState(false);
+  const [settingsModal, setSettingsModal] = useState(false);
   const [addForDate, setAddForDate] = useState<string | null>(null);
   const [editSession, setEditSession] = useState<Session | null>(null);
   const [shareText, setShareText] = useState("");
   const [shared, setShared] = useState(false);
-  const [editingName, setEditingName] = useState(false);
   const [shortWarn, setShortWarn] = useState(false);
-  const nameRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const t = setInterval(() => setTick(x => x + 1), 10000);
@@ -353,29 +354,29 @@ export default function PunchClock() {
   useEffect(() => {
     const d = load();
     setName(d.name);
-    setNormHours(d.normHours);
+    setSchedule(d.schedule);
     setDepartment(d.department);
     setOnboardingDone(d.onboardingDone);
     setSessions(d.sessions);
     setAbsences(d.absences);
-    if (d.onboardingDone && !d.name) setEditingName(true);
   }, []);
 
   useEffect(() => {
-    save({ name, normHours, department, onboardingDone, sessions, absences });
-  }, [name, normHours, department, onboardingDone, sessions, absences]);
+    save({ name, schedule, department, onboardingDone, sessions, absences });
+  }, [name, schedule, department, onboardingDone, sessions, absences]);
 
-  const weeklyNorm = normHours * 5 * 60;
+  const weeklyNorm = weeklyNetMin(schedule);
   const activeSession = sessions.find(s => !s.checkOut);
   const todaySessions = sessions.filter(s => new Date(s.checkIn).toISOString().slice(0, 10) === todayStr());
-  const { lunchDeducted } = computeDayMinutes(todaySessions);
+  const todayDate = todayStr();
+  const { net: todayNet, lunchDeducted, cfg: todayCfg } = computeDayMinutes(todaySessions, todayDate, schedule);
+  void todayNet;
   const isIn = !!activeSession;
 
   const filteredSessions = filterSessions(sessions, historyFilter);
   const filteredAbsences = filterAbsences(absences, historyFilter);
   const currentWeekKey = weekKey(new Date());
 
-  // Compute all dates for history (sessions + absences)
   function getHistoryDates(fSessions: Session[], fAbsences: AbsenceEntry[]) {
     const dateSet = new Set<string>();
     for (const s of fSessions) dateSet.add(new Date(s.checkIn).toISOString().slice(0, 10));
@@ -416,25 +417,27 @@ export default function PunchClock() {
     setAbsences(prev => [...prev, entry]);
     setAbsenceModal(false);
   }
-  function handleSaveSchedule(newSessions: { id: string; checkIn: number; checkOut: number; manual: true }[]) {
+  function handleSaveQuickSchedule(newSessions: { id: string; checkIn: number; checkOut: number; manual: true }[]) {
     setSessions(prev => [...prev, ...newSessions]);
     setScheduleModal(false);
   }
 
-  function handleOnboardingComplete(data: { name: string; normHours: number; department?: string }) {
-    setName(data.name);
-    setNormHours(data.normHours);
-    setDepartment(data.department);
+  function handleOnboardingComplete(result: OnboardingResult) {
+    setName(result.name);
+    setSchedule(result.schedule);
+    setDepartment(result.department);
     setOnboardingDone(true);
   }
 
-  function handleOnboardingSkip() {
-    setNormHours(8);
-    setOnboardingDone(true);
+  function handleSettingsSave(result: { name: string; department?: string; schedule: WeekSchedule }) {
+    setName(result.name);
+    setDepartment(result.department);
+    setSchedule(result.schedule);
+    setSettingsModal(false);
   }
 
   function handleShare() {
-    setShareText(buildShareText(sessions, absences, name, normHours));
+    setShareText(buildShareText(sessions, absences, name, schedule));
     setView("share");
     setShared(false);
   }
@@ -451,23 +454,18 @@ export default function PunchClock() {
 
   const liveMs = activeSession ? (now() - activeSession.checkIn) : 0;
   const liveTotalRaw = todaySessions.reduce((a, s) => a + ((s.checkOut ?? now()) - s.checkIn), 0) / 60000;
-  const { net: liveNet } = applyLunchRule(liveTotalRaw);
+  const { net: liveNet } = applyLunch(liveTotalRaw, todayCfg);
 
   const FILTERS: { key: HistoryFilter; label: string }[] = [
-    { key: "week", label: "Den här veckan" },
-    { key: "lastweek", label: "Förra veckan" },
-    { key: "month", label: "Denna månad" },
-    { key: "all", label: "Allt" },
+    { key: "week",     label: "Den här veckan" },
+    { key: "lastweek", label: "Förra veckan"   },
+    { key: "month",    label: "Denna månad"    },
+    { key: "all",      label: "Allt"           },
   ];
 
   // ── Onboarding gate ─────────────────────────────────────────
   if (!onboardingDone) {
-    return (
-      <Onboarding
-        onComplete={handleOnboardingComplete}
-        onSkip={handleOnboardingSkip}
-      />
-    );
+    return <Onboarding onComplete={handleOnboardingComplete} />;
   }
 
   return (
@@ -490,8 +488,6 @@ export default function PunchClock() {
         @keyframes pcSheet { from { transform: translateY(100%); } to { transform: translateY(0); } }
         .pc-overlay { animation: pcOverlay 0.25s ease; }
         @keyframes pcOverlay { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes pcOverlay { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes pcSheet { from { transform: translateY(100%); } to { transform: translateY(0); } }
         .pc-input {
           width: 100%; padding: 14px 16px; border-radius: 16px;
           border: 1px solid #ece6df; font-size: 16px; outline: none;
@@ -517,29 +513,26 @@ export default function PunchClock() {
               <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-pc-muted">
                 Tidrapport{department ? ` · ${department}` : ""}
               </div>
-              {editingName ? (
-                <input
-                  ref={nameRef} autoFocus value={name}
-                  onChange={e => setName(e.target.value)}
-                  onBlur={() => { if (name.trim()) setEditingName(false); }}
-                  onKeyDown={e => { if (e.key === "Enter" && name.trim()) setEditingName(false); }}
-                  placeholder="Ditt namn..."
-                  className="border-none outline-none text-[17px] font-bold bg-transparent w-44 py-0.5"
-                  style={{ borderBottom: "2px solid #ff5f00" }}
-                />
-              ) : (
-                <button onClick={() => setEditingName(true)} className="text-[17px] font-bold leading-tight">
-                  {name || "Sätt namn"}
-                </button>
-              )}
+              <div className="text-[17px] font-bold leading-tight text-pc-ink">
+                {name || "—"}
+              </div>
             </div>
           </div>
-          {isIn && (
-            <div className="flex items-center gap-1.5 bg-pc-orange/10 text-pc-orange-deep px-3 py-1.5 rounded-full">
-              <span className="w-2 h-2 rounded-full bg-pc-orange animate-pulse" />
-              <span className="text-[12px] font-bold">LIVE</span>
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            {isIn && (
+              <div className="flex items-center gap-1.5 bg-pc-orange/10 text-pc-orange-deep px-3 py-1.5 rounded-full">
+                <span className="w-2 h-2 rounded-full bg-pc-orange animate-pulse" />
+                <span className="text-[12px] font-bold">LIVE</span>
+              </div>
+            )}
+            <button
+              onClick={() => setSettingsModal(true)}
+              className="w-9 h-9 rounded-xl flex items-center justify-center text-pc-muted hover:text-pc-orange hover:bg-pc-peach transition-colors"
+              aria-label="Inställningar"
+            >
+              <IconGear />
+            </button>
+          </div>
         </header>
 
         <main className="flex-1 px-5">
@@ -592,9 +585,9 @@ export default function PunchClock() {
                   <Stat label="Netto arbetstid" value={fmtDur(liveNet)} accent />
                   <Stat label="Antal pass" value={`${todaySessions.length} st`} />
                 </div>
-                {lunchDeducted && (
+                {lunchDeducted && todayCfg.lunchMinutes > 0 && (
                   <div className="mt-3 bg-pc-peach text-pc-orange-deep rounded-2xl px-4 py-3 text-[13px] font-semibold flex items-center gap-2">
-                    <span>🥪</span> 45 min lunch avdragen (över 5h)
+                    <span>🥪</span> {todayCfg.lunchMinutes} min lunch avdragen
                   </div>
                 )}
                 {todaySessions.length > 0 && (
@@ -641,7 +634,6 @@ export default function PunchClock() {
             <div className="pc-fade pt-2">
               <h1 className="text-[28px] font-extrabold tracking-tight mb-4">Historik</h1>
 
-              {/* Filter pills */}
               <div className="flex gap-2 mb-5 overflow-x-auto hide-scroll -mx-1 px-1">
                 {FILTERS.map(({ key, label }) => (
                   <button
@@ -669,7 +661,6 @@ export default function PunchClock() {
                   );
                 }
 
-                // Group all dates by week
                 const weekMap: Record<string, string[]> = {};
                 for (const d of allDates) {
                   const wk = weekKey(new Date(d + "T12:00:00"));
@@ -684,7 +675,7 @@ export default function PunchClock() {
                       .sort((a, b) => b[0].localeCompare(a[0]))
                       .map(([wMon, wDates]) => {
                         const wSessions = wDates.flatMap(d => byDate[d] ?? []);
-                        const wNet = computeWeekNet(wSessions);
+                        const wNet = computeWeekNet(wSessions, schedule);
                         const isCurrentWeek = wMon === currentWeekKey;
                         const meetsNorm = wNet >= weeklyNorm;
                         const diff = wNet - weeklyNorm;
@@ -692,8 +683,6 @@ export default function PunchClock() {
 
                         return (
                           <div key={wMon} className="bg-white rounded-[22px] border border-pc-line shadow-[0_2px_14px_rgba(81,43,43,0.05)] overflow-hidden">
-
-                            {/* Week header */}
                             <div className="px-4 pt-4 pb-3 flex items-start justify-between gap-3">
                               <div>
                                 <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-pc-muted mb-1.5">
@@ -703,45 +692,43 @@ export default function PunchClock() {
                                   {fmtDur(wNet)}
                                 </div>
                                 <div className="text-[12px] text-pc-muted mt-0.5 font-medium">
-                                  av {fmtDur(weeklyNorm)} norm ({normHours}h/dag)
+                                  av {fmtMin(weeklyNorm)} norm
                                 </div>
                               </div>
                               <div className={`shrink-0 mt-0.5 px-3 py-1.5 rounded-full text-[12px] font-extrabold flex items-center gap-1.5 ${
-                                meetsNorm
-                                  ? "bg-green-50 text-green-700"
-                                  : isCurrentWeek
-                                  ? "bg-amber-50 text-amber-700"
+                                meetsNorm ? "bg-green-50 text-green-700"
+                                  : isCurrentWeek ? "bg-amber-50 text-amber-700"
                                   : "bg-red-50 text-red-600"
                               }`}>
                                 <span className={`w-2 h-2 rounded-full ${
                                   meetsNorm ? "bg-green-500" : isCurrentWeek ? "bg-amber-400" : "bg-red-400"
                                 }`} />
                                 {meetsNorm
-                                  ? `+${fmtDur(diff)}`
+                                  ? `+${fmtMin(diff)}`
                                   : isCurrentWeek ? "Pågår"
-                                  : `−${fmtDur(Math.abs(diff))}`}
+                                  : `−${fmtMin(Math.abs(diff))}`}
                               </div>
                             </div>
 
-                            {/* Day sections */}
-                            {sortedDates.map((date, di) => {
+                            {sortedDates.map(date => {
                               const daySessions = byDate[date] ?? [];
                               const dayAbsences = getAbsencesForDate(filteredAbsences, date);
-                              const { net: dayNet, lunchDeducted: ld } = computeDayMinutes(daySessions);
+                              const { net: dayNet, lunchDeducted: ld, cfg } = computeDayMinutes(daySessions, date, schedule);
 
                               return (
-                                <div key={date} className={`px-4 py-3 border-t border-pc-line`}>
+                                <div key={date} className="px-4 py-3 border-t border-pc-line">
                                   <div className="flex justify-between items-baseline mb-2">
                                     <div className="font-bold text-[14px] capitalize">{fmtDateLabel(date)}</div>
                                     {daySessions.length > 0 && (
                                       <div className="font-bold text-pc-orange text-[14px] tabular-nums">{fmtDur(dayNet)}</div>
                                     )}
                                   </div>
-                                  {ld && (
-                                    <div className="text-[12px] text-pc-orange-deep mb-2 font-semibold">🥪 -45min lunch avdragen</div>
+                                  {ld && cfg.lunchMinutes > 0 && (
+                                    <div className="text-[12px] text-pc-orange-deep mb-2 font-semibold">
+                                      🥪 -{cfg.lunchMinutes}min lunch avdragen
+                                    </div>
                                   )}
 
-                                  {/* Absence entries */}
                                   {dayAbsences.map(a => (
                                     <div key={a.id} className="flex items-center gap-2 mb-2">
                                       <div className="flex-1 min-w-0 bg-pc-peach text-pc-orange-deep rounded-[12px] px-3 py-2 flex items-center gap-2">
@@ -754,7 +741,6 @@ export default function PunchClock() {
                                           {a.note && <div className="text-[11px] opacity-70 mt-0.5 truncate">{a.note}</div>}
                                         </div>
                                       </div>
-                                      {/* Only show delete on the start date of multi-day absences */}
                                       {a.startDate === date && (
                                         <button
                                           onClick={() => handleDeleteAbsence(a.id)}
@@ -767,7 +753,6 @@ export default function PunchClock() {
                                     </div>
                                   ))}
 
-                                  {/* Session rows */}
                                   {daySessions.length > 0 && (
                                     <div className="space-y-0.5">
                                       {daySessions.map((s, i) => (
@@ -840,7 +825,6 @@ export default function PunchClock() {
         </nav>
       </div>
 
-      {/* Short session warning */}
       {shortWarn && activeSession && (
         <ShortSessionWarning
           elapsed={now() - activeSession.checkIn}
@@ -849,41 +833,45 @@ export default function PunchClock() {
         />
       )}
 
-      {/* Add time modal (clock tab) */}
       {addModal && (
-        <SessionModal onClose={() => setAddModal(false)}
+        <SessionModal schedule={schedule} onClose={() => setAddModal(false)}
           onSave={s => { setSessions(prev => [...prev, s]); setAddModal(false); }} />
       )}
 
-      {/* Add time modal (history tab — date pre-filled) */}
       {addForDate && (
-        <SessionModal defaultDate={addForDate}
+        <SessionModal schedule={schedule} defaultDate={addForDate}
           onClose={() => setAddForDate(null)}
           onSave={s => { setSessions(prev => [...prev, s]); setAddForDate(null); }} />
       )}
 
-      {/* Edit session modal */}
       {editSession && (
-        <SessionModal session={editSession}
+        <SessionModal schedule={schedule} session={editSession}
           onClose={() => setEditSession(null)}
           onSave={handleSaveEdit} />
       )}
 
-      {/* Absence modal */}
       <AbsenceModal
         open={absenceModal}
         onClose={() => setAbsenceModal(false)}
         onSave={handleSaveAbsence}
       />
 
-      {/* Quick schedule modal */}
       <QuickScheduleModal
         open={scheduleModal}
         onClose={() => setScheduleModal(false)}
-        onSave={handleSaveSchedule}
-        normHours={normHours}
+        onSave={handleSaveQuickSchedule}
+        schedule={schedule}
         existingSessions={sessions}
         existingAbsences={absences}
+      />
+
+      <SettingsModal
+        open={settingsModal}
+        initialName={name}
+        initialDepartment={department}
+        initialSchedule={schedule}
+        onClose={() => setSettingsModal(false)}
+        onSave={handleSettingsSave}
       />
     </div>
   );
@@ -975,9 +963,10 @@ function NavItem({ active, onClick, label, icon }: { active: boolean; onClick: (
   );
 }
 
-// ─── Session Modal (Add & Edit) ────────────────────────────────
-function SessionModal({ session, defaultDate, onClose, onSave }: {
-  session?: Session; defaultDate?: string; onClose: () => void; onSave: (s: Session) => void;
+// ─── Session Modal ─────────────────────────────────────────────
+function SessionModal({ session, defaultDate, schedule, onClose, onSave }: {
+  session?: Session; defaultDate?: string; schedule: WeekSchedule;
+  onClose: () => void; onSave: (s: Session) => void;
 }) {
   const isEdit = !!session;
   const initDate = session ? new Date(session.checkIn).toISOString().slice(0, 10) : (defaultDate ?? todayStr());
@@ -1001,7 +990,10 @@ function SessionModal({ session, defaultDate, onClose, onSave }: {
     ? new Date(`${date}T${endTime}`).getTime() - new Date(`${date}T${startTime}`).getTime()
     : null;
   const previewMin = previewMs ? previewMs / 60000 : null;
-  const { net: previewNet, lunchDeducted: previewLunch } = previewMin ? applyLunchRule(previewMin) : { net: 0, lunchDeducted: false };
+  const dayCfg = schedule[dayKeyOf(new Date(date + "T12:00:00"))];
+  const { net: previewNet, lunchDeducted: previewLunch } = previewMin
+    ? applyLunch(previewMin, dayCfg)
+    : { net: 0, lunchDeducted: false };
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center pc-overlay" style={{ background: "rgba(45,23,23,0.55)" }} onClick={onClose}>
@@ -1009,7 +1001,11 @@ function SessionModal({ session, defaultDate, onClose, onSave }: {
         <div className="w-10 h-1 bg-pc-line rounded-full mx-auto mb-5" />
         <div className="font-extrabold text-[22px] tracking-tight mb-1">{isEdit ? "Redigera pass" : "Lägg till tid"}</div>
         <div className="text-[13px] text-pc-muted mb-6">
-          {isEdit ? "Ändra start- och sluttid för detta pass." : "Välj datum, start och sluttid. Lunchen dras automatiskt om du jobbat mer än 5h."}
+          {isEdit
+            ? "Ändra start- och sluttid för detta pass."
+            : dayCfg.lunchMinutes > 0
+              ? `Lunch (${dayCfg.lunchMinutes}min) dras av automatiskt om du jobbat tillräckligt länge.`
+              : "Välj datum, start och sluttid."}
         </div>
 
         <Label>Datum</Label>
@@ -1023,8 +1019,10 @@ function SessionModal({ session, defaultDate, onClose, onSave }: {
           <div className="bg-pc-peach rounded-2xl px-4 py-3 mb-4 text-[13px]">
             <div className="font-extrabold text-pc-orange-deep mb-0.5 text-[15px]">Netto: {fmtDur(previewNet)}</div>
             {previewLunch
-              ? <div className="text-pc-orange-deep/80">🥪 45min lunch dras av (mer än 5h)</div>
-              : <div className="text-pc-muted">Ingen lunchavdrag (under 5h)</div>}
+              ? <div className="text-pc-orange-deep/80">🥪 {dayCfg.lunchMinutes}min lunch dras av</div>
+              : dayCfg.lunchMinutes > 0
+                ? <div className="text-pc-muted">Ingen lunchavdrag ännu (jobba lite mer)</div>
+                : <div className="text-pc-muted">Ingen lunch konfigurerad för denna dag</div>}
           </div>
         )}
 
