@@ -1,13 +1,7 @@
 node_modules
 dist
 .git
-.gitignore
 *.md
 .prettierrc
 .prettierignore
 eslint.config.js
-wrangler.jsonc
-.replit
-replit.md
-bun.lockb
-bunfig.toml

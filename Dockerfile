@@ -5,13 +5,7 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-FROM node:22-alpine AS runner
-WORKDIR /app
-ENV NODE_ENV=production
-ENV PORT=3000
-# package.json needed so Node treats serve.js as ESM ("type": "module")
-COPY package.json .
-COPY --from=builder /app/dist ./dist
-COPY serve.js .
-EXPOSE 3000
-CMD ["node", "serve.js"]
+FROM nginx:alpine AS runner
+COPY --from=builder /app/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80
