@@ -1,4 +1,7 @@
 import { useState, useEffect, useRef } from "react";
+import Onboarding from "./Onboarding";
+import AbsenceModal, { type AbsenceEntry, type AbsenceCategory, ABSENCE_META } from "./AbsenceModal";
+import QuickScheduleModal from "./QuickScheduleModal";
 
 // ─── Constants ────────────────────────────────────────────────
 const LUNCH_MINUTES = 45;
@@ -6,7 +9,20 @@ const LUNCH_THRESHOLD_HOURS = 5;
 const STORAGE_KEY = "punchclock_v2";
 const SHORT_SESSION_THRESHOLD_MS = 60 * 1000;
 
-// ─── Helpers ──────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────
+type Session = { id: string; checkIn: number; checkOut: number | null; manual: boolean };
+type HistoryFilter = "week" | "lastweek" | "month" | "all";
+
+type StorageShape = {
+  name: string;
+  normHours: number;
+  department?: string;
+  onboardingDone: boolean;
+  sessions: Session[];
+  absences: AbsenceEntry[];
+};
+
+// ─── Time helpers ─────────────────────────────────────────────
 function now() { return Date.now(); }
 function todayStr() { return new Date().toISOString().slice(0, 10); }
 
@@ -15,13 +31,11 @@ function fmtTime(ms: number | null | undefined) {
   return new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-function fmtDur(minutes: number, showLunch = false) {
+function fmtDur(minutes: number) {
   if (minutes <= 0) return "0h 0min";
   const h = Math.floor(minutes / 60);
   const m = Math.round(minutes % 60);
-  let s = h > 0 ? `${h}h ${m}min` : `${m}min`;
-  if (showLunch) s += " (inkl. 45min lunch avdragen)";
-  return s;
+  return h > 0 ? `${h}h ${m}min` : `${m}min`;
 }
 
 function applyLunchRule(rawMinutes: number) {
@@ -31,8 +45,6 @@ function applyLunchRule(rawMinutes: number) {
   return { net: rawMinutes, lunchDeducted: false };
 }
 
-type Session = { id: string; checkIn: number; checkOut: number | null; manual: boolean };
-
 function computeDayMinutes(sessions: Session[]) {
   let raw = 0;
   for (const s of sessions) {
@@ -41,6 +53,37 @@ function computeDayMinutes(sessions: Session[]) {
   }
   const { net, lunchDeducted } = applyLunchRule(raw);
   return { raw, net, lunchDeducted };
+}
+
+// ─── Week helpers ─────────────────────────────────────────────
+function getWeekMonday(date: Date): Date {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  const day = d.getDay();
+  d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day));
+  return d;
+}
+
+function isoWeekNumber(date: Date): number {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dow = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dow);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil(((d.getTime() - yearStart.getTime()) / 86_400_000 + 1) / 7);
+}
+
+function weekKey(date: Date): string {
+  return getWeekMonday(date).toISOString().slice(0, 10);
+}
+
+function weekRangeLabel(mondayStr: string): string {
+  const mon = new Date(mondayStr + "T12:00:00");
+  const sun = new Date(mon);
+  sun.setDate(sun.getDate() + 6);
+  const wn = isoWeekNumber(mon);
+  const monFmt = mon.toLocaleDateString("sv-SE", { day: "numeric", month: "short" });
+  const sunFmt = sun.toLocaleDateString("sv-SE", { day: "numeric", month: "short" });
+  return `Vecka ${wn}  •  ${monFmt} – ${sunFmt}`;
 }
 
 function groupByDate(sessions: Session[]) {
@@ -53,38 +96,184 @@ function groupByDate(sessions: Session[]) {
   return map;
 }
 
-function fmtDateLabel(dateStr: string) {
-  return new Date(dateStr + "T12:00:00").toLocaleDateString("sv-SE", { weekday: "long", day: "numeric", month: "long" });
+function computeWeekNet(sessions: Session[]): number {
+  const byDate = groupByDate(sessions);
+  let total = 0;
+  for (const ds of Object.values(byDate)) total += computeDayMinutes(ds).net;
+  return total;
 }
 
-function buildShareText(sessions: Session[], name: string) {
-  const byDate = groupByDate(sessions);
-  const dates = Object.keys(byDate).sort((a, b) => b.localeCompare(a)).slice(0, 14);
-  const lines = [`⏱ Tidrapport${name ? " – " + name : ""}\n`];
-  let totalNet = 0;
-  for (const d of dates) {
-    const { net, lunchDeducted } = computeDayMinutes(byDate[d]);
-    totalNet += net;
-    const h = Math.floor(net / 60), m = Math.round(net % 60);
-    lines.push(`${fmtDateLabel(d)}: ${h}h ${m}min${lunchDeducted ? " (lunch -45min)" : ""}`);
-    for (const s of byDate[d]) {
-      lines.push(`  ${fmtTime(s.checkIn)} → ${s.checkOut ? fmtTime(s.checkOut) : "pågår"}${s.manual ? " ✏️" : ""}`);
-    }
+function fmtDateLabel(dateStr: string) {
+  return new Date(dateStr + "T12:00:00").toLocaleDateString("sv-SE", {
+    weekday: "long", day: "numeric", month: "long",
+  });
+}
+
+// ─── Absence helpers ──────────────────────────────────────────
+function expandAbsenceDates(absence: AbsenceEntry): string[] {
+  const dates: string[] = [];
+  const cur = new Date(absence.startDate + "T12:00:00");
+  const end = new Date(absence.endDate + "T12:00:00");
+  while (cur <= end) {
+    dates.push(cur.toISOString().slice(0, 10));
+    cur.setDate(cur.getDate() + 1);
   }
-  lines.push(`\nTotal: ${Math.floor(totalNet / 60)}h ${Math.round(totalNet % 60)}min`);
+  return dates;
+}
+
+function getAbsencesForDate(absences: AbsenceEntry[], date: string): AbsenceEntry[] {
+  return absences.filter(a => a.startDate <= date && a.endDate >= date);
+}
+
+function absenceLabel(a: AbsenceEntry): string {
+  const meta = ABSENCE_META[a.category];
+  return `${meta.emoji} ${meta.label}`;
+}
+
+function absenceDateRangeLabel(a: AbsenceEntry): string {
+  if (a.startDate === a.endDate) return fmtDateLabel(a.startDate);
+  const s = new Date(a.startDate + "T12:00:00").toLocaleDateString("sv-SE", { day: "numeric", month: "short" });
+  const e = new Date(a.endDate + "T12:00:00").toLocaleDateString("sv-SE", { day: "numeric", month: "short" });
+  return `${s} – ${e}`;
+}
+
+// ─── Filter helper ────────────────────────────────────────────
+function filterSessions(sessions: Session[], filter: HistoryFilter): Session[] {
+  const ref = new Date();
+  if (filter === "all") return sessions;
+  if (filter === "week") {
+    const mon = getWeekMonday(ref);
+    const sun = new Date(mon); sun.setDate(sun.getDate() + 7);
+    return sessions.filter(s => { const d = new Date(s.checkIn); return d >= mon && d < sun; });
+  }
+  if (filter === "lastweek") {
+    const thisMon = getWeekMonday(ref);
+    const lastMon = new Date(thisMon); lastMon.setDate(lastMon.getDate() - 7);
+    return sessions.filter(s => { const d = new Date(s.checkIn); return d >= lastMon && d < thisMon; });
+  }
+  if (filter === "month") {
+    const start = new Date(ref.getFullYear(), ref.getMonth(), 1);
+    return sessions.filter(s => new Date(s.checkIn) >= start);
+  }
+  return sessions;
+}
+
+function filterAbsences(absences: AbsenceEntry[], filter: HistoryFilter): AbsenceEntry[] {
+  const ref = new Date();
+  if (filter === "all") return absences;
+  if (filter === "week") {
+    const mon = getWeekMonday(ref).toISOString().slice(0, 10);
+    const sun = new Date(getWeekMonday(ref)); sun.setDate(sun.getDate() + 6);
+    const sunStr = sun.toISOString().slice(0, 10);
+    return absences.filter(a => a.startDate <= sunStr && a.endDate >= mon);
+  }
+  if (filter === "lastweek") {
+    const thisMon = getWeekMonday(ref);
+    const lastMon = new Date(thisMon); lastMon.setDate(lastMon.getDate() - 7);
+    const lastSun = new Date(thisMon); lastSun.setDate(lastSun.getDate() - 1);
+    const lmStr = lastMon.toISOString().slice(0, 10);
+    const lsStr = lastSun.toISOString().slice(0, 10);
+    return absences.filter(a => a.startDate <= lsStr && a.endDate >= lmStr);
+  }
+  if (filter === "month") {
+    const start = new Date(ref.getFullYear(), ref.getMonth(), 1).toISOString().slice(0, 10);
+    return absences.filter(a => a.endDate >= start);
+  }
+  return absences;
+}
+
+// ─── Share text ───────────────────────────────────────────────
+function buildShareText(sessions: Session[], absences: AbsenceEntry[], name: string, normHours: number) {
+  const weeklyNorm = normHours * 5 * 60;
+  const completed = sessions.filter(s => s.checkOut !== null);
+
+  // Collect all dates (from sessions + absences)
+  const dateSet = new Set<string>();
+  for (const s of completed) dateSet.add(new Date(s.checkIn).toISOString().slice(0, 10));
+  for (const a of absences) expandAbsenceDates(a).forEach(d => dateSet.add(d));
+
+  // Group all dates by week
+  const weekMap: Record<string, Set<string>> = {};
+  for (const d of dateSet) {
+    const wk = weekKey(new Date(d + "T12:00:00"));
+    if (!weekMap[wk]) weekMap[wk] = new Set();
+    weekMap[wk].add(d);
+  }
+
+  const byDate = groupByDate(completed);
+  const weeks = Object.keys(weekMap).sort((a, b) => b.localeCompare(a)).slice(0, 8);
+  const lines: string[] = [`⏱ Tidrapport${name ? " – " + name : ""}\n`];
+  let grandNet = 0;
+
+  for (const wMon of weeks) {
+    const wDates = [...weekMap[wMon]].sort();
+    const wSessions = wDates.flatMap(d => byDate[d] ?? []);
+    const wNet = computeWeekNet(wSessions);
+    grandNet += wNet;
+    const wh = Math.floor(wNet / 60), wm = Math.round(wNet % 60);
+    const diff = wNet - weeklyNorm;
+    const diffStr = diff >= 0
+      ? `+${Math.floor(diff / 60)}h ${Math.round(diff % 60)}min`
+      : `−${Math.floor(Math.abs(diff) / 60)}h ${Math.round(Math.abs(diff) % 60)}min`;
+    lines.push(`── ${weekRangeLabel(wMon)} ──`);
+    lines.push(`Totalt: ${wh}h ${wm}min  (${diffStr} mot norm)\n`);
+
+    for (const d of wDates) {
+      const ds = byDate[d] ?? [];
+      const da = getAbsencesForDate(absences, d);
+      if (ds.length === 0 && da.length === 0) continue;
+
+      if (ds.length > 0) {
+        const { net, lunchDeducted } = computeDayMinutes(ds);
+        const dh = Math.floor(net / 60), dm = Math.round(net % 60);
+        lines.push(`  ${fmtDateLabel(d)}: ${dh}h ${dm}min${lunchDeducted ? " (lunch -45min)" : ""}`);
+        for (const s of ds) {
+          lines.push(`    ${fmtTime(s.checkIn)} → ${fmtTime(s.checkOut)}${s.manual ? " ✏️" : ""}`);
+        }
+      } else {
+        // absence-only day
+        const a = da[0];
+        const meta = ABSENCE_META[a.category];
+        if (a.startDate === d) {
+          // only show on start date to avoid duplicates
+          lines.push(`  ${a.startDate === a.endDate ? fmtDateLabel(d) : absenceDateRangeLabel(a)}: ${meta.emoji} ${meta.label}`);
+        }
+      }
+      // Absences on a day that also has sessions
+      if (ds.length > 0) {
+        for (const a of da) {
+          const meta = ABSENCE_META[a.category];
+          lines.push(`    ${meta.emoji} ${meta.label}${a.startDate !== a.endDate ? ` (${absenceDateRangeLabel(a)})` : ""}`);
+        }
+      }
+    }
+    lines.push("");
+  }
+
+  lines.push(`Total: ${Math.floor(grandNet / 60)}h ${Math.round(grandNet % 60)}min`);
   lines.push(`\nGenererat ${new Date().toLocaleString("sv-SE")}`);
   return lines.join("\n");
 }
 
 // ─── Storage ──────────────────────────────────────────────────
-function load(): { name: string; sessions: Session[] } {
+function load(): StorageShape {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : { name: "", sessions: [] };
-  } catch { return { name: "", sessions: [] }; }
+    const parsed = raw ? JSON.parse(raw) : {};
+    return {
+      name: parsed.name ?? "",
+      normHours: parsed.normHours ?? 8,
+      department: parsed.department,
+      onboardingDone: parsed.onboardingDone ?? false,
+      sessions: parsed.sessions ?? [],
+      absences: parsed.absences ?? [],
+    };
+  } catch {
+    return { name: "", normHours: 8, onboardingDone: false, sessions: [], absences: [] };
+  }
 }
 
-function save(data: { name: string; sessions: Session[] }) {
+function save(data: StorageShape) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch { /* ignore */ }
 }
 
@@ -109,13 +298,45 @@ function IconTrash() {
   );
 }
 
+function IconCalendar() {
+  return (
+    <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+      <path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01" />
+    </svg>
+  );
+}
+
+function IconCalendarX() {
+  return (
+    <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+      <line x1="10" y1="14" x2="14" y2="18" />
+      <line x1="14" y1="14" x2="10" y2="18" />
+    </svg>
+  );
+}
+
 // ─── Main App ─────────────────────────────────────────────────
 export default function PunchClock() {
   const [name, setName] = useState("");
+  const [normHours, setNormHours] = useState(8);
+  const [department, setDepartment] = useState<string | undefined>();
+  const [onboardingDone, setOnboardingDone] = useState(true); // default true until loaded
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [absences, setAbsences] = useState<AbsenceEntry[]>([]);
   const [, setTick] = useState(0);
   const [view, setView] = useState<"clock" | "history" | "share">("clock");
+  const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("all");
   const [addModal, setAddModal] = useState(false);
+  const [absenceModal, setAbsenceModal] = useState(false);
+  const [scheduleModal, setScheduleModal] = useState(false);
   const [addForDate, setAddForDate] = useState<string | null>(null);
   const [editSession, setEditSession] = useState<Session | null>(null);
   const [shareText, setShareText] = useState("");
@@ -131,44 +352,50 @@ export default function PunchClock() {
 
   useEffect(() => {
     const d = load();
-    setName(d.name || "");
-    setSessions(d.sessions || []);
-    if (!d.name) setEditingName(true);
+    setName(d.name);
+    setNormHours(d.normHours);
+    setDepartment(d.department);
+    setOnboardingDone(d.onboardingDone);
+    setSessions(d.sessions);
+    setAbsences(d.absences);
+    if (d.onboardingDone && !d.name) setEditingName(true);
   }, []);
 
   useEffect(() => {
-    save({ name, sessions });
-  }, [name, sessions]);
+    save({ name, normHours, department, onboardingDone, sessions, absences });
+  }, [name, normHours, department, onboardingDone, sessions, absences]);
 
+  const weeklyNorm = normHours * 5 * 60;
   const activeSession = sessions.find(s => !s.checkOut);
   const todaySessions = sessions.filter(s => new Date(s.checkIn).toISOString().slice(0, 10) === todayStr());
-  const { net: todayNet, lunchDeducted } = computeDayMinutes(todaySessions);
-  void todayNet;
+  const { lunchDeducted } = computeDayMinutes(todaySessions);
   const isIn = !!activeSession;
+
+  const filteredSessions = filterSessions(sessions, historyFilter);
+  const filteredAbsences = filterAbsences(absences, historyFilter);
+  const currentWeekKey = weekKey(new Date());
+
+  // Compute all dates for history (sessions + absences)
+  function getHistoryDates(fSessions: Session[], fAbsences: AbsenceEntry[]) {
+    const dateSet = new Set<string>();
+    for (const s of fSessions) dateSet.add(new Date(s.checkIn).toISOString().slice(0, 10));
+    for (const a of fAbsences) expandAbsenceDates(a).forEach(d => dateSet.add(d));
+    return dateSet;
+  }
 
   function handlePunch() {
     if (isIn && activeSession) {
       const elapsed = now() - activeSession.checkIn;
-      if (elapsed < SHORT_SESSION_THRESHOLD_MS) {
-        setShortWarn(true);
-        return;
-      }
+      if (elapsed < SHORT_SESSION_THRESHOLD_MS) { setShortWarn(true); return; }
       doCheckOut();
     } else {
-      setSessions(prev => [...prev, {
-        id: crypto.randomUUID(),
-        checkIn: now(),
-        checkOut: null,
-        manual: false,
-      }]);
+      setSessions(prev => [...prev, { id: crypto.randomUUID(), checkIn: now(), checkOut: null, manual: false }]);
     }
   }
 
   function doCheckOut() {
     if (!activeSession) return;
-    setSessions(prev => prev.map(s =>
-      s.id === activeSession.id ? { ...s, checkOut: now() } : s
-    ));
+    setSessions(prev => prev.map(s => s.id === activeSession.id ? { ...s, checkOut: now() } : s));
     setShortWarn(false);
   }
 
@@ -178,22 +405,36 @@ export default function PunchClock() {
     setShortWarn(false);
   }
 
-  function handleDeleteSession(id: string) {
-    setSessions(prev => prev.filter(s => s.id !== id));
-  }
-
-  function handleEditSession(session: Session) {
-    setEditSession(session);
-  }
-
+  function handleDeleteSession(id: string) { setSessions(prev => prev.filter(s => s.id !== id)); }
+  function handleEditSession(session: Session) { setEditSession(session); }
   function handleSaveEdit(updated: Session) {
     setSessions(prev => prev.map(s => s.id === updated.id ? updated : s));
     setEditSession(null);
   }
+  function handleDeleteAbsence(id: string) { setAbsences(prev => prev.filter(a => a.id !== id)); }
+  function handleSaveAbsence(entry: AbsenceEntry) {
+    setAbsences(prev => [...prev, entry]);
+    setAbsenceModal(false);
+  }
+  function handleSaveSchedule(newSessions: { id: string; checkIn: number; checkOut: number; manual: true }[]) {
+    setSessions(prev => [...prev, ...newSessions]);
+    setScheduleModal(false);
+  }
+
+  function handleOnboardingComplete(data: { name: string; normHours: number; department?: string }) {
+    setName(data.name);
+    setNormHours(data.normHours);
+    setDepartment(data.department);
+    setOnboardingDone(true);
+  }
+
+  function handleOnboardingSkip() {
+    setNormHours(8);
+    setOnboardingDone(true);
+  }
 
   function handleShare() {
-    const txt = buildShareText(sessions, name);
-    setShareText(txt);
+    setShareText(buildShareText(sessions, absences, name, normHours));
     setView("share");
     setShared(false);
   }
@@ -212,6 +453,23 @@ export default function PunchClock() {
   const liveTotalRaw = todaySessions.reduce((a, s) => a + ((s.checkOut ?? now()) - s.checkIn), 0) / 60000;
   const { net: liveNet } = applyLunchRule(liveTotalRaw);
 
+  const FILTERS: { key: HistoryFilter; label: string }[] = [
+    { key: "week", label: "Den här veckan" },
+    { key: "lastweek", label: "Förra veckan" },
+    { key: "month", label: "Denna månad" },
+    { key: "all", label: "Allt" },
+  ];
+
+  // ── Onboarding gate ─────────────────────────────────────────
+  if (!onboardingDone) {
+    return (
+      <Onboarding
+        onComplete={handleOnboardingComplete}
+        onSkip={handleOnboardingSkip}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-pc-bg font-display text-pc-ink antialiased">
       <style>{`
@@ -225,23 +483,23 @@ export default function PunchClock() {
           border: 2px solid #ff5f00; opacity: 0.6;
           animation: pcRing 2s ease-out infinite;
         }
-        @keyframes pcRing {
-          0% { transform: scale(0.95); opacity: 0.6; }
-          100% { transform: scale(1.25); opacity: 0; }
-        }
+        @keyframes pcRing { 0% { transform: scale(0.95); opacity: 0.6; } 100% { transform: scale(1.25); opacity: 0; } }
         .pc-press:active { transform: scale(0.96); }
         .pc-press { transition: transform 0.15s, box-shadow 0.2s; }
         .pc-sheet { animation: pcSheet 0.32s cubic-bezier(0.32,0.72,0,1); }
         @keyframes pcSheet { from { transform: translateY(100%); } to { transform: translateY(0); } }
         .pc-overlay { animation: pcOverlay 0.25s ease; }
         @keyframes pcOverlay { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes pcOverlay { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes pcSheet { from { transform: translateY(100%); } to { transform: translateY(0); } }
         .pc-input {
           width: 100%; padding: 14px 16px; border-radius: 16px;
           border: 1px solid #ece6df; font-size: 16px; outline: none;
-          margin-bottom: 16px; background: #fdf6ee; font-weight: 600;
-          color: #2d1717;
+          margin-bottom: 16px; background: #fdf6ee; font-weight: 600; color: #2d1717;
         }
         .pc-input:focus { border-color: #ff5f00; background: #fff; }
+        .hide-scroll { scrollbar-width: none; }
+        .hide-scroll::-webkit-scrollbar { display: none; }
       `}</style>
 
       <div className="mx-auto max-w-[480px] min-h-screen flex flex-col relative pb-[88px]">
@@ -256,17 +514,17 @@ export default function PunchClock() {
               </svg>
             </div>
             <div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-pc-muted">Tidrapport</div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-pc-muted">
+                Tidrapport{department ? ` · ${department}` : ""}
+              </div>
               {editingName ? (
                 <input
-                  ref={nameRef}
-                  autoFocus
-                  value={name}
+                  ref={nameRef} autoFocus value={name}
                   onChange={e => setName(e.target.value)}
                   onBlur={() => { if (name.trim()) setEditingName(false); }}
                   onKeyDown={e => { if (e.key === "Enter" && name.trim()) setEditingName(false); }}
                   placeholder="Ditt namn..."
-                  className="border-none border-b-2 border-pc-orange outline-none text-[17px] font-bold bg-transparent w-44 py-0.5"
+                  className="border-none outline-none text-[17px] font-bold bg-transparent w-44 py-0.5"
                   style={{ borderBottom: "2px solid #ff5f00" }}
                 />
               ) : (
@@ -285,9 +543,10 @@ export default function PunchClock() {
         </header>
 
         <main className="flex-1 px-5">
+
+          {/* ── CLOCK ── */}
           {view === "clock" && (
             <div className="pc-fade">
-              {/* Hero punch */}
               <div className="text-center mt-6 mb-10">
                 <div className="text-[12px] font-semibold uppercase tracking-[0.16em] text-pc-muted mb-6">
                   {isIn ? "Du är incheckad" : "Inte incheckad"}
@@ -307,28 +566,21 @@ export default function PunchClock() {
                     }}
                   >
                     <svg viewBox="0 0 24 24" className="w-9 h-9" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                      {isIn ? (
-                        <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" />
-                      ) : (
-                        <polygon points="6 4 20 12 6 20 6 4" fill="currentColor" />
-                      )}
+                      {isIn
+                        ? <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" />
+                        : <polygon points="6 4 20 12 6 20 6 4" fill="currentColor" />}
                     </svg>
                     <span className="text-[19px] tracking-tight">{isIn ? "Checka ut" : "Checka in"}</span>
                   </button>
                 </div>
                 {isIn && activeSession && (
                   <div className="mt-7 pc-pop">
-                    <div className="text-[34px] font-extrabold tabular-nums tracking-tight text-pc-ink">
-                      {fmtDur(liveMs / 60000)}
-                    </div>
-                    <div className="text-[13px] text-pc-muted font-medium mt-0.5">
-                      Sedan {fmtTime(activeSession.checkIn)}
-                    </div>
+                    <div className="text-[34px] font-extrabold tabular-nums tracking-tight text-pc-ink">{fmtDur(liveMs / 60000)}</div>
+                    <div className="text-[13px] text-pc-muted font-medium mt-0.5">Sedan {fmtTime(activeSession.checkIn)}</div>
                   </div>
                 )}
               </div>
 
-              {/* Today card */}
               <section className="bg-white rounded-[24px] p-5 mb-3 shadow-[0_2px_12px_rgba(81,43,43,0.04)] border border-pc-line">
                 <div className="flex items-baseline justify-between mb-4">
                   <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-pc-muted">Idag</div>
@@ -348,72 +600,203 @@ export default function PunchClock() {
                 {todaySessions.length > 0 && (
                   <div className="mt-4 pt-4 border-t border-pc-line space-y-1">
                     {todaySessions.map((s, i) => (
-                      <SessionRow
-                        key={s.id}
-                        session={s}
-                        index={i}
+                      <SessionRow key={s.id} session={s} index={i}
                         onEdit={() => handleEditSession(s)}
-                        onDelete={() => handleDeleteSession(s.id)}
-                      />
+                        onDelete={() => handleDeleteSession(s.id)} />
                     ))}
                   </div>
                 )}
               </section>
 
+              {/* Action buttons */}
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <button
+                  onClick={() => setAddModal(true)}
+                  className="pc-press bg-white border border-pc-line rounded-[20px] py-4 font-bold text-[14px] text-pc-ink flex items-center justify-center gap-2"
+                >
+                  <span className="text-pc-orange text-xl leading-none">+</span> Lägg till tid
+                </button>
+                <button
+                  onClick={() => setAbsenceModal(true)}
+                  className="pc-press bg-white border border-pc-line rounded-[20px] py-4 font-bold text-[14px] text-pc-ink flex items-center justify-center gap-2"
+                >
+                  <span className="text-pc-muted"><IconCalendarX /></span> Avvikelse
+                </button>
+              </div>
               <button
-                onClick={() => setAddModal(true)}
-                className="pc-press w-full bg-white border border-pc-line rounded-[20px] py-4 font-bold text-[15px] text-pc-ink flex items-center justify-center gap-2"
+                onClick={() => setScheduleModal(true)}
+                className="pc-press w-full rounded-[20px] py-4 font-bold text-[15px] text-white flex items-center justify-center gap-2"
+                style={{
+                  background: "linear-gradient(135deg, #ff5f00 0%, #e04d00 100%)",
+                  boxShadow: "0 6px 20px -6px rgba(255,95,0,0.5)",
+                }}
               >
-                <span className="text-pc-orange text-xl leading-none">+</span> Lägg till tid manuellt
+                <IconCalendar /> Planera dagar
               </button>
             </div>
           )}
 
+          {/* ── HISTORY ── */}
           {view === "history" && (
             <div className="pc-fade pt-2">
-              <h1 className="text-[28px] font-extrabold tracking-tight mb-5">Historik</h1>
-              {sessions.length === 0 && (
-                <div className="text-center text-pc-muted py-20 text-[15px]">
-                  <div className="text-4xl mb-3 opacity-40">📋</div>
-                  Inga registrerade tider ännu.
-                </div>
-              )}
-              <div className="space-y-3">
-                {Object.entries(groupByDate(sessions))
-                  .sort((a, b) => b[0].localeCompare(a[0]))
-                  .map(([date, daySessions]) => {
-                    const { net, lunchDeducted: ld } = computeDayMinutes(daySessions);
-                    return (
-                      <div key={date} className="bg-white rounded-[20px] p-4 border border-pc-line shadow-[0_2px_12px_rgba(81,43,43,0.04)]">
-                        <div className="flex justify-between items-baseline mb-2">
-                          <div className="font-bold text-[15px] capitalize">{fmtDateLabel(date)}</div>
-                          <div className="font-extrabold text-pc-orange text-[15px] tabular-nums">{fmtDur(net)}</div>
-                        </div>
-                        {ld && <div className="text-[12px] text-pc-orange-deep mb-2 font-semibold">🥪 -45min lunch avdragen</div>}
-                        <div className="space-y-0.5 pt-2 border-t border-pc-line">
-                          {daySessions.map((s, i) => (
-                            <SessionRow
-                              key={s.id}
-                              session={s}
-                              index={i}
-                              onEdit={() => handleEditSession(s)}
-                              onDelete={() => handleDeleteSession(s.id)}
-                            />
-                          ))}
-                        </div>
-                        <button
-                          onClick={() => setAddForDate(date)}
-                          className="pc-press mt-3 w-full flex items-center justify-center gap-1.5 py-2.5 rounded-[14px] border border-dashed border-pc-line text-pc-muted text-[13px] font-semibold hover:border-pc-orange hover:text-pc-orange transition-colors"
-                        >
-                          <span className="text-[16px] leading-none">+</span> Lägg till tid
-                        </button>
-                      </div>
-                    );
-                  })}
+              <h1 className="text-[28px] font-extrabold tracking-tight mb-4">Historik</h1>
+
+              {/* Filter pills */}
+              <div className="flex gap-2 mb-5 overflow-x-auto hide-scroll -mx-1 px-1">
+                {FILTERS.map(({ key, label }) => (
+                  <button
+                    key={key}
+                    onClick={() => setHistoryFilter(key)}
+                    className={`pc-press shrink-0 px-4 py-2 rounded-full text-[13px] font-bold transition-colors ${
+                      historyFilter === key
+                        ? "bg-pc-orange text-white shadow-[0_4px_12px_-4px_rgba(255,95,0,0.45)]"
+                        : "bg-white border border-pc-line text-pc-muted"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
+
+              {(() => {
+                const allDates = getHistoryDates(filteredSessions, filteredAbsences);
+                if (allDates.size === 0) {
+                  return (
+                    <div className="text-center text-pc-muted py-20 text-[15px]">
+                      <div className="text-4xl mb-3 opacity-40">📋</div>
+                      Inga tider för vald period.
+                    </div>
+                  );
+                }
+
+                // Group all dates by week
+                const weekMap: Record<string, string[]> = {};
+                for (const d of allDates) {
+                  const wk = weekKey(new Date(d + "T12:00:00"));
+                  if (!weekMap[wk]) weekMap[wk] = [];
+                  weekMap[wk].push(d);
+                }
+                const byDate = groupByDate(filteredSessions);
+
+                return (
+                  <div className="space-y-4">
+                    {Object.entries(weekMap)
+                      .sort((a, b) => b[0].localeCompare(a[0]))
+                      .map(([wMon, wDates]) => {
+                        const wSessions = wDates.flatMap(d => byDate[d] ?? []);
+                        const wNet = computeWeekNet(wSessions);
+                        const isCurrentWeek = wMon === currentWeekKey;
+                        const meetsNorm = wNet >= weeklyNorm;
+                        const diff = wNet - weeklyNorm;
+                        const sortedDates = [...wDates].sort((a, b) => b.localeCompare(a));
+
+                        return (
+                          <div key={wMon} className="bg-white rounded-[22px] border border-pc-line shadow-[0_2px_14px_rgba(81,43,43,0.05)] overflow-hidden">
+
+                            {/* Week header */}
+                            <div className="px-4 pt-4 pb-3 flex items-start justify-between gap-3">
+                              <div>
+                                <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-pc-muted mb-1.5">
+                                  {weekRangeLabel(wMon)}
+                                </div>
+                                <div className="text-[24px] font-extrabold tabular-nums tracking-tight leading-none">
+                                  {fmtDur(wNet)}
+                                </div>
+                                <div className="text-[12px] text-pc-muted mt-0.5 font-medium">
+                                  av {fmtDur(weeklyNorm)} norm ({normHours}h/dag)
+                                </div>
+                              </div>
+                              <div className={`shrink-0 mt-0.5 px-3 py-1.5 rounded-full text-[12px] font-extrabold flex items-center gap-1.5 ${
+                                meetsNorm
+                                  ? "bg-green-50 text-green-700"
+                                  : isCurrentWeek
+                                  ? "bg-amber-50 text-amber-700"
+                                  : "bg-red-50 text-red-600"
+                              }`}>
+                                <span className={`w-2 h-2 rounded-full ${
+                                  meetsNorm ? "bg-green-500" : isCurrentWeek ? "bg-amber-400" : "bg-red-400"
+                                }`} />
+                                {meetsNorm
+                                  ? `+${fmtDur(diff)}`
+                                  : isCurrentWeek ? "Pågår"
+                                  : `−${fmtDur(Math.abs(diff))}`}
+                              </div>
+                            </div>
+
+                            {/* Day sections */}
+                            {sortedDates.map((date, di) => {
+                              const daySessions = byDate[date] ?? [];
+                              const dayAbsences = getAbsencesForDate(filteredAbsences, date);
+                              const { net: dayNet, lunchDeducted: ld } = computeDayMinutes(daySessions);
+
+                              return (
+                                <div key={date} className={`px-4 py-3 border-t border-pc-line`}>
+                                  <div className="flex justify-between items-baseline mb-2">
+                                    <div className="font-bold text-[14px] capitalize">{fmtDateLabel(date)}</div>
+                                    {daySessions.length > 0 && (
+                                      <div className="font-bold text-pc-orange text-[14px] tabular-nums">{fmtDur(dayNet)}</div>
+                                    )}
+                                  </div>
+                                  {ld && (
+                                    <div className="text-[12px] text-pc-orange-deep mb-2 font-semibold">🥪 -45min lunch avdragen</div>
+                                  )}
+
+                                  {/* Absence entries */}
+                                  {dayAbsences.map(a => (
+                                    <div key={a.id} className="flex items-center gap-2 mb-2">
+                                      <div className="flex-1 min-w-0 bg-pc-peach text-pc-orange-deep rounded-[12px] px-3 py-2 flex items-center gap-2">
+                                        <span className="text-[16px] leading-none shrink-0">{ABSENCE_META[a.category as AbsenceCategory].emoji}</span>
+                                        <div className="min-w-0">
+                                          <div className="font-bold text-[13px] leading-tight">{ABSENCE_META[a.category as AbsenceCategory].label}</div>
+                                          {a.startDate !== a.endDate && (
+                                            <div className="text-[11px] opacity-75 font-medium">{absenceDateRangeLabel(a)}</div>
+                                          )}
+                                          {a.note && <div className="text-[11px] opacity-70 mt-0.5 truncate">{a.note}</div>}
+                                        </div>
+                                      </div>
+                                      {/* Only show delete on the start date of multi-day absences */}
+                                      {a.startDate === date && (
+                                        <button
+                                          onClick={() => handleDeleteAbsence(a.id)}
+                                          className="w-8 h-8 shrink-0 flex items-center justify-center rounded-xl text-pc-muted hover:text-red-500 hover:bg-red-50 transition-colors"
+                                          aria-label="Ta bort avvikelse"
+                                        >
+                                          <IconTrash />
+                                        </button>
+                                      )}
+                                    </div>
+                                  ))}
+
+                                  {/* Session rows */}
+                                  {daySessions.length > 0 && (
+                                    <div className="space-y-0.5">
+                                      {daySessions.map((s, i) => (
+                                        <SessionRow key={s.id} session={s} index={i}
+                                          onEdit={() => handleEditSession(s)}
+                                          onDelete={() => handleDeleteSession(s.id)} />
+                                      ))}
+                                    </div>
+                                  )}
+
+                                  <button
+                                    onClick={() => setAddForDate(date)}
+                                    className="pc-press mt-2 w-full flex items-center justify-center gap-1.5 py-2 rounded-[12px] border border-dashed border-pc-line text-pc-muted text-[12px] font-semibold hover:border-pc-orange hover:text-pc-orange transition-colors"
+                                  >
+                                    <span className="text-[14px] leading-none">+</span> Lägg till tid
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })}
+                  </div>
+                );
+              })()}
             </div>
           )}
 
+          {/* ── SHARE ── */}
           {view === "share" && (
             <div className="pc-fade pt-2">
               <button onClick={() => setView("clock")} className="text-pc-orange font-semibold text-[15px] mb-3 flex items-center gap-1">
@@ -422,8 +805,7 @@ export default function PunchClock() {
               <h1 className="text-[28px] font-extrabold tracking-tight mb-1">Dela rapport</h1>
               <p className="text-[14px] text-pc-muted mb-5">Kopiera eller dela som text — till dig själv eller din chef.</p>
               <textarea
-                readOnly
-                value={shareText}
+                readOnly value={shareText}
                 className="w-full min-h-[280px] border border-pc-line rounded-[18px] p-4 text-[13px] leading-[1.7] bg-white text-pc-ink resize-none outline-none"
                 style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}
               />
@@ -469,44 +851,47 @@ export default function PunchClock() {
 
       {/* Add time modal (clock tab) */}
       {addModal && (
-        <SessionModal
-          onClose={() => setAddModal(false)}
-          onSave={(s) => { setSessions(prev => [...prev, s]); setAddModal(false); }}
-        />
+        <SessionModal onClose={() => setAddModal(false)}
+          onSave={s => { setSessions(prev => [...prev, s]); setAddModal(false); }} />
       )}
 
-      {/* Add time modal (history tab — pre-fills date) */}
+      {/* Add time modal (history tab — date pre-filled) */}
       {addForDate && (
-        <SessionModal
-          defaultDate={addForDate}
+        <SessionModal defaultDate={addForDate}
           onClose={() => setAddForDate(null)}
-          onSave={(s) => { setSessions(prev => [...prev, s]); setAddForDate(null); }}
-        />
+          onSave={s => { setSessions(prev => [...prev, s]); setAddForDate(null); }} />
       )}
 
       {/* Edit session modal */}
       {editSession && (
-        <SessionModal
-          session={editSession}
+        <SessionModal session={editSession}
           onClose={() => setEditSession(null)}
-          onSave={handleSaveEdit}
-        />
+          onSave={handleSaveEdit} />
       )}
+
+      {/* Absence modal */}
+      <AbsenceModal
+        open={absenceModal}
+        onClose={() => setAbsenceModal(false)}
+        onSave={handleSaveAbsence}
+      />
+
+      {/* Quick schedule modal */}
+      <QuickScheduleModal
+        open={scheduleModal}
+        onClose={() => setScheduleModal(false)}
+        onSave={handleSaveSchedule}
+        normHours={normHours}
+        existingSessions={sessions}
+        existingAbsences={absences}
+      />
     </div>
   );
 }
 
 // ─── Session Row ───────────────────────────────────────────────
-function SessionRow({
-  session,
-  index,
-  onEdit,
-  onDelete,
-}: {
-  session: Session;
-  index: number;
-  onEdit: () => void;
-  onDelete: () => void;
+function SessionRow({ session, index, onEdit, onDelete }: {
+  session: Session; index: number; onEdit: () => void; onDelete: () => void;
 }) {
   const dur = fmtDur(((session.checkOut ?? now()) - session.checkIn) / 60000);
   const timeRange = session.checkOut
@@ -517,33 +902,21 @@ function SessionRow({
     <div className="flex items-center gap-2 py-1.5">
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
-          <span className="text-[14px] font-bold text-pc-ink">
-            Pass {index + 1}
-          </span>
+          <span className="text-[14px] font-bold text-pc-ink">Pass {index + 1}</span>
           {session.manual && <span className="text-[11px] text-pc-muted">✏️</span>}
         </div>
         <div className="flex items-center gap-2 mt-0.5">
           <span className="text-[13px] text-pc-muted tabular-nums font-medium">{timeRange}</span>
-          {session.checkOut && (
-            <span className="text-[12px] text-pc-orange-deep font-semibold tabular-nums">{dur}</span>
-          )}
+          {session.checkOut && <span className="text-[12px] text-pc-orange-deep font-semibold tabular-nums">{dur}</span>}
         </div>
       </div>
       <div className="flex items-center gap-1 shrink-0">
         {session.checkOut && (
-          <button
-            onClick={onEdit}
-            className="w-8 h-8 flex items-center justify-center rounded-xl text-pc-muted hover:text-pc-orange hover:bg-pc-peach transition-colors"
-            aria-label="Redigera pass"
-          >
+          <button onClick={onEdit} className="w-8 h-8 flex items-center justify-center rounded-xl text-pc-muted hover:text-pc-orange hover:bg-pc-peach transition-colors" aria-label="Redigera pass">
             <IconEdit />
           </button>
         )}
-        <button
-          onClick={onDelete}
-          className="w-8 h-8 flex items-center justify-center rounded-xl text-pc-muted hover:text-red-500 hover:bg-red-50 transition-colors"
-          aria-label="Ta bort pass"
-        >
+        <button onClick={onDelete} className="w-8 h-8 flex items-center justify-center rounded-xl text-pc-muted hover:text-red-500 hover:bg-red-50 transition-colors" aria-label="Ta bort pass">
           <IconTrash />
         </button>
       </div>
@@ -552,33 +925,20 @@ function SessionRow({
 }
 
 // ─── Short Session Warning ─────────────────────────────────────
-function ShortSessionWarning({
-  elapsed,
-  onStop,
-  onCancel,
-}: {
-  elapsed: number;
-  onStop: () => void;
-  onCancel: () => void;
+function ShortSessionWarning({ elapsed, onStop, onCancel }: {
+  elapsed: number; onStop: () => void; onCancel: () => void;
 }) {
   const secs = Math.floor(elapsed / 1000);
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center pc-overlay" style={{ background: "rgba(45,23,23,0.55)" }} onClick={onCancel}>
-      <div
-        className="pc-sheet bg-white w-full max-w-[480px] rounded-t-[28px] px-6 pt-6"
-        style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)" }}
-        onClick={e => e.stopPropagation()}
-      >
+      <div className="pc-sheet bg-white w-full max-w-[480px] rounded-t-[28px] px-6 pt-6" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)" }} onClick={e => e.stopPropagation()}>
         <div className="w-10 h-1 bg-pc-line rounded-full mx-auto mb-5" />
-
         <div className="w-14 h-14 rounded-2xl bg-amber-100 flex items-center justify-center mb-4 mx-auto">
           <svg viewBox="0 0 24 24" className="w-7 h-7 text-amber-600" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-            <line x1="12" y1="9" x2="12" y2="13" />
-            <line x1="12" y1="17" x2="12.01" y2="17" />
+            <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
           </svg>
         </div>
-
         <div className="text-center mb-2">
           <div className="font-extrabold text-[20px] tracking-tight mb-2">Ingen tid registreras</div>
           <div className="text-[14px] text-pc-muted leading-relaxed">
@@ -586,20 +946,9 @@ function ShortSessionWarning({
             Pass kortare än 1 minut sparas inte.
           </div>
         </div>
-
         <div className="grid grid-cols-2 gap-3 mt-6">
-          <button
-            onClick={onCancel}
-            className="pc-press py-4 rounded-[16px] bg-pc-bg border border-pc-line font-bold text-[15px] text-pc-ink"
-          >
-            Avbryt
-          </button>
-          <button
-            onClick={onStop}
-            className="pc-press py-4 rounded-[16px] bg-pc-orange text-white font-bold text-[15px] shadow-[0_8px_20px_-8px_rgba(255,95,0,0.6)]"
-          >
-            Stoppa klockan
-          </button>
+          <button onClick={onCancel} className="pc-press py-4 rounded-[16px] bg-pc-bg border border-pc-line font-bold text-[15px] text-pc-ink">Avbryt</button>
+          <button onClick={onStop} className="pc-press py-4 rounded-[16px] bg-pc-orange text-white font-bold text-[15px] shadow-[0_8px_20px_-8px_rgba(255,95,0,0.6)]">Stoppa klockan</button>
         </div>
       </div>
     </div>
@@ -619,10 +968,7 @@ function Stat({ label, value, accent }: { label: string; value: string; accent?:
 // ─── Nav Item ─────────────────────────────────────────────────
 function NavItem({ active, onClick, label, icon }: { active: boolean; onClick: () => void; label: string; icon: React.ReactNode }) {
   return (
-    <button
-      onClick={onClick}
-      className={`flex flex-col items-center gap-0.5 py-1.5 rounded-xl transition-colors ${active ? "text-pc-orange" : "text-pc-muted"}`}
-    >
+    <button onClick={onClick} className={`flex flex-col items-center gap-0.5 py-1.5 rounded-xl transition-colors ${active ? "text-pc-orange" : "text-pc-muted"}`}>
       {icon}
       <span className="text-[10px] font-bold tracking-wide">{label}</span>
     </button>
@@ -630,28 +976,13 @@ function NavItem({ active, onClick, label, icon }: { active: boolean; onClick: (
 }
 
 // ─── Session Modal (Add & Edit) ────────────────────────────────
-function SessionModal({
-  session,
-  defaultDate,
-  onClose,
-  onSave,
-}: {
-  session?: Session;
-  defaultDate?: string;
-  onClose: () => void;
-  onSave: (s: Session) => void;
+function SessionModal({ session, defaultDate, onClose, onSave }: {
+  session?: Session; defaultDate?: string; onClose: () => void; onSave: (s: Session) => void;
 }) {
   const isEdit = !!session;
-
-  const initDate = session
-    ? new Date(session.checkIn).toISOString().slice(0, 10)
-    : (defaultDate ?? todayStr());
-  const initStart = session
-    ? new Date(session.checkIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })
-    : "";
-  const initEnd = session?.checkOut
-    ? new Date(session.checkOut).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })
-    : "";
+  const initDate = session ? new Date(session.checkIn).toISOString().slice(0, 10) : (defaultDate ?? todayStr());
+  const initStart = session ? new Date(session.checkIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }) : "";
+  const initEnd = session?.checkOut ? new Date(session.checkOut).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }) : "";
 
   const [date, setDate] = useState(initDate);
   const [startTime, setStartTime] = useState(initStart);
@@ -663,12 +994,7 @@ function SessionModal({
     const checkIn = new Date(`${date}T${startTime}`).getTime();
     const checkOut = endTime ? new Date(`${date}T${endTime}`).getTime() : null;
     if (checkOut && checkOut <= checkIn) { setErr("Sluttid måste vara efter starttid."); return; }
-    onSave({
-      id: session?.id ?? crypto.randomUUID(),
-      checkIn,
-      checkOut,
-      manual: true,
-    });
+    onSave({ id: session?.id ?? crypto.randomUUID(), checkIn, checkOut, manual: true });
   }
 
   const previewMs = startTime && endTime
@@ -679,48 +1005,33 @@ function SessionModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center pc-overlay" style={{ background: "rgba(45,23,23,0.55)" }} onClick={onClose}>
-      <div
-        className="pc-sheet bg-white w-full max-w-[480px] rounded-t-[28px] px-6 pt-6"
-        style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)" }}
-        onClick={e => e.stopPropagation()}
-      >
+      <div className="pc-sheet bg-white w-full max-w-[480px] rounded-t-[28px] px-6 pt-6" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)" }} onClick={e => e.stopPropagation()}>
         <div className="w-10 h-1 bg-pc-line rounded-full mx-auto mb-5" />
-        <div className="font-extrabold text-[22px] tracking-tight mb-1">
-          {isEdit ? "Redigera pass" : "Lägg till tid"}
-        </div>
+        <div className="font-extrabold text-[22px] tracking-tight mb-1">{isEdit ? "Redigera pass" : "Lägg till tid"}</div>
         <div className="text-[13px] text-pc-muted mb-6">
-          {isEdit
-            ? "Ändra start- och sluttid för detta pass."
-            : "Välj datum, start och sluttid. Lunchen dras automatiskt om du jobbat mer än 5h."}
+          {isEdit ? "Ändra start- och sluttid för detta pass." : "Välj datum, start och sluttid. Lunchen dras automatiskt om du jobbat mer än 5h."}
         </div>
 
         <Label>Datum</Label>
         <input type="date" value={date} onChange={e => setDate(e.target.value)} className="pc-input" />
-
         <Label>Starttid</Label>
         <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className="pc-input" />
-
         <Label>Sluttid (valfri – lämna tom om pågående)</Label>
         <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} className="pc-input" />
 
         {previewMin !== null && previewMin > 0 && (
           <div className="bg-pc-peach rounded-2xl px-4 py-3 mb-4 text-[13px]">
-            <div className="font-extrabold text-pc-orange-deep mb-0.5 text-[15px]">
-              Netto: {fmtDur(previewNet)}
-            </div>
+            <div className="font-extrabold text-pc-orange-deep mb-0.5 text-[15px]">Netto: {fmtDur(previewNet)}</div>
             {previewLunch
               ? <div className="text-pc-orange-deep/80">🥪 45min lunch dras av (mer än 5h)</div>
-              : <div className="text-pc-muted">Ingen lunchavdrag (under 5h)</div>
-            }
+              : <div className="text-pc-muted">Ingen lunchavdrag (under 5h)</div>}
           </div>
         )}
 
         {err && <div className="text-red-600 text-[13px] mb-3">{err}</div>}
 
         <div className="grid grid-cols-2 gap-3 mt-2">
-          <button onClick={onClose} className="pc-press py-4 rounded-[16px] bg-pc-bg border border-pc-line font-bold text-[15px] text-pc-ink">
-            Avbryt
-          </button>
+          <button onClick={onClose} className="pc-press py-4 rounded-[16px] bg-pc-bg border border-pc-line font-bold text-[15px] text-pc-ink">Avbryt</button>
           <button onClick={handleSave} className="pc-press py-4 rounded-[16px] bg-pc-orange text-white font-bold text-[15px] shadow-[0_8px_20px_-8px_rgba(255,95,0,0.6)]">
             {isEdit ? "Spara ändringar" : "Spara"}
           </button>
