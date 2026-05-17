@@ -1,6 +1,6 @@
 # min-tid
 
-A lightweight, mobile-first punch clock for time tracking. Built for Dalslands Sparbank employees to stamp in and out, review their hours, and share a formatted time report.
+A lightweight, mobile-first punch clock for time tracking. Built for employees to stamp in and out, review their hours, and share a formatted time report.
 
 The entire UI is in Swedish.
 
@@ -69,7 +69,7 @@ src/
   routes/
     __root.tsx       # Root layout
     index.tsx        # / route — mounts PunchClock, sets page meta
-  styles.css         # Tailwind v4 config + Dalslands Sparbank design tokens
+  styles.css         # Tailwind v4 config
   router.tsx         # TanStack Router setup
   lib/utils.ts       # cn() helper
 ```
