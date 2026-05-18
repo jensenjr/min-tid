@@ -3,7 +3,6 @@ import {
   type WeekSchedule,
   dayKeyOf,
   fmtMin,
-  netDayMin,
 } from "../lib/schedule";
 
 // ─── Types ────────────────────────────────────────────────────
@@ -116,8 +115,9 @@ export default function QuickScheduleModal({
         }) ?? weekDays[0];
 
   const previewCfg = cfgForDate(previewDate);
-  const previewRawMin = previewCfg.workMinutes;
-  const previewEndTime = addMinutesToTime(startTime, previewRawMin);
+  // Total shift = work + lunch (end time accounts for the break)
+  const previewShiftMin = previewCfg.workMinutes + previewCfg.lunchMinutes;
+  const previewEndTime = addMinutesToTime(startTime, previewShiftMin);
 
   // Total for all selected days
   const totalNetMin = useMemo(() => {
@@ -128,11 +128,14 @@ export default function QuickScheduleModal({
     return total;
   }, [selected, schedule]);
 
-  // Are all selected days the same hours?
+  // Are all selected days the same shift length?
   const allSameHours = useMemo(() => {
     if (selected.size <= 1) return true;
-    const hours = [...selected].map(d => cfgForDate(d).workMinutes);
-    return hours.every(h => h === hours[0]);
+    const shifts = [...selected].map(d => {
+      const c = cfgForDate(d);
+      return c.workMinutes + c.lunchMinutes;
+    });
+    return shifts.every(s => s === shifts[0]);
   }, [selected, schedule]);
 
   function toggleDay(date: string) {
@@ -154,7 +157,7 @@ export default function QuickScheduleModal({
     const newSessions: NewSession[] = [];
     for (const date of [...selected].sort()) {
       const cfg = cfgForDate(date);
-      const endTime = addMinutesToTime(startTime, cfg.workMinutes);
+      const endTime = addMinutesToTime(startTime, cfg.workMinutes + cfg.lunchMinutes);
       const checkIn = new Date(`${date}T${startTime}`).getTime();
       const checkOut = new Date(`${date}T${endTime}`).getTime();
       if (checkOut > checkIn) {
@@ -256,7 +259,7 @@ export default function QuickScheduleModal({
                 </button>
                 {/* Per-day hours hint */}
                 <div className="text-[9px] font-semibold text-[#c4a882] leading-none">
-                  {cfg.active ? `${Math.floor(netDayMin(cfg) / 60)}h` : ""}
+                  {cfg.active ? `${Math.floor(cfg.workMinutes / 60)}h` : ""}
                 </div>
                 {/* Indicators */}
                 <div className="flex gap-0.5 h-2 items-center">
@@ -322,9 +325,16 @@ export default function QuickScheduleModal({
         <div className="flex items-center gap-2 bg-[#fff3ec] rounded-[14px] px-4 py-3 mb-5">
           <div className="flex-1">
             {allSameHours ? (
-              <div className="text-[13px] font-bold text-[#ff5f00]">
-                {fmtMin(previewRawMin)} per dag
-              </div>
+              <>
+                <div className="text-[13px] font-bold text-[#ff5f00]">
+                  {fmtMin(previewCfg.workMinutes)} per dag
+                </div>
+                {previewCfg.lunchMinutes > 0 && (
+                  <div className="text-[12px] text-[#9c7c5c] mt-0.5">
+                    +{previewCfg.lunchMinutes}min lunch → sluttid {previewEndTime}
+                  </div>
+                )}
+              </>
             ) : (
               <>
                 <div className="text-[13px] font-bold text-[#ff5f00]">

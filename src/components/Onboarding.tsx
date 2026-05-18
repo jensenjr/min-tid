@@ -2,7 +2,7 @@ import { useState } from "react";
 import {
   type DayKey, type WeekSchedule,
   DAY_KEYS, DAY_LABEL_SHORT,
-  DEFAULT_SCHEDULE, WORK_PRESETS,
+  DEFAULT_SCHEDULE, WORK_PRESETS, LUNCH_PRESETS,
   weeklyNetMin, fmtMin, buildUniformSchedule,
 } from "../lib/schedule";
 
@@ -37,7 +37,7 @@ function PerDayEditor({
   schedule: WeekSchedule;
   onChange: (s: WeekSchedule) => void;
 }) {
-  function setDay(key: DayKey, patch: Partial<{ active: boolean; workMinutes: number }>) {
+  function setDay(key: DayKey, patch: Partial<{ active: boolean; workMinutes: number; lunchMinutes: number }>) {
     onChange({ ...schedule, [key]: { ...schedule[key], ...patch } });
   }
 
@@ -45,9 +45,10 @@ function PerDayEditor({
     <div className="space-y-2">
       {/* Header */}
       <div className="grid gap-2 text-[10px] font-bold uppercase tracking-[0.1em] text-pc-muted px-1 mb-1"
-        style={{ gridTemplateColumns: "56px 1fr 36px" }}>
+        style={{ gridTemplateColumns: "56px 1fr 1fr 36px" }}>
         <span>Dag</span>
-        <span>Arbetstid (netto)</span>
+        <span>Arbetstid</span>
+        <span>Lunch</span>
         <span />
       </div>
 
@@ -56,7 +57,7 @@ function PerDayEditor({
         return (
           <div key={key}
             className="grid gap-2 items-center"
-            style={{ gridTemplateColumns: "56px 1fr 36px" }}>
+            style={{ gridTemplateColumns: "56px 1fr 1fr 36px" }}>
             {/* Day label */}
             <span className={`text-[13px] font-bold ${cfg.active ? "text-pc-ink" : "text-pc-muted"}`}>
               {DAY_LABEL_SHORT[key]}
@@ -77,9 +78,24 @@ function PerDayEditor({
               <div style={{ ...SEL, color: "#c4b0a0", background: "#f5f0ea" }}>—</div>
             )}
 
+            {/* Lunch */}
+            {cfg.active ? (
+              <select
+                value={cfg.lunchMinutes}
+                onChange={e => setDay(key, { lunchMinutes: +e.target.value })}
+                style={SEL}
+              >
+                {LUNCH_PRESETS.map(p => (
+                  <option key={p.value} value={p.value}>{p.label}</option>
+                ))}
+              </select>
+            ) : (
+              <div style={{ ...SEL, color: "#c4b0a0", background: "#f5f0ea" }}>—</div>
+            )}
+
             {/* Toggle */}
             <button
-              onClick={() => setDay(key, { active: !cfg.active })}
+              onClick={() => setDay(key, { active: !cfg.active, lunchMinutes: !cfg.active ? 30 : 0 })}
               className="w-9 h-9 rounded-xl flex items-center justify-center transition-colors"
               style={{ background: cfg.active ? "#ff5f00" : "#f0e8df" }}
               aria-label={cfg.active ? "Inaktivera" : "Aktivera"}
@@ -115,7 +131,9 @@ export default function Onboarding({ onComplete }: { onComplete: (r: OnboardingR
   // Uniform-mode local state
   const [activeDays, setActiveDays] = useState<Set<DayKey>>(new Set(WEEKDAYS));
   const [uniformWork, setUniformWork] = useState(480);
+  const [uniformLunch, setUniformLunch] = useState(30);
 
+  // Weekly norm = work hours only, lunch is not deducted
   const uniformWeekNet = [...activeDays].length * uniformWork;
 
   function toggleDay(k: DayKey) {
@@ -211,7 +229,7 @@ export default function Onboarding({ onComplete }: { onComplete: (r: OnboardingR
     <Screen scroll>
       <StepDots current={2} total={3} />
       <h2 className="text-[22px] font-extrabold tracking-tight text-pc-ink mb-1 text-center">Välj ditt schema</h2>
-      <p className="text-[13px] text-pc-muted mb-6 text-center">Ange hur många timmar du faktiskt arbetar per dag.</p>
+      <p className="text-[13px] text-pc-muted mb-6 text-center">Samma arbetstid för alla valda dagar.</p>
 
       <div className="w-full space-y-5">
         {/* Day toggles */}
@@ -237,7 +255,7 @@ export default function Onboarding({ onComplete }: { onComplete: (r: OnboardingR
 
         {/* Work time */}
         <div>
-          <Label>Netto arbetstid per dag</Label>
+          <Label>Arbetstid per dag</Label>
           <div className="grid grid-cols-3 gap-2">
             {COMMON_WORK.map(p => (
               <button
@@ -275,7 +293,29 @@ export default function Onboarding({ onComplete }: { onComplete: (r: OnboardingR
           </div>
         </div>
 
-        {/* Preview */}
+        {/* Lunch */}
+        <div>
+          <Label>Lunchrast</Label>
+          <div className="grid grid-cols-4 gap-2">
+            {LUNCH_PRESETS.map(p => (
+              <button
+                key={p.value}
+                onClick={() => setUniformLunch(p.value)}
+                className="pc-press py-2.5 rounded-[12px] text-[12px] font-bold border transition-colors"
+                style={{
+                  background: uniformLunch === p.value ? "#ff5f00" : "#fdf6ee",
+                  color: uniformLunch === p.value ? "#fff" : "#9a8a82",
+                  border: uniformLunch === p.value ? "1.5px solid #ff5f00" : "1.5px solid #ece6df",
+                  boxShadow: uniformLunch === p.value ? "0 4px 12px -4px rgba(255,95,0,0.45)" : "none",
+                }}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Preview — lunch does NOT reduce work target */}
         <div className="bg-pc-peach rounded-2xl px-4 py-3 flex items-center justify-between">
           <div>
             <div className="text-[11px] font-bold uppercase tracking-wide text-pc-orange-deep">Per dag</div>
@@ -291,7 +331,7 @@ export default function Onboarding({ onComplete }: { onComplete: (r: OnboardingR
           <button onClick={() => setStep("type")} className="ob-btn-ghost">← Tillbaka</button>
           <button
             onClick={() => {
-              setSchedule(buildUniformSchedule(activeDays, uniformWork));
+              setSchedule(buildUniformSchedule(activeDays, uniformWork, uniformLunch));
               setStep("dept");
             }}
             className="ob-btn-primary"
@@ -309,7 +349,7 @@ export default function Onboarding({ onComplete }: { onComplete: (r: OnboardingR
     <Screen scroll>
       <StepDots current={2} total={3} />
       <h2 className="text-[22px] font-extrabold tracking-tight text-pc-ink mb-1 text-center">Schema per dag</h2>
-      <p className="text-[13px] text-pc-muted mb-6 text-center">Aktivera de dagar du jobbar och ange netto arbetstid per dag.</p>
+      <p className="text-[13px] text-pc-muted mb-6 text-center">Aktivera de dagar du jobbar och sätt tid och lunchrast per dag.</p>
 
       <div className="w-full space-y-4">
         <PerDayEditor schedule={schedule} onChange={setSchedule} />

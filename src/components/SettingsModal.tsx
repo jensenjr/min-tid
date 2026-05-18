@@ -2,7 +2,7 @@ import { useState } from "react";
 import {
   type WeekSchedule, type DayKey,
   DAY_KEYS,
-  WORK_PRESETS,
+  WORK_PRESETS, LUNCH_PRESETS,
   weeklyNetMin, fmtMin,
 } from "../lib/schedule";
 import { PerDayEditor } from "./Onboarding";
@@ -44,6 +44,7 @@ export default function SettingsModal({
 
   // "Set same for all active days" quick-fill
   const [bulkWork, setBulkWork] = useState(480);
+  const [bulkLunch, setBulkLunch] = useState(30);
 
   if (!open) return null;
 
@@ -51,7 +52,7 @@ export default function SettingsModal({
     const next = { ...schedule };
     for (const k of DAY_KEYS) {
       if (next[k].active) {
-        next[k] = { ...next[k], workMinutes: bulkWork };
+        next[k] = { ...next[k], workMinutes: bulkWork, lunchMinutes: bulkLunch };
       }
     }
     setSchedule(next);
@@ -128,11 +129,19 @@ export default function SettingsModal({
             <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-3">
               Sätt samma för alla aktiva dagar
             </div>
-            <div className="mb-3">
-              <div className="text-[10px] font-bold text-pc-muted mb-1 uppercase tracking-wide">Netto arbetstid</div>
-              <select value={bulkWork} onChange={e => setBulkWork(+e.target.value)} style={SEL}>
-                {WORK_PRESETS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-              </select>
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              <div>
+                <div className="text-[10px] font-bold text-pc-muted mb-1 uppercase tracking-wide">Arbetstid</div>
+                <select value={bulkWork} onChange={e => setBulkWork(+e.target.value)} style={SEL}>
+                  {WORK_PRESETS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <div className="text-[10px] font-bold text-pc-muted mb-1 uppercase tracking-wide">Lunch</div>
+                <select value={bulkLunch} onChange={e => setBulkLunch(+e.target.value)} style={SEL}>
+                  {LUNCH_PRESETS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                </select>
+              </div>
             </div>
             <button
               onClick={applyBulk}

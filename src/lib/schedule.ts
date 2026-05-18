@@ -3,7 +3,8 @@ export type DayKey = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 
 export type DayConfig = {
   active: boolean;
-  workMinutes: number;   // net worked time (what the user actually works)
+  workMinutes: number;   // net worked time — what the user actually works (not including lunch)
+  lunchMinutes: number;  // lunch break length — only affects shift end time, never deducted from work target
 };
 
 export type WeekSchedule = Record<DayKey, DayConfig>;
@@ -26,13 +27,13 @@ const JS_TO_KEY: DayKey[] = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 export function dayKeyOf(date: Date): DayKey { return JS_TO_KEY[date.getDay()]; }
 
 export const DEFAULT_SCHEDULE: WeekSchedule = {
-  mon: { active: true,  workMinutes: 480 },
-  tue: { active: true,  workMinutes: 480 },
-  wed: { active: true,  workMinutes: 480 },
-  thu: { active: true,  workMinutes: 480 },
-  fri: { active: true,  workMinutes: 480 },
-  sat: { active: false, workMinutes: 480 },
-  sun: { active: false, workMinutes: 480 },
+  mon: { active: true,  workMinutes: 480, lunchMinutes: 30 },
+  tue: { active: true,  workMinutes: 480, lunchMinutes: 30 },
+  wed: { active: true,  workMinutes: 480, lunchMinutes: 30 },
+  thu: { active: true,  workMinutes: 480, lunchMinutes: 30 },
+  fri: { active: true,  workMinutes: 480, lunchMinutes: 30 },
+  sat: { active: false, workMinutes: 480, lunchMinutes: 0  },
+  sun: { active: false, workMinutes: 480, lunchMinutes: 0  },
 };
 
 // ─── Calculations ─────────────────────────────────────────────
@@ -58,6 +59,17 @@ export function fmtMin(min: number): string {
 }
 
 // ─── Preset lists (used in editors) ──────────────────────────
+export const LUNCH_PRESETS: { label: string; value: number }[] = [
+  { label: "Ingen",   value: 0  },
+  { label: "15 min",  value: 15 },
+  { label: "20 min",  value: 20 },
+  { label: "30 min",  value: 30 },
+  { label: "45 min",  value: 45 },
+  { label: "60 min",  value: 60 },
+  { label: "75 min",  value: 75 },
+  { label: "90 min",  value: 90 },
+];
+
 export const WORK_PRESETS: { label: string; value: number }[] = [
   { label: "2h",      value: 120 },
   { label: "3h",      value: 180 },
@@ -80,10 +92,12 @@ export const WORK_PRESETS: { label: string; value: number }[] = [
 export function buildUniformSchedule(
   activeDays: Set<DayKey>,
   workMinutes: number,
+  lunchMinutes: number,
 ): WeekSchedule {
   const base = {} as WeekSchedule;
   for (const k of DAY_KEYS) {
-    base[k] = { active: activeDays.has(k), workMinutes };
+    const active = activeDays.has(k);
+    base[k] = { active, workMinutes, lunchMinutes: active ? lunchMinutes : 0 };
   }
   return base;
 }
@@ -92,13 +106,13 @@ export function buildUniformSchedule(
 export function migrateNormHours(normHours: number): WeekSchedule {
   const wm = Math.round(normHours * 60);
   return {
-    mon: { active: true,  workMinutes: wm },
-    tue: { active: true,  workMinutes: wm },
-    wed: { active: true,  workMinutes: wm },
-    thu: { active: true,  workMinutes: wm },
-    fri: { active: true,  workMinutes: wm },
-    sat: { active: false, workMinutes: wm },
-    sun: { active: false, workMinutes: wm },
+    mon: { active: true,  workMinutes: wm, lunchMinutes: 30 },
+    tue: { active: true,  workMinutes: wm, lunchMinutes: 30 },
+    wed: { active: true,  workMinutes: wm, lunchMinutes: 30 },
+    thu: { active: true,  workMinutes: wm, lunchMinutes: 30 },
+    fri: { active: true,  workMinutes: wm, lunchMinutes: 30 },
+    sat: { active: false, workMinutes: wm, lunchMinutes: 0  },
+    sun: { active: false, workMinutes: wm, lunchMinutes: 0  },
   };
 }
 
