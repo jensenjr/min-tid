@@ -5,7 +5,7 @@ import QuickScheduleModal from "./QuickScheduleModal";
 import SettingsModal from "./SettingsModal";
 import {
   type WeekSchedule,
-  DEFAULT_SCHEDULE, dayKeyOf, weeklyNetMin, fmtMin,
+  DEFAULT_SCHEDULE, dayKeyOf, shiftMinutes, weeklyNetMin, fmtMin,
   migrateNormHours, migrateSchedule,
 } from "../lib/schedule";
 
@@ -49,7 +49,6 @@ function computeDayMinutes(sessions: Session[], dateStr: string, schedule: WeekS
     const end = s.checkOut ?? now();
     raw += (end - s.checkIn) / 60000;
   }
-  // workMinutes is net worked time — no lunch deduction
   return { raw, net: raw, cfg };
 }
 
@@ -351,7 +350,20 @@ export default function PunchClock() {
   const [shortWarn, setShortWarn] = useState(false);
 
   useEffect(() => {
-    const t = setInterval(() => setTick(x => x + 1), 10000);
+    const t = setInterval(() => {
+      setTick(x => x + 1);
+
+      // 🔔 NOTIFICATION HOOK — fires every 10 s.
+      // To add smart start/stop reminders, check here:
+      //   const key  = dayKeyOf(new Date());
+      //   const cfg  = schedule[key];           // has cfg.startTime / cfg.endTime
+      //   const now  = new Date().toTimeString().slice(0, 5);  // "HH:MM"
+      //   if (!isIn && cfg.active && now === cfg.startTime)
+      //     → prompt "Your schedule says you start at HH:MM — start the timer?"
+      //   if ( isIn && cfg.active && now === cfg.endTime)
+      //     → prompt "You usually finish at HH:MM — stop the timer?"
+      // Requires notification permission + a persistent "already prompted today" flag.
+    }, 10000);
     return () => clearInterval(t);
   }, []);
 
@@ -957,19 +969,31 @@ function NavItem({ active, onClick, label, icon }: { active: boolean; onClick: (
 }
 
 // ─── Session Modal ─────────────────────────────────────────────
-function SessionModal({ session, defaultDate, onClose, onSave }: {
-  session?: Session; defaultDate?: string;
+function SessionModal({ session, defaultDate, schedule, onClose, onSave }: {
+  session?: Session; defaultDate?: string; schedule: WeekSchedule;
   onClose: () => void; onSave: (s: Session) => void;
 }) {
   const isEdit = !!session;
-  const initDate = session ? new Date(session.checkIn).toISOString().slice(0, 10) : (defaultDate ?? todayStr());
-  const initStart = session ? new Date(session.checkIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }) : "";
-  const initEnd = session?.checkOut ? new Date(session.checkOut).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }) : "";
+  const initDate = session
+    ? new Date(session.checkIn).toISOString().slice(0, 10)
+    : (defaultDate ?? todayStr());
+  const initCfg = schedule[dayKeyOf(new Date(initDate + "T12:00:00"))];
+
+  // Pre-fill times from schedule when adding a new session
+  const initStart = session
+    ? new Date(session.checkIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })
+    : (initCfg.active ? initCfg.startTime : "");
+  const initEnd = session?.checkOut
+    ? new Date(session.checkOut).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })
+    : (initCfg.active ? initCfg.endTime : "");
 
   const [date, setDate] = useState(initDate);
   const [startTime, setStartTime] = useState(initStart);
   const [endTime, setEndTime] = useState(initEnd);
   const [err, setErr] = useState("");
+
+  const dayCfg = schedule[dayKeyOf(new Date(date + "T12:00:00"))];
+  const scheduledMins = dayCfg.active ? shiftMinutes(dayCfg) : 0;
 
   function handleSave() {
     if (!startTime) { setErr("Ange starttid."); return; }
@@ -982,7 +1006,7 @@ function SessionModal({ session, defaultDate, onClose, onSave }: {
   const previewMs = startTime && endTime
     ? new Date(`${date}T${endTime}`).getTime() - new Date(`${date}T${startTime}`).getTime()
     : null;
-  const previewMin = previewMs ? previewMs / 60000 : null;
+  const previewMin = previewMs !== null && previewMs > 0 ? previewMs / 60000 : null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center pc-overlay" style={{ background: "rgba(45,23,23,0.55)" }} onClick={onClose}>
@@ -990,19 +1014,28 @@ function SessionModal({ session, defaultDate, onClose, onSave }: {
         <div className="w-10 h-1 bg-pc-line rounded-full mx-auto mb-5" />
         <div className="font-extrabold text-[22px] tracking-tight mb-1">{isEdit ? "Redigera pass" : "Lägg till tid"}</div>
         <div className="text-[13px] text-pc-muted mb-6">
-          {isEdit ? "Ändra start- och sluttid för detta pass." : "Välj datum, start och sluttid."}
+          {dayCfg.active
+            ? `Schema: ${dayCfg.startTime}–${dayCfg.endTime} (${fmtMin(scheduledMins)})`
+            : "Välj datum, start och sluttid."}
         </div>
 
         <Label>Datum</Label>
         <input type="date" value={date} onChange={e => setDate(e.target.value)} className="pc-input" />
         <Label>Starttid</Label>
         <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className="pc-input" />
-        <Label>Sluttid (valfri – lämna tom om pågående)</Label>
+        <Label>Sluttid <span className="normal-case font-medium tracking-normal">(valfri — lämna tom om pågående)</span></Label>
         <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} className="pc-input" />
 
         {previewMin !== null && previewMin > 0 && (
-          <div className="bg-pc-peach rounded-2xl px-4 py-3 mb-4 text-[13px]">
-            <div className="font-extrabold text-pc-orange-deep text-[15px]">{fmtDur(previewMin)}</div>
+          <div className="bg-pc-peach rounded-2xl px-4 py-3 mb-4">
+            <div className="font-extrabold text-pc-orange-deep text-[17px]">{fmtDur(previewMin)}</div>
+            {scheduledMins > 0 && (
+              <div className="text-[12px] text-pc-muted mt-0.5">
+                {previewMin >= scheduledMins
+                  ? `✓ Uppfyller schema (${fmtMin(scheduledMins)})`
+                  : `${fmtMin(scheduledMins - previewMin)} kvar till schema`}
+              </div>
+            )}
           </div>
         )}
 

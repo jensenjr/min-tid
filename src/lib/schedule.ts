@@ -3,8 +3,8 @@ export type DayKey = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 
 export type DayConfig = {
   active: boolean;
-  workMinutes: number;   // net worked time — what the user actually works (not including lunch)
-  lunchMinutes: number;  // lunch break length — only affects shift end time, never deducted from work target
+  startTime: string;  // "HH:MM" 24-hour, e.g. "08:00"
+  endTime: string;    // "HH:MM" 24-hour, e.g. "17:00"
 };
 
 export type WeekSchedule = Record<DayKey, DayConfig>;
@@ -27,25 +27,32 @@ const JS_TO_KEY: DayKey[] = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 export function dayKeyOf(date: Date): DayKey { return JS_TO_KEY[date.getDay()]; }
 
 export const DEFAULT_SCHEDULE: WeekSchedule = {
-  mon: { active: true,  workMinutes: 480, lunchMinutes: 30 },
-  tue: { active: true,  workMinutes: 480, lunchMinutes: 30 },
-  wed: { active: true,  workMinutes: 480, lunchMinutes: 30 },
-  thu: { active: true,  workMinutes: 480, lunchMinutes: 30 },
-  fri: { active: true,  workMinutes: 480, lunchMinutes: 30 },
-  sat: { active: false, workMinutes: 480, lunchMinutes: 0  },
-  sun: { active: false, workMinutes: 480, lunchMinutes: 0  },
+  mon: { active: true,  startTime: "08:00", endTime: "17:00" },
+  tue: { active: true,  startTime: "08:00", endTime: "17:00" },
+  wed: { active: true,  startTime: "08:00", endTime: "17:00" },
+  thu: { active: true,  startTime: "08:00", endTime: "17:00" },
+  fri: { active: true,  startTime: "08:00", endTime: "17:00" },
+  sat: { active: false, startTime: "08:00", endTime: "17:00" },
+  sun: { active: false, startTime: "08:00", endTime: "17:00" },
 };
 
 // ─── Calculations ─────────────────────────────────────────────
 
-/** Scheduled minutes for one day. workMinutes is already the net worked time. */
-export function netDayMin(cfg: DayConfig): number {
-  return cfg.workMinutes;
+/** Shift length in minutes (endTime − startTime). Never negative. */
+export function shiftMinutes(cfg: DayConfig): number {
+  const [sh, sm] = cfg.startTime.split(":").map(Number);
+  const [eh, em] = cfg.endTime.split(":").map(Number);
+  return Math.max(0, (eh * 60 + em) - (sh * 60 + sm));
 }
 
-/** Total net minutes across the whole week. */
+/** Scheduled minutes for one day (0 if inactive). */
+export function netDayMin(cfg: DayConfig): number {
+  return cfg.active ? shiftMinutes(cfg) : 0;
+}
+
+/** Total scheduled minutes across the whole week. */
 export function weeklyNetMin(s: WeekSchedule): number {
-  return DAY_KEYS.reduce((sum, k) => sum + (s[k].active ? netDayMin(s[k]) : 0), 0);
+  return DAY_KEYS.reduce((sum, k) => sum + netDayMin(s[k]), 0);
 }
 
 /** Format minutes as "Xh Ymin" (or just "Ymin" / "Xh"). */
@@ -58,79 +65,67 @@ export function fmtMin(min: number): string {
   return `${h}h ${m}min`;
 }
 
-// ─── Preset lists (used in editors) ──────────────────────────
-export const LUNCH_PRESETS: { label: string; value: number }[] = [
-  { label: "Ingen",   value: 0  },
-  { label: "15 min",  value: 15 },
-  { label: "20 min",  value: 20 },
-  { label: "30 min",  value: 30 },
-  { label: "45 min",  value: 45 },
-  { label: "60 min",  value: 60 },
-  { label: "75 min",  value: 75 },
-  { label: "90 min",  value: 90 },
-];
-
-export const WORK_PRESETS: { label: string; value: number }[] = [
-  { label: "2h",      value: 120 },
-  { label: "3h",      value: 180 },
-  { label: "4h",      value: 240 },
-  { label: "5h",      value: 300 },
-  { label: "6h",      value: 360 },
-  { label: "6h 45min",value: 405 },
-  { label: "7h",      value: 420 },
-  { label: "7h 15min",value: 435 },
-  { label: "7h 30min",value: 450 },
-  { label: "7h 45min",value: 465 },
-  { label: "8h",      value: 480 },
-  { label: "8h 30min",value: 510 },
-  { label: "9h",      value: 540 },
-  { label: "10h",     value: 600 },
-  { label: "12h",     value: 720 },
-];
-
-/** Build a uniform schedule (same hours every active day). */
-export function buildUniformSchedule(
-  activeDays: Set<DayKey>,
-  workMinutes: number,
-  lunchMinutes: number,
-): WeekSchedule {
-  const base = {} as WeekSchedule;
-  for (const k of DAY_KEYS) {
-    const active = activeDays.has(k);
-    base[k] = { active, workMinutes, lunchMinutes: active ? lunchMinutes : 0 };
-  }
-  return base;
+/**
+ * Add offsetMinutes to a base hour and return an "HH:MM" string.
+ * Clamps to 23:59 to avoid wrapping past midnight.
+ */
+export function addMinutes(baseHour: number, offsetMinutes: number): string {
+  const total = Math.min(baseHour * 60 + offsetMinutes, 23 * 60 + 59);
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
+
+// ─── Migration ────────────────────────────────────────────────
 
 /** Migrate old normHours (number) into a WeekSchedule. */
 export function migrateNormHours(normHours: number): WeekSchedule {
-  const wm = Math.round(normHours * 60);
+  // normHours was gross (e.g. 8.75h = 8h45min including lunch). Assume 08:00 start.
+  const endTime = addMinutes(8, Math.round(normHours * 60));
   return {
-    mon: { active: true,  workMinutes: wm, lunchMinutes: 30 },
-    tue: { active: true,  workMinutes: wm, lunchMinutes: 30 },
-    wed: { active: true,  workMinutes: wm, lunchMinutes: 30 },
-    thu: { active: true,  workMinutes: wm, lunchMinutes: 30 },
-    fri: { active: true,  workMinutes: wm, lunchMinutes: 30 },
-    sat: { active: false, workMinutes: wm, lunchMinutes: 0  },
-    sun: { active: false, workMinutes: wm, lunchMinutes: 0  },
+    mon: { active: true,  startTime: "08:00", endTime },
+    tue: { active: true,  startTime: "08:00", endTime },
+    wed: { active: true,  startTime: "08:00", endTime },
+    thu: { active: true,  startTime: "08:00", endTime },
+    fri: { active: true,  startTime: "08:00", endTime },
+    sat: { active: false, startTime: "08:00", endTime },
+    sun: { active: false, startTime: "08:00", endTime },
   };
 }
 
 /**
- * Migrate a saved schedule that may still contain the old lunchMinutes field.
- * Since workMinutes was previously gross (including lunch), we subtract lunchMinutes
- * so the stored value becomes net worked time matching the new model.
+ * Migrate a saved schedule from any previous format to the current one.
+ *
+ * Handles three formats:
+ *   1. New format — { active, startTime, endTime } → pass through
+ *   2. workMinutes/lunchMinutes format → reconstruct assuming 08:00 start,
+ *      total shift = workMinutes + lunchMinutes
+ *   3. workMinutes only (no lunchMinutes) → same but lunchMinutes = 0
  */
 export function migrateSchedule(raw: Record<string, unknown>): WeekSchedule {
   const result = {} as WeekSchedule;
   for (const k of DAY_KEYS) {
     const day = raw[k] as Record<string, unknown> | undefined;
     if (!day) { result[k] = DEFAULT_SCHEDULE[k]; continue; }
-    const active = Boolean(day.active);
-    const workMinutes = Number(day.workMinutes) || 480;
-    const lunchMinutes = Number(day.lunchMinutes) || 0;
-    // Old model stored gross; subtract lunch to get net
-    result[k] = { active, workMinutes: Math.max(0, workMinutes - lunchMinutes) };
+
+    if (typeof day.startTime === "string" && typeof day.endTime === "string") {
+      // Already current format
+      result[k] = {
+        active: Boolean(day.active),
+        startTime: day.startTime,
+        endTime: day.endTime,
+      };
+    } else {
+      // Old workMinutes/lunchMinutes format — reconstruct shift window
+      const active = Boolean(day.active);
+      const workMinutes = Number(day.workMinutes) || 480;
+      const lunchMinutes = Number(day.lunchMinutes) || 0;
+      result[k] = {
+        active,
+        startTime: "08:00",
+        endTime: addMinutes(8, workMinutes + lunchMinutes),
+      };
+    }
   }
   return result;
 }

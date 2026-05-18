@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import {
   type WeekSchedule,
   dayKeyOf,
+  shiftMinutes,
   fmtMin,
 } from "../lib/schedule";
 
@@ -38,6 +39,7 @@ function getWeekDays(mondayStr: string): string[] {
   return days;
 }
 
+/** Add offsetMin to a "HH:MM" start string, returns new "HH:MM". */
 function addMinutesToTime(timeStr: string, minutes: number): string {
   const [h, m] = timeStr.split(":").map(Number);
   const total = h * 60 + m + Math.round(minutes);
@@ -66,7 +68,16 @@ export default function QuickScheduleModal({
 }) {
   const [weekOffset, setWeekOffset] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [startTime, setStartTime] = useState("08:00");
+
+  // Start time override — defaults to first active weekday's scheduled start
+  const defaultStart = (() => {
+    const keys = ["mon", "tue", "wed", "thu", "fri"] as const;
+    for (const k of keys) {
+      if (schedule[k].active) return schedule[k].startTime;
+    }
+    return "08:00";
+  })();
+  const [startTimeOverride, setStartTimeOverride] = useState(defaultStart);
 
   if (!open) return null;
 
@@ -77,6 +88,10 @@ export default function QuickScheduleModal({
   const weekDays = getWeekDays(mondayStr);
   const weekNum = isoWeekNumber(displayMon);
   const today = todayStr();
+
+  function cfgForDate(dateStr: string) {
+    return schedule[dayKeyOf(new Date(dateStr + "T12:00:00"))];
+  }
 
   // Build sets for quick lookup
   const sessionDates = useMemo(() => {
@@ -99,43 +114,34 @@ export default function QuickScheduleModal({
     return s;
   }, [existingAbsences]);
 
-  // Get the schedule config for a given date string
-  function cfgForDate(dateStr: string) {
-    const key = dayKeyOf(new Date(dateStr + "T12:00:00"));
-    return schedule[key];
-  }
-
-  // Preview: use first selected day, or nearest active weekday as fallback
+  // Preview: representative day = first selected, else first active weekday in view
   const previewDate =
     selected.size > 0
       ? [...selected].sort()[0]
-      : weekDays.find(d => {
-          const cfg = cfgForDate(d);
-          return cfg.active;
-        }) ?? weekDays[0];
-
+      : weekDays.find(d => cfgForDate(d).active) ?? weekDays[0];
   const previewCfg = cfgForDate(previewDate);
-  // Total shift = work + lunch (end time accounts for the break)
-  const previewShiftMin = previewCfg.workMinutes + previewCfg.lunchMinutes;
-  const previewEndTime = addMinutesToTime(startTime, previewShiftMin);
+  const previewShiftMins = shiftMinutes(previewCfg);
 
-  // Total for all selected days
-  const totalNetMin = useMemo(() => {
+  // Compute end time for a given date using the override start + scheduled shift length
+  function endTimeFor(dateStr: string): string {
+    const cfg = cfgForDate(dateStr);
+    return addMinutesToTime(startTimeOverride, shiftMinutes(cfg));
+  }
+
+  // Total minutes across selected days
+  const totalMins = useMemo(() => {
     let total = 0;
     for (const date of selected) {
-      total += cfgForDate(date).workMinutes;
+      total += shiftMinutes(cfgForDate(date));
     }
     return total;
   }, [selected, schedule]);
 
-  // Are all selected days the same shift length?
-  const allSameHours = useMemo(() => {
+  // Do all selected days have the same shift length?
+  const allSameLength = useMemo(() => {
     if (selected.size <= 1) return true;
-    const shifts = [...selected].map(d => {
-      const c = cfgForDate(d);
-      return c.workMinutes + c.lunchMinutes;
-    });
-    return shifts.every(s => s === shifts[0]);
+    const lengths = [...selected].map(d => shiftMinutes(cfgForDate(d)));
+    return lengths.every(l => l === lengths[0]);
   }, [selected, schedule]);
 
   function toggleDay(date: string) {
@@ -146,19 +152,17 @@ export default function QuickScheduleModal({
     });
   }
 
-  function selectWorkdays() {
-    // Only select active days in the schedule
-    const activeDays = weekDays.filter(d => cfgForDate(d).active);
-    setSelected(new Set(activeDays.length > 0 ? activeDays : weekDays.slice(0, 5)));
+  function selectActiveDays() {
+    const active = weekDays.filter(d => cfgForDate(d).active);
+    setSelected(new Set(active.length > 0 ? active : weekDays.slice(0, 5)));
   }
 
   function handleSave() {
     if (selected.size === 0) return;
     const newSessions: NewSession[] = [];
     for (const date of [...selected].sort()) {
-      const cfg = cfgForDate(date);
-      const endTime = addMinutesToTime(startTime, cfg.workMinutes + cfg.lunchMinutes);
-      const checkIn = new Date(`${date}T${startTime}`).getTime();
+      const endTime = endTimeFor(date);
+      const checkIn = new Date(`${date}T${startTimeOverride}`).getTime();
       const checkOut = new Date(`${date}T${endTime}`).getTime();
       if (checkOut > checkIn) {
         newSessions.push({ id: crypto.randomUUID(), checkIn, checkOut, manual: true });
@@ -168,10 +172,10 @@ export default function QuickScheduleModal({
     setSelected(new Set());
   }
 
-  // Range label for header
   const firstDay = new Date(mondayStr + "T12:00:00");
   const lastDay = new Date(weekDays[6] + "T12:00:00");
   const rangeLabel = `${firstDay.toLocaleDateString("sv-SE", { day: "numeric", month: "short" })} – ${lastDay.toLocaleDateString("sv-SE", { day: "numeric", month: "short" })}`;
+  const previewEndTime = addMinutesToTime(startTimeOverride, previewShiftMins);
 
   return (
     <div
@@ -190,10 +194,9 @@ export default function QuickScheduleModal({
         {/* Handle */}
         <div className="w-10 h-1 bg-[#ece6df] rounded-full mx-auto mb-5" />
 
-        {/* Title */}
         <div className="font-extrabold text-[22px] tracking-tight mb-0.5">Planera dagar</div>
         <div className="text-[13px] text-[#9c7c5c] mb-5">
-          Välj en eller flera dagar — ett helt arbetspass läggs till automatiskt.
+          Välj dagar — starttid kan justeras, sluttid beräknas per schema.
         </div>
 
         {/* Week navigation */}
@@ -235,65 +238,55 @@ export default function QuickScheduleModal({
             const isWeekend = i >= 5;
             const cfg = cfgForDate(date);
             const isInactive = !cfg.active;
+            const dayShiftMins = shiftMinutes(cfg);
 
             return (
-              <div key={date} className="flex flex-col items-center gap-1">
+              <div key={date} className="flex flex-col items-center gap-0.5">
                 <button
                   onClick={() => toggleDay(date)}
                   className="w-full aspect-square rounded-2xl flex items-center justify-center font-extrabold text-[15px] transition-all active:scale-90"
                   style={{
-                    background: isSel
-                      ? "#ff5f00"
-                      : isToday
-                      ? "#fff3ec"
-                      : isWeekend || isInactive
-                      ? "#faf7f4"
-                      : "#fdf6ee",
+                    background: isSel ? "#ff5f00" : isToday ? "#fff3ec" : (isWeekend || isInactive) ? "#faf7f4" : "#fdf6ee",
                     color: isSel ? "#fff" : (isWeekend || isInactive) ? "#c4a882" : "#2d1717",
                     border: isToday && !isSel ? "2px solid #ff5f00" : "2px solid transparent",
                     boxShadow: isSel ? "0 4px 12px -4px rgba(255,95,0,0.45)" : "none",
-                    opacity: isInactive && !isSel ? 0.6 : 1,
+                    opacity: isInactive && !isSel ? 0.55 : 1,
                   }}
                 >
                   {new Date(date + "T12:00:00").getDate()}
                 </button>
-                {/* Per-day hours hint */}
-                <div className="text-[9px] font-semibold text-[#c4a882] leading-none">
-                  {cfg.active ? `${Math.floor(cfg.workMinutes / 60)}h` : ""}
+                {/* Scheduled hours hint */}
+                <div className="text-[9px] font-semibold text-[#c4a882] leading-none h-3">
+                  {cfg.active ? `${Math.floor(dayShiftMins / 60)}h` : ""}
                 </div>
                 {/* Indicators */}
                 <div className="flex gap-0.5 h-2 items-center">
-                  {hasSess && (
-                    <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#ff5f00", opacity: isSel ? 0.5 : 1 }} />
-                  )}
-                  {hasAbs && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#e8c4a0]" />
-                  )}
+                  {hasSess && <span className="w-1.5 h-1.5 rounded-full bg-[#ff5f00]" style={{ opacity: isSel ? 0.5 : 1 }} />}
+                  {hasAbs && <span className="w-1.5 h-1.5 rounded-full bg-[#e8c4a0]" />}
                 </div>
               </div>
             );
           })}
         </div>
 
-        {/* Quick select all active weekdays */}
+        {/* Quick select active days */}
         <button
-          onClick={selectWorkdays}
+          onClick={selectActiveDays}
           className="w-full mt-2 mb-4 py-2 rounded-[12px] border border-dashed border-[#ece6df] text-[#9c7c5c] text-[12px] font-semibold active:scale-[0.98] transition-transform hover:border-[#ff5f00] hover:text-[#ff5f00]"
         >
           Välj alla aktiva dagar
         </button>
 
-        {/* Divider */}
         <div className="h-px bg-[#ece6df] mb-4" />
 
-        {/* Time settings */}
+        {/* Start time override */}
         <div className="flex items-center gap-3 mb-3">
           <div className="flex-1">
             <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-1.5">Starttid</div>
             <input
               type="time"
-              value={startTime}
-              onChange={e => setStartTime(e.target.value)}
+              value={startTimeOverride}
+              onChange={e => setStartTimeOverride(e.target.value)}
               style={{
                 width: "100%", padding: "10px 12px", borderRadius: "12px",
                 border: "1.5px solid #ece6df", fontSize: "15px", outline: "none",
@@ -306,50 +299,42 @@ export default function QuickScheduleModal({
           </div>
           <div className="flex-1">
             <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-1.5">
-              Sluttid {!allSameHours && <span className="normal-case tracking-normal font-medium">(varierar)</span>}
+              Sluttid {!allSameLength && <span className="normal-case tracking-normal font-medium">(varierar)</span>}
             </div>
-            <div
-              style={{
-                width: "100%", padding: "10px 12px", borderRadius: "12px",
-                border: "1.5px solid #ece6df", fontSize: "15px",
-                background: "#f5f0ea", fontWeight: 700, color: "#9c7c5c",
-                boxSizing: "border-box",
-              }}
-            >
-              {allSameHours ? previewEndTime : "Per schema"}
+            <div style={{
+              width: "100%", padding: "10px 12px", borderRadius: "12px",
+              border: "1.5px solid #ece6df", fontSize: "15px",
+              background: "#f5f0ea", fontWeight: 700, color: "#9c7c5c",
+              boxSizing: "border-box",
+            }}>
+              {allSameLength ? previewEndTime : "Per schema"}
             </div>
           </div>
         </div>
 
-        {/* Duration preview */}
+        {/* Summary preview */}
         <div className="flex items-center gap-2 bg-[#fff3ec] rounded-[14px] px-4 py-3 mb-5">
           <div className="flex-1">
-            {allSameHours ? (
+            {allSameLength ? (
               <>
                 <div className="text-[13px] font-bold text-[#ff5f00]">
-                  {fmtMin(previewCfg.workMinutes)} per dag
+                  {fmtMin(previewShiftMins)} per dag
                 </div>
-                {previewCfg.lunchMinutes > 0 && (
-                  <div className="text-[12px] text-[#9c7c5c] mt-0.5">
-                    +{previewCfg.lunchMinutes}min lunch → sluttid {previewEndTime}
-                  </div>
-                )}
+                <div className="text-[12px] text-[#9c7c5c] mt-0.5">
+                  {startTimeOverride} → {previewEndTime}
+                </div>
               </>
             ) : (
               <>
-                <div className="text-[13px] font-bold text-[#ff5f00]">
-                  Varierar per dag
-                </div>
-                <div className="text-[12px] text-[#9c7c5c] mt-0.5">
-                  Enligt ditt schema
-                </div>
+                <div className="text-[13px] font-bold text-[#ff5f00]">Varierar per dag</div>
+                <div className="text-[12px] text-[#9c7c5c] mt-0.5">Enligt schema</div>
               </>
             )}
           </div>
           {selected.size > 0 && (
             <div className="text-right">
               <div className="text-[11px] font-bold uppercase tracking-wide text-[#9c7c5c]">Totalt</div>
-              <div className="text-[15px] font-extrabold text-[#2d1717]">{fmtMin(totalNetMin)}</div>
+              <div className="text-[15px] font-extrabold text-[#2d1717]">{fmtMin(totalMins)}</div>
             </div>
           )}
         </div>
@@ -370,15 +355,11 @@ export default function QuickScheduleModal({
           </div>
         </div>
 
-        {/* Action buttons */}
+        {/* Actions */}
         <div className="grid grid-cols-2 gap-3">
           <button
             onClick={onClose}
-            style={{
-              padding: "15px", borderRadius: "16px", background: "#fdf6ee",
-              border: "1.5px solid #ece6df", fontWeight: 700, fontSize: "15px",
-              color: "#2d1717",
-            }}
+            style={{ padding: "15px", borderRadius: "16px", background: "#fdf6ee", border: "1.5px solid #ece6df", fontWeight: 700, fontSize: "15px", color: "#2d1717" }}
           >
             Avbryt
           </button>

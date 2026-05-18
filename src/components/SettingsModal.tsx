@@ -1,25 +1,11 @@
 import { useState } from "react";
-import {
-  type WeekSchedule, type DayKey,
-  DAY_KEYS,
-  WORK_PRESETS, LUNCH_PRESETS,
-  weeklyNetMin, fmtMin,
-} from "../lib/schedule";
-import { PerDayEditor } from "./Onboarding";
+import { type WeekSchedule, weeklyNetMin, fmtMin } from "../lib/schedule";
+import { WeekScheduleEditor } from "./Onboarding";
 
 export type SettingsResult = {
   name: string;
   department?: string;
   schedule: WeekSchedule;
-};
-
-const SEL: React.CSSProperties = {
-  padding: "8px 10px", borderRadius: "12px", border: "1.5px solid #ece6df",
-  fontSize: "13px", fontWeight: 700, color: "#2d1717", background: "#fdf6ee",
-  outline: "none", width: "100%", appearance: "none",
-  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239a8a82' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
-  backgroundRepeat: "no-repeat", backgroundPosition: "right 8px center",
-  backgroundSize: "14px", paddingRight: "28px",
 };
 
 export default function SettingsModal({
@@ -42,21 +28,7 @@ export default function SettingsModal({
   const [schedule, setSchedule] = useState<WeekSchedule>(initialSchedule);
   const [nameErr, setNameErr] = useState("");
 
-  // "Set same for all active days" quick-fill
-  const [bulkWork, setBulkWork] = useState(480);
-  const [bulkLunch, setBulkLunch] = useState(30);
-
   if (!open) return null;
-
-  function applyBulk() {
-    const next = { ...schedule };
-    for (const k of DAY_KEYS) {
-      if (next[k].active) {
-        next[k] = { ...next[k], workMinutes: bulkWork, lunchMinutes: bulkLunch };
-      }
-    }
-    setSchedule(next);
-  }
 
   function handleSave() {
     if (!name.trim()) { setNameErr("Namn krävs."); return; }
@@ -74,7 +46,7 @@ export default function SettingsModal({
       onClick={onClose}
     >
       <div
-        className="bg-white w-full max-w-[480px] rounded-t-[28px] px-6 pt-6 overflow-y-auto"
+        className="bg-white w-full max-w-[480px] rounded-t-[28px] px-5 pt-6 overflow-y-auto"
         style={{
           paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)",
           animation: "pcSheet 0.32s cubic-bezier(0.32,0.72,0,1)",
@@ -94,7 +66,6 @@ export default function SettingsModal({
           type="text"
           value={name}
           onChange={e => { setName(e.target.value); setNameErr(""); }}
-          className="s-input"
           style={INPUT}
           placeholder="Ditt namn"
         />
@@ -106,7 +77,6 @@ export default function SettingsModal({
           type="text"
           value={department}
           onChange={e => setDepartment(e.target.value)}
-          className="s-input"
           style={INPUT}
           placeholder="t.ex. Lager, Kontor…"
         />
@@ -117,39 +87,12 @@ export default function SettingsModal({
             <div>
               <div className="font-extrabold text-[16px] text-pc-ink">Arbetsschema</div>
               <div className="text-[12px] text-pc-muted mt-0.5">
-                Netto/vecka: <span className="font-bold text-pc-orange-deep">{fmtMin(weeklyNetMin(schedule))}</span>
+                Norm/vecka: <span className="font-bold text-pc-orange-deep">{fmtMin(weeklyNetMin(schedule))}</span>
               </div>
             </div>
           </div>
 
-          <PerDayEditor schedule={schedule} onChange={setSchedule} />
-
-          {/* Bulk fill */}
-          <div className="mt-4 bg-pc-apricot rounded-[18px] p-4 border border-pc-line">
-            <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-3">
-              Sätt samma för alla aktiva dagar
-            </div>
-            <div className="grid grid-cols-2 gap-2 mb-3">
-              <div>
-                <div className="text-[10px] font-bold text-pc-muted mb-1 uppercase tracking-wide">Arbetstid</div>
-                <select value={bulkWork} onChange={e => setBulkWork(+e.target.value)} style={SEL}>
-                  {WORK_PRESETS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-                </select>
-              </div>
-              <div>
-                <div className="text-[10px] font-bold text-pc-muted mb-1 uppercase tracking-wide">Lunch</div>
-                <select value={bulkLunch} onChange={e => setBulkLunch(+e.target.value)} style={SEL}>
-                  {LUNCH_PRESETS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-                </select>
-              </div>
-            </div>
-            <button
-              onClick={applyBulk}
-              className="w-full py-2.5 rounded-[14px] border border-pc-orange text-pc-orange font-bold text-[13px] bg-white active:scale-[0.98] transition-transform"
-            >
-              Tillämpa på alla aktiva dagar
-            </button>
-          </div>
+          <WeekScheduleEditor schedule={schedule} onChange={setSchedule} />
         </div>
 
         {/* Actions */}
