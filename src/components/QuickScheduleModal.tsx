@@ -2,7 +2,6 @@ import { useState, useMemo } from "react";
 import {
   type WeekSchedule,
   dayKeyOf,
-  applyLunch,
   fmtMin,
   netDayMin,
 } from "../lib/schedule";
@@ -119,15 +118,12 @@ export default function QuickScheduleModal({
   const previewCfg = cfgForDate(previewDate);
   const previewRawMin = previewCfg.workMinutes;
   const previewEndTime = addMinutesToTime(startTime, previewRawMin);
-  const { net: previewNetMin, lunchDeducted } = applyLunch(previewRawMin, previewCfg);
 
-  // Total net for all selected days
+  // Total for all selected days
   const totalNetMin = useMemo(() => {
     let total = 0;
     for (const date of selected) {
-      const cfg = cfgForDate(date);
-      const { net } = applyLunch(cfg.workMinutes, cfg);
-      total += net;
+      total += cfgForDate(date).workMinutes;
     }
     return total;
   }, [selected, schedule]);
@@ -326,15 +322,9 @@ export default function QuickScheduleModal({
         <div className="flex items-center gap-2 bg-[#fff3ec] rounded-[14px] px-4 py-3 mb-5">
           <div className="flex-1">
             {allSameHours ? (
-              <>
-                <div className="text-[13px] font-bold text-[#ff5f00]">
-                  {fmtMin(previewRawMin)} per dag
-                </div>
-                <div className="text-[12px] text-[#9c7c5c] mt-0.5">
-                  Netto: {fmtMin(previewNetMin)}
-                  {lunchDeducted ? ` (lunch -${previewCfg.lunchMinutes}min)` : ""}
-                </div>
-              </>
+              <div className="text-[13px] font-bold text-[#ff5f00]">
+                {fmtMin(previewRawMin)} per dag
+              </div>
             ) : (
               <>
                 <div className="text-[13px] font-bold text-[#ff5f00]">

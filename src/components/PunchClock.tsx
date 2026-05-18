@@ -4,9 +4,9 @@ import AbsenceModal, { type AbsenceEntry, type AbsenceCategory, ABSENCE_META } f
 import QuickScheduleModal from "./QuickScheduleModal";
 import SettingsModal from "./SettingsModal";
 import {
-  type WeekSchedule, type DayKey,
-  DEFAULT_SCHEDULE, dayKeyOf, applyLunch, weeklyNetMin, fmtMin,
-  migrateNormHours,
+  type WeekSchedule,
+  DEFAULT_SCHEDULE, dayKeyOf, weeklyNetMin, fmtMin,
+  migrateNormHours, migrateSchedule,
 } from "../lib/schedule";
 
 // ─── Constants ────────────────────────────────────────────────
@@ -49,8 +49,8 @@ function computeDayMinutes(sessions: Session[], dateStr: string, schedule: WeekS
     const end = s.checkOut ?? now();
     raw += (end - s.checkIn) / 60000;
   }
-  const { net, lunchDeducted } = applyLunch(raw, cfg);
-  return { raw, net, lunchDeducted, cfg };
+  // workMinutes is net worked time — no lunch deduction
+  return { raw, net: raw, cfg };
 }
 
 // ─── Week helpers ─────────────────────────────────────────────
@@ -216,8 +216,8 @@ function buildShareText(sessions: Session[], absences: AbsenceEntry[], name: str
       if (ds.length === 0 && da.length === 0) continue;
 
       if (ds.length > 0) {
-        const { net, lunchDeducted, cfg } = computeDayMinutes(ds, d, schedule);
-        lines.push(`  ${fmtDateLabel(d)}: ${fmtMin(net)}${lunchDeducted ? ` (lunch -${cfg.lunchMinutes}min)` : ""}`);
+        const { net } = computeDayMinutes(ds, d, schedule);
+        lines.push(`  ${fmtDateLabel(d)}: ${fmtMin(net)}`);
         for (const s of ds) {
           lines.push(`    ${fmtTime(s.checkIn)} → ${fmtTime(s.checkOut)}${s.manual ? " ✏️" : ""}`);
         }
@@ -248,10 +248,14 @@ function load(): StorageShape {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     const p = raw ? JSON.parse(raw) : {};
-    // Migrate old normHours → schedule
-    let schedule: WeekSchedule = p.schedule ?? null;
-    if (!schedule) {
-      schedule = p.normHours ? migrateNormHours(p.normHours) : DEFAULT_SCHEDULE;
+    let schedule: WeekSchedule;
+    if (p.schedule) {
+      // Migrate old gross+lunch model → net model
+      schedule = migrateSchedule(p.schedule as Record<string, unknown>);
+    } else if (p.normHours) {
+      schedule = migrateNormHours(p.normHours as number);
+    } else {
+      schedule = DEFAULT_SCHEDULE;
     }
     return {
       name: p.name ?? "",
@@ -369,7 +373,7 @@ export default function PunchClock() {
   const activeSession = sessions.find(s => !s.checkOut);
   const todaySessions = sessions.filter(s => new Date(s.checkIn).toISOString().slice(0, 10) === todayStr());
   const todayDate = todayStr();
-  const { net: todayNet, lunchDeducted, cfg: todayCfg } = computeDayMinutes(todaySessions, todayDate, schedule);
+  const { net: todayNet } = computeDayMinutes(todaySessions, todayDate, schedule);
   void todayNet;
   const isIn = !!activeSession;
 
@@ -453,8 +457,7 @@ export default function PunchClock() {
   }
 
   const liveMs = activeSession ? (now() - activeSession.checkIn) : 0;
-  const liveTotalRaw = todaySessions.reduce((a, s) => a + ((s.checkOut ?? now()) - s.checkIn), 0) / 60000;
-  const { net: liveNet } = applyLunch(liveTotalRaw, todayCfg);
+  const liveNet = todaySessions.reduce((a, s) => a + ((s.checkOut ?? now()) - s.checkIn), 0) / 60000;
 
   const FILTERS: { key: HistoryFilter; label: string }[] = [
     { key: "week",     label: "Den här veckan" },
@@ -585,11 +588,6 @@ export default function PunchClock() {
                   <Stat label="Netto arbetstid" value={fmtDur(liveNet)} accent />
                   <Stat label="Antal pass" value={`${todaySessions.length} st`} />
                 </div>
-                {lunchDeducted && todayCfg.lunchMinutes > 0 && (
-                  <div className="mt-3 bg-pc-peach text-pc-orange-deep rounded-2xl px-4 py-3 text-[13px] font-semibold flex items-center gap-2">
-                    <span>🥪</span> {todayCfg.lunchMinutes} min lunch avdragen
-                  </div>
-                )}
                 {todaySessions.length > 0 && (
                   <div className="mt-4 pt-4 border-t border-pc-line space-y-1">
                     {todaySessions.map((s, i) => (
@@ -713,7 +711,7 @@ export default function PunchClock() {
                             {sortedDates.map(date => {
                               const daySessions = byDate[date] ?? [];
                               const dayAbsences = getAbsencesForDate(filteredAbsences, date);
-                              const { net: dayNet, lunchDeducted: ld, cfg } = computeDayMinutes(daySessions, date, schedule);
+                              const { net: dayNet } = computeDayMinutes(daySessions, date, schedule);
 
                               return (
                                 <div key={date} className="px-4 py-3 border-t border-pc-line">
@@ -723,11 +721,6 @@ export default function PunchClock() {
                                       <div className="font-bold text-pc-orange text-[14px] tabular-nums">{fmtDur(dayNet)}</div>
                                     )}
                                   </div>
-                                  {ld && cfg.lunchMinutes > 0 && (
-                                    <div className="text-[12px] text-pc-orange-deep mb-2 font-semibold">
-                                      🥪 -{cfg.lunchMinutes}min lunch avdragen
-                                    </div>
-                                  )}
 
                                   {dayAbsences.map(a => (
                                     <div key={a.id} className="flex items-center gap-2 mb-2">
@@ -834,18 +827,18 @@ export default function PunchClock() {
       )}
 
       {addModal && (
-        <SessionModal schedule={schedule} onClose={() => setAddModal(false)}
+        <SessionModal onClose={() => setAddModal(false)}
           onSave={s => { setSessions(prev => [...prev, s]); setAddModal(false); }} />
       )}
 
       {addForDate && (
-        <SessionModal schedule={schedule} defaultDate={addForDate}
+        <SessionModal defaultDate={addForDate}
           onClose={() => setAddForDate(null)}
           onSave={s => { setSessions(prev => [...prev, s]); setAddForDate(null); }} />
       )}
 
       {editSession && (
-        <SessionModal schedule={schedule} session={editSession}
+        <SessionModal session={editSession}
           onClose={() => setEditSession(null)}
           onSave={handleSaveEdit} />
       )}
@@ -964,8 +957,8 @@ function NavItem({ active, onClick, label, icon }: { active: boolean; onClick: (
 }
 
 // ─── Session Modal ─────────────────────────────────────────────
-function SessionModal({ session, defaultDate, schedule, onClose, onSave }: {
-  session?: Session; defaultDate?: string; schedule: WeekSchedule;
+function SessionModal({ session, defaultDate, onClose, onSave }: {
+  session?: Session; defaultDate?: string;
   onClose: () => void; onSave: (s: Session) => void;
 }) {
   const isEdit = !!session;
@@ -990,10 +983,6 @@ function SessionModal({ session, defaultDate, schedule, onClose, onSave }: {
     ? new Date(`${date}T${endTime}`).getTime() - new Date(`${date}T${startTime}`).getTime()
     : null;
   const previewMin = previewMs ? previewMs / 60000 : null;
-  const dayCfg = schedule[dayKeyOf(new Date(date + "T12:00:00"))];
-  const { net: previewNet, lunchDeducted: previewLunch } = previewMin
-    ? applyLunch(previewMin, dayCfg)
-    : { net: 0, lunchDeducted: false };
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center pc-overlay" style={{ background: "rgba(45,23,23,0.55)" }} onClick={onClose}>
@@ -1001,11 +990,7 @@ function SessionModal({ session, defaultDate, schedule, onClose, onSave }: {
         <div className="w-10 h-1 bg-pc-line rounded-full mx-auto mb-5" />
         <div className="font-extrabold text-[22px] tracking-tight mb-1">{isEdit ? "Redigera pass" : "Lägg till tid"}</div>
         <div className="text-[13px] text-pc-muted mb-6">
-          {isEdit
-            ? "Ändra start- och sluttid för detta pass."
-            : dayCfg.lunchMinutes > 0
-              ? `Lunch (${dayCfg.lunchMinutes}min) dras av automatiskt om du jobbat tillräckligt länge.`
-              : "Välj datum, start och sluttid."}
+          {isEdit ? "Ändra start- och sluttid för detta pass." : "Välj datum, start och sluttid."}
         </div>
 
         <Label>Datum</Label>
@@ -1017,12 +1002,7 @@ function SessionModal({ session, defaultDate, schedule, onClose, onSave }: {
 
         {previewMin !== null && previewMin > 0 && (
           <div className="bg-pc-peach rounded-2xl px-4 py-3 mb-4 text-[13px]">
-            <div className="font-extrabold text-pc-orange-deep mb-0.5 text-[15px]">Netto: {fmtDur(previewNet)}</div>
-            {previewLunch
-              ? <div className="text-pc-orange-deep/80">🥪 {dayCfg.lunchMinutes}min lunch dras av</div>
-              : dayCfg.lunchMinutes > 0
-                ? <div className="text-pc-muted">Ingen lunchavdrag ännu (jobba lite mer)</div>
-                : <div className="text-pc-muted">Ingen lunch konfigurerad för denna dag</div>}
+            <div className="font-extrabold text-pc-orange-deep text-[15px]">{fmtDur(previewMin)}</div>
           </div>
         )}
 

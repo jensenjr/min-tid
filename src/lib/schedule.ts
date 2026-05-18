@@ -3,8 +3,7 @@ export type DayKey = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 
 export type DayConfig = {
   active: boolean;
-  workMinutes: number;   // gross shift length including lunch
-  lunchMinutes: number;  // amount to deduct (0 = no deduction)
+  workMinutes: number;   // net worked time (what the user actually works)
 };
 
 export type WeekSchedule = Record<DayKey, DayConfig>;
@@ -27,40 +26,25 @@ const JS_TO_KEY: DayKey[] = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 export function dayKeyOf(date: Date): DayKey { return JS_TO_KEY[date.getDay()]; }
 
 export const DEFAULT_SCHEDULE: WeekSchedule = {
-  mon: { active: true,  workMinutes: 480, lunchMinutes: 45 },
-  tue: { active: true,  workMinutes: 480, lunchMinutes: 45 },
-  wed: { active: true,  workMinutes: 480, lunchMinutes: 45 },
-  thu: { active: true,  workMinutes: 480, lunchMinutes: 45 },
-  fri: { active: true,  workMinutes: 480, lunchMinutes: 45 },
-  sat: { active: false, workMinutes: 480, lunchMinutes: 0  },
-  sun: { active: false, workMinutes: 480, lunchMinutes: 0  },
+  mon: { active: true,  workMinutes: 480 },
+  tue: { active: true,  workMinutes: 480 },
+  wed: { active: true,  workMinutes: 480 },
+  thu: { active: true,  workMinutes: 480 },
+  fri: { active: true,  workMinutes: 480 },
+  sat: { active: false, workMinutes: 480 },
+  sun: { active: false, workMinutes: 480 },
 };
 
 // ─── Calculations ─────────────────────────────────────────────
 
-/** Net scheduled minutes for one day (gross − lunch). */
+/** Scheduled minutes for one day. workMinutes is already the net worked time. */
 export function netDayMin(cfg: DayConfig): number {
-  return Math.max(0, cfg.workMinutes - cfg.lunchMinutes);
+  return cfg.workMinutes;
 }
 
 /** Total net minutes across the whole week. */
 export function weeklyNetMin(s: WeekSchedule): number {
   return DAY_KEYS.reduce((sum, k) => sum + (s[k].active ? netDayMin(s[k]) : 0), 0);
-}
-
-/**
- * Apply lunch deduction for a recorded day.
- * Deducts lunchMinutes if the user worked at least (lunchMinutes + 3h).
- * This covers part-timers: a 30 min lunch requires 3h30 worked, a 1h lunch requires 4h worked.
- */
-export function applyLunch(
-  rawMin: number,
-  cfg: DayConfig,
-): { net: number; lunchDeducted: boolean } {
-  if (cfg.lunchMinutes > 0 && rawMin > cfg.lunchMinutes + 180) {
-    return { net: rawMin - cfg.lunchMinutes, lunchDeducted: true };
-  }
-  return { net: rawMin, lunchDeducted: false };
 }
 
 /** Format minutes as "Xh Ymin" (or just "Ymin" / "Xh"). */
@@ -92,27 +76,14 @@ export const WORK_PRESETS: { label: string; value: number }[] = [
   { label: "12h",     value: 720 },
 ];
 
-export const LUNCH_PRESETS: { label: string; value: number }[] = [
-  { label: "Ingen",   value: 0  },
-  { label: "15 min",  value: 15 },
-  { label: "20 min",  value: 20 },
-  { label: "30 min",  value: 30 },
-  { label: "45 min",  value: 45 },
-  { label: "60 min",  value: 60 },
-  { label: "75 min",  value: 75 },
-  { label: "90 min",  value: 90 },
-];
-
 /** Build a uniform schedule (same hours every active day). */
 export function buildUniformSchedule(
   activeDays: Set<DayKey>,
   workMinutes: number,
-  lunchMinutes: number,
 ): WeekSchedule {
   const base = {} as WeekSchedule;
   for (const k of DAY_KEYS) {
-    const active = activeDays.has(k);
-    base[k] = { active, workMinutes, lunchMinutes: active ? lunchMinutes : 0 };
+    base[k] = { active: activeDays.has(k), workMinutes };
   }
   return base;
 }
@@ -121,12 +92,31 @@ export function buildUniformSchedule(
 export function migrateNormHours(normHours: number): WeekSchedule {
   const wm = Math.round(normHours * 60);
   return {
-    mon: { active: true,  workMinutes: wm, lunchMinutes: 45 },
-    tue: { active: true,  workMinutes: wm, lunchMinutes: 45 },
-    wed: { active: true,  workMinutes: wm, lunchMinutes: 45 },
-    thu: { active: true,  workMinutes: wm, lunchMinutes: 45 },
-    fri: { active: true,  workMinutes: wm, lunchMinutes: 45 },
-    sat: { active: false, workMinutes: wm, lunchMinutes: 0  },
-    sun: { active: false, workMinutes: wm, lunchMinutes: 0  },
+    mon: { active: true,  workMinutes: wm },
+    tue: { active: true,  workMinutes: wm },
+    wed: { active: true,  workMinutes: wm },
+    thu: { active: true,  workMinutes: wm },
+    fri: { active: true,  workMinutes: wm },
+    sat: { active: false, workMinutes: wm },
+    sun: { active: false, workMinutes: wm },
   };
+}
+
+/**
+ * Migrate a saved schedule that may still contain the old lunchMinutes field.
+ * Since workMinutes was previously gross (including lunch), we subtract lunchMinutes
+ * so the stored value becomes net worked time matching the new model.
+ */
+export function migrateSchedule(raw: Record<string, unknown>): WeekSchedule {
+  const result = {} as WeekSchedule;
+  for (const k of DAY_KEYS) {
+    const day = raw[k] as Record<string, unknown> | undefined;
+    if (!day) { result[k] = DEFAULT_SCHEDULE[k]; continue; }
+    const active = Boolean(day.active);
+    const workMinutes = Number(day.workMinutes) || 480;
+    const lunchMinutes = Number(day.lunchMinutes) || 0;
+    // Old model stored gross; subtract lunch to get net
+    result[k] = { active, workMinutes: Math.max(0, workMinutes - lunchMinutes) };
+  }
+  return result;
 }
