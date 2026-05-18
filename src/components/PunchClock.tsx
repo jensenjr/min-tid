@@ -1,11 +1,10 @@
 import { useState, useEffect, useRef } from "react";
-import Onboarding, { type OnboardingResult } from "./Onboarding";
+import Onboarding, { type OnboardingResult, WeekScheduleEditor } from "./Onboarding";
 import AbsenceModal, { type AbsenceEntry, type AbsenceCategory, ABSENCE_META } from "./AbsenceModal";
-import QuickScheduleModal from "./QuickScheduleModal";
 import SettingsModal from "./SettingsModal";
 import {
   type WeekSchedule,
-  DEFAULT_SCHEDULE, dayKeyOf, shiftMinutes, weeklyNetMin, fmtMin,
+  DEFAULT_SCHEDULE, dayKeyOf, netDayMin, weeklyNetMin, fmtMin,
   migrateNormHours, migrateSchedule,
 } from "../lib/schedule";
 
@@ -433,11 +432,6 @@ export default function PunchClock() {
     setAbsences(prev => [...prev, entry]);
     setAbsenceModal(false);
   }
-  function handleSaveQuickSchedule(newSessions: { id: string; checkIn: number; checkOut: number; manual: true }[]) {
-    setSessions(prev => [...prev, ...newSessions]);
-    setScheduleModal(false);
-  }
-
   function handleOnboardingComplete(result: OnboardingResult) {
     setName(result.name);
     setSchedule(result.schedule);
@@ -839,18 +833,18 @@ export default function PunchClock() {
       )}
 
       {addModal && (
-        <SessionModal onClose={() => setAddModal(false)}
+        <SessionModal schedule={schedule} onClose={() => setAddModal(false)}
           onSave={s => { setSessions(prev => [...prev, s]); setAddModal(false); }} />
       )}
 
       {addForDate && (
-        <SessionModal defaultDate={addForDate}
+        <SessionModal schedule={schedule} defaultDate={addForDate}
           onClose={() => setAddForDate(null)}
           onSave={s => { setSessions(prev => [...prev, s]); setAddForDate(null); }} />
       )}
 
       {editSession && (
-        <SessionModal session={editSession}
+        <SessionModal schedule={schedule} session={editSession}
           onClose={() => setEditSession(null)}
           onSave={handleSaveEdit} />
       )}
@@ -861,13 +855,11 @@ export default function PunchClock() {
         onSave={handleSaveAbsence}
       />
 
-      <QuickScheduleModal
+      <ScheduleEditorModal
         open={scheduleModal}
-        onClose={() => setScheduleModal(false)}
-        onSave={handleSaveQuickSchedule}
         schedule={schedule}
-        existingSessions={sessions}
-        existingAbsences={absences}
+        onClose={() => setScheduleModal(false)}
+        onSave={s => { setSchedule(s); setScheduleModal(false); }}
       />
 
       <SettingsModal
@@ -993,7 +985,7 @@ function SessionModal({ session, defaultDate, schedule, onClose, onSave }: {
   const [err, setErr] = useState("");
 
   const dayCfg = schedule[dayKeyOf(new Date(date + "T12:00:00"))];
-  const scheduledMins = dayCfg.active ? shiftMinutes(dayCfg) : 0;
+  const scheduledMins = netDayMin(dayCfg);
 
   function handleSave() {
     if (!startTime) { setErr("Ange starttid."); return; }
@@ -1015,7 +1007,7 @@ function SessionModal({ session, defaultDate, schedule, onClose, onSave }: {
         <div className="font-extrabold text-[22px] tracking-tight mb-1">{isEdit ? "Redigera pass" : "Lägg till tid"}</div>
         <div className="text-[13px] text-pc-muted mb-6">
           {dayCfg.active
-            ? `Schema: ${dayCfg.startTime}–${dayCfg.endTime} (${fmtMin(scheduledMins)})`
+            ? `Schema: ${dayCfg.startTime}–${dayCfg.endTime} · ${fmtMin(scheduledMins)} netto`
             : "Välj datum, start och sluttid."}
         </div>
 
@@ -1054,4 +1046,61 @@ function SessionModal({ session, defaultDate, schedule, onClose, onSave }: {
 
 function Label({ children }: { children: React.ReactNode }) {
   return <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-2">{children}</div>;
+}
+
+// ─── Schedule Editor Modal ─────────────────────────────────────
+function ScheduleEditorModal({ open, schedule, onClose, onSave }: {
+  open: boolean;
+  schedule: WeekSchedule;
+  onClose: () => void;
+  onSave: (s: WeekSchedule) => void;
+}) {
+  const [draft, setDraft] = useState<WeekSchedule>(schedule);
+
+  // Reset draft when modal opens with new schedule
+  const prevOpen = useRef(false);
+  useEffect(() => {
+    if (open && !prevOpen.current) setDraft(schedule);
+    prevOpen.current = open;
+  }, [open, schedule]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center pc-overlay"
+      style={{ background: "rgba(45,23,23,0.55)" }}
+      onClick={onClose}
+    >
+      <div
+        className="pc-sheet bg-white w-full max-w-[480px] rounded-t-[28px] px-5 pt-6 overflow-y-auto"
+        style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)", maxHeight: "92dvh" }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="w-10 h-1 bg-pc-line rounded-full mx-auto mb-5" />
+        <div className="font-extrabold text-[22px] tracking-tight mb-1">Planera dagar</div>
+        <div className="text-[13px] text-pc-muted mb-6">
+          Ange arbetstider och lunch per dag.
+          Norm/vecka: <span className="font-bold text-pc-orange-deep">{fmtMin(weeklyNetMin(draft))}</span>
+        </div>
+
+        <WeekScheduleEditor schedule={draft} onChange={setDraft} />
+
+        <div className="grid grid-cols-2 gap-3 mt-6">
+          <button
+            onClick={onClose}
+            style={{ padding: "15px", borderRadius: "16px", background: "#fdf6ee", border: "1.5px solid #ece6df", fontWeight: 700, fontSize: "15px", color: "#2d1717" }}
+          >
+            Avbryt
+          </button>
+          <button
+            onClick={() => onSave(draft)}
+            style={{ padding: "15px", borderRadius: "16px", background: "#ff5f00", color: "white", fontWeight: 700, fontSize: "15px", boxShadow: "0 8px 20px -8px rgba(255,95,0,0.6)" }}
+          >
+            Spara
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
