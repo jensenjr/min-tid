@@ -70,8 +70,8 @@ function TimePicker({
   );
 }
 
-// ─── LunchPicker — compact minutes select (0–90, 5-min steps) ─
-function LunchPicker({
+// ─── LunchInput — number input for lunch minutes (0–90) ────────
+function LunchInput({
   value,
   onChange,
   disabled,
@@ -81,12 +81,20 @@ function LunchPicker({
   disabled?: boolean;
 }) {
   return (
-    <select
+    <input
+      type="number"
+      min={0}
+      max={90}
+      step={5}
       value={value}
-      onChange={e => onChange(+e.target.value)}
       disabled={disabled}
+      onChange={e => {
+        const v = Math.min(90, Math.max(0, parseInt(e.target.value) || 0));
+        onChange(v);
+      }}
       style={{
-        padding: "5px 0",
+        width: "44px",
+        padding: "5px 4px",
         borderRadius: "10px",
         border: "1.5px solid #ece6df",
         fontSize: "15px",
@@ -94,16 +102,11 @@ function LunchPicker({
         color: disabled ? "#c4b0a0" : "#9a6a3a",
         background: disabled ? "#f5f0ea" : "#fff3ec",
         outline: "none",
-        appearance: "none",
         textAlign: "center",
-        width: "40px",
-        cursor: disabled ? "default" : "pointer",
-      }}
-    >
-      {Array.from({ length: 19 }, (_, i) => i * 5).map(min => (
-        <option key={min} value={min}>{String(min).padStart(2, "0")}</option>
-      ))}
-    </select>
+        boxSizing: "border-box",
+        MozAppearance: "textfield",
+      } as React.CSSProperties}
+    />
   );
 }
 
@@ -144,7 +147,8 @@ export function WeekScheduleEditor({
           <TimePicker value={bulkStart} onChange={setBulkStart} />
           <span className="text-[13px] font-bold text-pc-muted">→</span>
           <TimePicker value={bulkEnd} onChange={setBulkEnd} />
-          <LunchPicker value={bulkLunch} onChange={setBulkLunch} />
+          <span className="text-[11px] text-pc-muted font-bold">☕</span>
+          <LunchInput value={bulkLunch} onChange={setBulkLunch} />
           <button
             onClick={applyBulk}
             className="ml-auto shrink-0 px-3 py-1.5 rounded-[10px] border border-pc-orange text-pc-orange font-bold text-[12px] bg-white active:scale-[0.97] transition-transform"
@@ -154,7 +158,7 @@ export function WeekScheduleEditor({
         </div>
       </div>
 
-      {/* Day rows */}
+      {/* Day cards — two-row layout to avoid cramping on mobile */}
       {DAY_KEYS.map(key => {
         const cfg = schedule[key];
         const isWeekend = key === "sat" || key === "sun";
@@ -163,59 +167,59 @@ export function WeekScheduleEditor({
         return (
           <div
             key={key}
-            className="flex items-center gap-1.5 bg-white rounded-[16px] px-3 py-2.5 border border-pc-line transition-opacity"
+            className="bg-white rounded-[16px] px-3 py-2.5 border border-pc-line transition-opacity"
             style={{ opacity: cfg.active ? 1 : 0.45 }}
           >
-            {/* Day label */}
-            <span
-              className="text-[13px] font-extrabold shrink-0"
-              style={{ width: 28, color: isWeekend ? "#c4a882" : "#2d1717" }}
-            >
-              {DAY_LABEL_SHORT[key]}
-            </span>
+            {/* Row 1: day label · net duration · toggle */}
+            <div className="flex items-center justify-between mb-2">
+              <span
+                className="text-[14px] font-extrabold"
+                style={{ color: isWeekend ? "#c4a882" : "#2d1717" }}
+              >
+                {DAY_LABEL_SHORT[key]}
+              </span>
+              <div className="flex items-center gap-2">
+                <span
+                  className="text-[12px] font-bold tabular-nums"
+                  style={{ color: cfg.active ? "#9a6a3a" : "#c4b0a0" }}
+                >
+                  {cfg.active ? fmtMin(net) : "—"}
+                </span>
+                <button
+                  onClick={() => setDay(key, { active: !cfg.active })}
+                  className="shrink-0 w-8 h-8 rounded-xl flex items-center justify-center transition-colors"
+                  style={{ background: cfg.active ? "#ff5f00" : "#f0e8df" }}
+                  aria-label={cfg.active ? "Inaktivera" : "Aktivera"}
+                >
+                  {cfg.active
+                    ? <svg viewBox="0 0 24 24" className="w-4 h-4 text-white" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                    : <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="#c4b0a0" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                  }
+                </button>
+              </div>
+            </div>
 
-            {/* Time pickers */}
-            <div className="flex items-center gap-1 flex-1 min-w-0">
+            {/* Row 2: start → end  ☕ lunch */}
+            <div className="flex items-center gap-2">
               <TimePicker
                 value={cfg.startTime}
                 onChange={v => setDay(key, { startTime: v })}
                 disabled={!cfg.active}
               />
-              <span className="text-[11px] text-pc-muted font-bold shrink-0">→</span>
+              <span className="text-[12px] text-pc-muted font-bold shrink-0">→</span>
               <TimePicker
                 value={cfg.endTime}
                 onChange={v => setDay(key, { endTime: v })}
                 disabled={!cfg.active}
               />
+              <span className="text-[13px] shrink-0 ml-auto">☕</span>
+              <LunchInput
+                value={cfg.lunchMinutes}
+                onChange={v => setDay(key, { lunchMinutes: v })}
+                disabled={!cfg.active}
+              />
+              <span className="text-[11px] text-pc-muted font-semibold shrink-0">min</span>
             </div>
-
-            {/* Lunch minutes */}
-            <LunchPicker
-              value={cfg.lunchMinutes}
-              onChange={v => setDay(key, { lunchMinutes: v })}
-              disabled={!cfg.active}
-            />
-
-            {/* Net duration */}
-            <span
-              className="text-[12px] font-bold tabular-nums shrink-0"
-              style={{ width: 38, textAlign: "right", color: cfg.active ? "#9a6a3a" : "#c4b0a0" }}
-            >
-              {cfg.active ? fmtMin(net) : "—"}
-            </span>
-
-            {/* Toggle */}
-            <button
-              onClick={() => setDay(key, { active: !cfg.active })}
-              className="shrink-0 w-8 h-8 rounded-xl flex items-center justify-center transition-colors"
-              style={{ background: cfg.active ? "#ff5f00" : "#f0e8df" }}
-              aria-label={cfg.active ? "Inaktivera" : "Aktivera"}
-            >
-              {cfg.active
-                ? <svg viewBox="0 0 24 24" className="w-4 h-4 text-white" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-                : <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="#c4b0a0" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-              }
-            </button>
           </div>
         );
       })}
