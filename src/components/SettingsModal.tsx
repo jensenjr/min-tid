@@ -1,32 +1,35 @@
-import { useState } from "react";
-import { type WeekSchedule, weeklyNetMin, fmtMin } from "../lib/schedule";
-import { WeekScheduleEditor } from "./Onboarding";
+import { useState, useEffect } from "react";
 
 export type SettingsResult = {
   name: string;
   department?: string;
-  schedule: WeekSchedule;
 };
 
 export default function SettingsModal({
   open,
   initialName,
   initialDepartment,
-  initialSchedule,
   onClose,
   onSave,
 }: {
   open: boolean;
   initialName: string;
   initialDepartment?: string;
-  initialSchedule: WeekSchedule;
   onClose: () => void;
   onSave: (r: SettingsResult) => void;
 }) {
   const [name, setName] = useState(initialName);
   const [department, setDepartment] = useState(initialDepartment ?? "");
-  const [schedule, setSchedule] = useState<WeekSchedule>(initialSchedule);
   const [nameErr, setNameErr] = useState("");
+
+  // Sync from props every time the modal opens
+  useEffect(() => {
+    if (open) {
+      setName(initialName);
+      setDepartment(initialDepartment ?? "");
+      setNameErr("");
+    }
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!open) return null;
 
@@ -35,7 +38,6 @@ export default function SettingsModal({
     onSave({
       name: name.trim(),
       department: department.trim() || undefined,
-      schedule,
     });
   }
 
@@ -58,7 +60,7 @@ export default function SettingsModal({
         <div className="w-10 h-1 bg-pc-line rounded-full mx-auto mb-5" />
 
         <div className="font-extrabold text-[22px] tracking-tight mb-1">Inställningar</div>
-        <div className="text-[13px] text-pc-muted mb-6">Ändra namn, avdelning och arbetsschema.</div>
+        <div className="text-[13px] text-pc-muted mb-6">Ändra namn och avdelning.</div>
 
         {/* Name */}
         <SLabel>Namn <span className="text-pc-orange">*</span></SLabel>
@@ -81,22 +83,8 @@ export default function SettingsModal({
           placeholder="t.ex. Lager, Kontor…"
         />
 
-        {/* Schedule */}
-        <div className="border-t border-pc-line pt-5 mt-2">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <div className="font-extrabold text-[16px] text-pc-ink">Arbetsschema</div>
-              <div className="text-[12px] text-pc-muted mt-0.5">
-                Norm/vecka: <span className="font-bold text-pc-orange-deep">{fmtMin(weeklyNetMin(schedule))}</span>
-              </div>
-            </div>
-          </div>
-
-          <WeekScheduleEditor schedule={schedule} onChange={setSchedule} />
-        </div>
-
         {/* Actions */}
-        <div className="grid grid-cols-2 gap-3 mt-6">
+        <div className="grid grid-cols-2 gap-3 mt-4">
           <button
             onClick={onClose}
             style={{ padding: "15px", borderRadius: "16px", background: "#fdf6ee", border: "1.5px solid #ece6df", fontWeight: 700, fontSize: "15px", color: "#2d1717" }}

@@ -439,10 +439,9 @@ export default function PunchClock() {
     setOnboardingDone(true);
   }
 
-  function handleSettingsSave(result: { name: string; department?: string; schedule: WeekSchedule }) {
+  function handleSettingsSave(result: { name: string; department?: string }) {
     setName(result.name);
     setDepartment(result.department);
-    setSchedule(result.schedule);
     setSettingsModal(false);
   }
 
@@ -866,7 +865,6 @@ export default function PunchClock() {
         open={settingsModal}
         initialName={name}
         initialDepartment={department}
-        initialSchedule={schedule}
         onClose={() => setSettingsModal(false)}
         onSave={handleSettingsSave}
       />
