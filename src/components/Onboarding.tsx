@@ -147,7 +147,7 @@ export function WeekScheduleEditor({
           <TimePicker value={bulkStart} onChange={setBulkStart} />
           <span className="text-[13px] font-bold text-pc-muted">→</span>
           <TimePicker value={bulkEnd} onChange={setBulkEnd} />
-          <span className="text-[11px] text-pc-muted font-bold">☕</span>
+          <span className="text-[11px] text-pc-muted font-bold">🍽️</span>
           <LunchInput value={bulkLunch} onChange={setBulkLunch} />
           <button
             onClick={applyBulk}
@@ -199,7 +199,7 @@ export function WeekScheduleEditor({
               </div>
             </div>
 
-            {/* Row 2: start → end  ☕ lunch */}
+            {/* Row 2: start → end  🍽️ lunch */}
             <div className="flex items-center gap-2">
               <TimePicker
                 value={cfg.startTime}
@@ -212,7 +212,7 @@ export function WeekScheduleEditor({
                 onChange={v => setDay(key, { endTime: v })}
                 disabled={!cfg.active}
               />
-              <span className="text-[13px] shrink-0 ml-auto">☕</span>
+              <span className="text-[13px] shrink-0 ml-auto">🍽️</span>
               <LunchInput
                 value={cfg.lunchMinutes}
                 onChange={v => setDay(key, { lunchMinutes: v })}
