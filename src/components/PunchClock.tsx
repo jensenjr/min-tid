@@ -31,7 +31,7 @@ function todayStr() { return new Date().toISOString().slice(0, 10); }
 
 function fmtTime(ms: number | null | undefined) {
   if (!ms) return "--:--";
-  return new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
 function fmtDur(minutes: number) {
@@ -48,7 +48,7 @@ function computeDayMinutes(sessions: Session[], dateStr: string, schedule: WeekS
     const end = s.checkOut ?? now();
     raw += (end - s.checkIn) / 60000;
   }
-  return { raw, net: raw, cfg };
+  return { raw, net: Math.max(0, raw - (cfg?.lunchMinutes ?? 0)), cfg };
 }
 
 // ─── Week helpers ─────────────────────────────────────────────
@@ -462,7 +462,9 @@ export default function PunchClock() {
   }
 
   const liveMs = activeSession ? (now() - activeSession.checkIn) : 0;
-  const liveNet = todaySessions.reduce((a, s) => a + ((s.checkOut ?? now()) - s.checkIn), 0) / 60000;
+  const todayCfg = schedule[dayKeyOf(new Date(todayDate + "T12:00:00"))];
+  const liveNetRaw = todaySessions.reduce((a, s) => a + ((s.checkOut ?? now()) - s.checkIn), 0) / 60000;
+  const liveNet = Math.max(0, liveNetRaw - (todayCfg.active ? todayCfg.lunchMinutes : 0));
 
   const FILTERS: { key: HistoryFilter; label: string }[] = [
     { key: "week",     label: "Den här veckan" },

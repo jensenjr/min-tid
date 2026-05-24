@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export type AbsenceCategory =
   | "sjuk"
@@ -25,7 +25,7 @@ export const ABSENCE_META: Record<AbsenceCategory, { emoji: string; label: strin
   vab:              { emoji: "👶", label: "VAB" },
   semester:         { emoji: "✈️",  label: "Semester" },
   foraldraledighet: { emoji: "👨‍👩‍👧", label: "Föräldraledighet" },
-  friskard:         { emoji: "💪", label: "Friskård" },
+  friskard:         { emoji: "💪", label: "Friskvård" },
   tjansteledighet:  { emoji: "💼", label: "Tjänsteledighet" },
   obetald:          { emoji: "💸", label: "Obetald ledighet" },
   overtid_betald:   { emoji: "💰", label: "Övertid (betald)" },
@@ -50,6 +50,17 @@ export default function AbsenceModal({
   const [endDate, setEndDate] = useState(todayStr());
   const [note, setNote] = useState("");
   const [err, setErr] = useState("");
+
+  // Reset fields every time the modal opens
+  useEffect(() => {
+    if (open) {
+      setCategory("sjuk");
+      setStartDate(todayStr());
+      setEndDate(todayStr());
+      setNote("");
+      setErr("");
+    }
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!open) return null;
 
