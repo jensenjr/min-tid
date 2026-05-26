@@ -442,6 +442,7 @@ export default function PunchClock() {
   const [shortWarn, setShortWarn] = useState(false);
   const [flexBaseMinutes, setFlexBaseMinutes] = useState(0);
   const [historyMode, setHistoryMode] = useState<"list" | "calendar">("list");
+  const [calendarSelectedDate, setCalendarSelectedDate] = useState<string | null>(null);
   const [exportMonth, setExportMonth] = useState<{ year: number; month: number }>(() => {
     const n = new Date(); return { year: n.getFullYear(), month: n.getMonth() };
   });
@@ -765,7 +766,96 @@ export default function PunchClock() {
               </div>
 
               {historyMode === "calendar" && (
-                <CalendarView sessions={sessions} absences={absences} schedule={schedule} />
+                <>
+                  <CalendarView
+                    sessions={sessions}
+                    absences={absences}
+                    schedule={schedule}
+                    selectedDate={calendarSelectedDate}
+                    onSelectDate={d => setCalendarSelectedDate(prev => prev === d ? null : d)}
+                  />
+                  {calendarSelectedDate && (() => {
+                    const daySessions = sessions.filter(s => new Date(s.checkIn).toISOString().slice(0, 10) === calendarSelectedDate);
+                    const dayAbsences = getAbsencesForDate(absences, calendarSelectedDate);
+                    const dayCfg = schedule[dayKeyOf(new Date(calendarSelectedDate + "T12:00:00"))];
+                    const { net: dayNet } = computeDayMinutes(daySessions, calendarSelectedDate, schedule);
+                    const scheduledMin = netDayMin(dayCfg);
+                    const diff = dayNet - scheduledMin;
+                    return (
+                      <div className="bg-white rounded-[22px] border border-pc-line shadow-[0_2px_14px_rgba(81,43,43,0.05)] overflow-hidden mb-4">
+                        <div className="px-4 pt-4 pb-3 flex items-start justify-between gap-3">
+                          <div>
+                            <div className="font-bold text-[18px] capitalize">{fmtDateLabel(calendarSelectedDate)}</div>
+                            {daySessions.length > 0 && (
+                              <div className="text-[26px] font-extrabold tabular-nums tracking-tight text-pc-orange-deep mt-0.5">{fmtDur(dayNet)}</div>
+                            )}
+                            {dayCfg.active && scheduledMin > 0 && (
+                              <div className="text-[12px] text-pc-muted font-medium mt-0.5">
+                                Schema: {dayCfg.startTime}–{dayCfg.endTime} · {fmtMin(scheduledMin)} netto
+                              </div>
+                            )}
+                          </div>
+                          {daySessions.length > 0 && scheduledMin > 0 && (
+                            <div className={`shrink-0 mt-1 px-3 py-1.5 rounded-full text-[12px] font-extrabold flex items-center gap-1.5 ${
+                              diff >= 0 ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"
+                            }`}>
+                              <span className={`w-2 h-2 rounded-full ${diff >= 0 ? "bg-green-500" : "bg-red-400"}`} />
+                              {diff >= 0 ? `+${fmtMin(diff)}` : `−${fmtMin(Math.abs(diff))}`}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="px-4 pb-4 pt-3 border-t border-pc-line space-y-2">
+                          {dayAbsences.map(a => (
+                            <div key={a.id} className="flex items-center gap-2">
+                              <div className="flex-1 min-w-0 bg-pc-peach text-pc-orange-deep rounded-[12px] px-3 py-2 flex items-center gap-2">
+                                <span className="text-[16px] leading-none shrink-0">{ABSENCE_META[a.category as AbsenceCategory].emoji}</span>
+                                <div className="min-w-0">
+                                  <div className="font-bold text-[13px] leading-tight">{ABSENCE_META[a.category as AbsenceCategory].label}</div>
+                                  <div className="text-[11px] opacity-75 font-medium">
+                                    {a.hours !== undefined ? `${a.hours}h` : "Hel dag"}
+                                    {a.startDate !== a.endDate && ` · ${absenceDateRangeLabel(a)}`}
+                                  </div>
+                                  {a.note && <div className="text-[11px] opacity-70 mt-0.5 truncate">{a.note}</div>}
+                                </div>
+                              </div>
+                              {a.startDate === calendarSelectedDate && (
+                                <button
+                                  onClick={() => handleDeleteAbsence(a.id)}
+                                  className="w-8 h-8 shrink-0 flex items-center justify-center rounded-xl text-pc-muted hover:text-red-500 hover:bg-red-50 transition-colors"
+                                  aria-label="Ta bort avvikelse"
+                                >
+                                  <IconTrash />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+
+                          {daySessions.length > 0 && (
+                            <div className="space-y-0.5">
+                              {daySessions.map((s, i) => (
+                                <SessionRow key={s.id} session={s} index={i}
+                                  onEdit={() => handleEditSession(s)}
+                                  onDelete={() => handleDeleteSession(s.id)} />
+                              ))}
+                            </div>
+                          )}
+
+                          {daySessions.length === 0 && dayAbsences.length === 0 && (
+                            <div className="text-pc-muted text-[13px] text-center py-1">Inga registreringar denna dag.</div>
+                          )}
+
+                          <button
+                            onClick={() => setAddForDate(calendarSelectedDate)}
+                            className="pc-press w-full flex items-center justify-center gap-1.5 py-2.5 rounded-[12px] border border-dashed border-pc-line text-pc-muted text-[13px] font-semibold hover:border-pc-orange hover:text-pc-orange transition-colors"
+                          >
+                            <span className="text-[15px] leading-none">+</span> Lägg till tid
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </>
               )}
 
               {historyMode === "list" && (<>
@@ -1294,10 +1384,12 @@ function ScheduleEditorModal({ open, schedule, onClose, onSave }: {
 }
 
 // ─── Calendar View ────────────────────────────────────────────
-function CalendarView({ sessions, absences, schedule }: {
+function CalendarView({ sessions, absences, schedule, selectedDate, onSelectDate }: {
   sessions: Session[];
   absences: AbsenceEntry[];
   schedule: WeekSchedule;
+  selectedDate?: string | null;
+  onSelectDate?: (date: string) => void;
 }) {
   const [viewYM, setViewYM] = useState(() => {
     const n = new Date(); return { year: n.getFullYear(), month: n.getMonth() };
@@ -1368,13 +1460,16 @@ function CalendarView({ sessions, absences, schedule }: {
             else dotColor = "bg-red-300";
           }
 
+          const isSelected = selectedDate === dateStr && inMonth;
           return (
-            <div
+            <button
               key={dateStr}
-              className={`flex flex-col items-center justify-center rounded-xl py-1.5 relative min-h-[44px]
-                ${!inMonth ? "opacity-25" : ""}
+              type="button"
+              onClick={() => inMonth && onSelectDate?.(dateStr)}
+              className={`flex flex-col items-center justify-center rounded-xl py-1.5 relative min-h-[44px] transition-colors
+                ${!inMonth ? "opacity-25 cursor-default" : "cursor-pointer"}
                 ${isToday ? "ring-2 ring-pc-orange ring-offset-1" : ""}
-                ${hasData && inMonth ? "bg-pc-apricot" : ""}
+                ${isSelected ? "bg-pc-orange/10 ring-2 ring-pc-orange/60 ring-offset-1" : hasData && inMonth ? "bg-pc-apricot" : ""}
               `}
             >
               <span
@@ -1396,7 +1491,7 @@ function CalendarView({ sessions, absences, schedule }: {
               {dotColor && (
                 <span className={`absolute bottom-0.5 w-1.5 h-1.5 rounded-full ${dotColor}`} />
               )}
-            </div>
+            </button>
           );
         })}
       </div>
