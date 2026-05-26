@@ -1,0 +1,16 @@
+{
+  "name": "min-tid-server",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^11.0.0",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2"
+  }
+}

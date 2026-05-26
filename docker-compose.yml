@@ -1,0 +1,16 @@
+services:
+  app:
+    build: .
+    ports:
+      - "80:80"
+    volumes:
+      - min-tid-data:/app/data
+    environment:
+      JWT_SECRET: "change-this-to-a-long-random-string-in-production"
+      DB_PATH: /app/data/data.db
+      NODE_ENV: production
+      PORT: 80
+    restart: unless-stopped
+
+volumes:
+  min-tid-data:

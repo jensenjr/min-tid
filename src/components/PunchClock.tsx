@@ -3,6 +3,8 @@ import Onboarding, { type OnboardingResult, WeekScheduleEditor } from "./Onboard
 import AbsenceModal, { type AbsenceEntry, type AbsenceCategory, ABSENCE_META } from "./AbsenceModal";
 import ExpenseModal, { type ExpenseEntry, type ExpenseCategory, EXPENSE_META } from "./ExpenseModal";
 import SettingsModal from "./SettingsModal";
+import SyncModal from "./SyncModal";
+import { syncPush, syncDeleteAccount, SYNC_TOKEN_KEY, type SyncState } from "../lib/sync";
 import {
   type WeekSchedule,
   DEFAULT_SCHEDULE, dayKeyOf, netDayMin, weeklyNetMin, fmtMin,
@@ -475,6 +477,11 @@ export default function PunchClock() {
   const [exportMonth, setExportMonth] = useState<{ year: number; month: number }>(() => {
     const n = new Date(); return { year: n.getFullYear(), month: n.getMonth() };
   });
+  const [syncToken, setSyncToken]   = useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "ok" | "error">("idle");
+  const [syncedAt, setSyncedAt]     = useState<number | null>(null);
+  const [syncModal, setSyncModal]   = useState(false);
+  const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const t = setInterval(() => {
@@ -504,11 +511,24 @@ export default function PunchClock() {
     setAbsences(d.absences);
     setExpenses(d.expenses ?? []);
     setFlexBaseMinutes(d.flexBaseMinutes ?? 0);
+    const token = localStorage.getItem(SYNC_TOKEN_KEY);
+    if (token) { setSyncToken(token); setSyncStatus("idle"); }
   }, []);
 
   useEffect(() => {
     save({ name, schedule, department, onboardingDone, sessions, absences, expenses, flexBaseMinutes });
-  }, [name, schedule, department, onboardingDone, sessions, absences, expenses, flexBaseMinutes]);
+    if (syncToken) {
+      if (syncTimer.current) clearTimeout(syncTimer.current);
+      const token = syncToken;
+      const payload: SyncState = { name, schedule, department, sessions, absences, expenses, flexBaseMinutes };
+      syncTimer.current = setTimeout(() => {
+        setSyncStatus("syncing");
+        syncPush(token, payload)
+          .then(() => { setSyncedAt(Date.now()); setSyncStatus("ok"); })
+          .catch(() => setSyncStatus("error"));
+      }, 3000);
+    }
+  }, [name, schedule, department, onboardingDone, sessions, absences, expenses, flexBaseMinutes, syncToken]);
 
   const weeklyNorm = weeklyNetMin(schedule);
   const activeSession = sessions.find(s => !s.checkOut);
@@ -565,9 +585,24 @@ export default function PunchClock() {
   function handleSaveExpense(entry: ExpenseEntry) { setExpenses(prev => [...prev, entry]); setExpenseModal(false); }
   function handleDeleteExpense(id: string) { setExpenses(prev => prev.filter(e => e.id !== id)); }
   function handleOnboardingComplete(result: OnboardingResult) {
-    setName(result.name);
-    setSchedule(result.schedule);
-    setDepartment(result.department);
+    if (result.syncToken) {
+      localStorage.setItem(SYNC_TOKEN_KEY, result.syncToken);
+      setSyncToken(result.syncToken);
+    }
+    if (result.restoredState) {
+      const s = result.restoredState;
+      setName(s.name ?? result.name);
+      setSchedule(s.schedule ? migrateSchedule(s.schedule as Record<string, unknown>) : result.schedule);
+      setDepartment(s.department ?? result.department);
+      setSessions((s.sessions ?? []) as Session[]);
+      setAbsences((s.absences ?? []) as AbsenceEntry[]);
+      setExpenses((s.expenses ?? []) as ExpenseEntry[]);
+      setFlexBaseMinutes(typeof s.flexBaseMinutes === "number" ? s.flexBaseMinutes : 0);
+    } else {
+      setName(result.name);
+      setSchedule(result.schedule);
+      setDepartment(result.department);
+    }
     setOnboardingDone(true);
   }
 
@@ -575,6 +610,34 @@ export default function PunchClock() {
     setName(result.name);
     setDepartment(result.department);
     setSettingsModal(false);
+  }
+
+  function handleSyncToken(token: string) {
+    localStorage.setItem(SYNC_TOKEN_KEY, token);
+    setSyncToken(token);
+    setSyncModal(false);
+  }
+
+  function handleSyncRestore(token: string, state: SyncState) {
+    localStorage.setItem(SYNC_TOKEN_KEY, token);
+    setSyncToken(token);
+    setName(state.name ?? name);
+    setSchedule(state.schedule ? migrateSchedule(state.schedule as Record<string, unknown>) : schedule);
+    setDepartment(state.department ?? department);
+    setSessions((state.sessions ?? []) as Session[]);
+    setAbsences((state.absences ?? []) as AbsenceEntry[]);
+    setExpenses((state.expenses ?? []) as ExpenseEntry[]);
+    setFlexBaseMinutes(typeof state.flexBaseMinutes === "number" ? state.flexBaseMinutes : 0);
+    setSyncModal(false);
+  }
+
+  async function handleDisconnectSync() {
+    if (!syncToken) return;
+    try { await syncDeleteAccount(syncToken); } catch { /* ignore */ }
+    localStorage.removeItem(SYNC_TOKEN_KEY);
+    setSyncToken(null);
+    setSyncStatus("idle");
+    setSyncedAt(null);
   }
 
   function handleShare() {
@@ -775,6 +838,37 @@ export default function PunchClock() {
               >
                 <IconCalendar /> Planera dagar
               </button>
+
+              {/* Sync status card */}
+              {syncToken ? (
+                <div className="mt-3 bg-white border border-pc-line rounded-[20px] px-4 py-3 flex items-center gap-3">
+                  <span className="text-[20px] leading-none shrink-0">
+                    {syncStatus === "syncing" ? "⏳" : syncStatus === "error" ? "⚠️" : "☁️"}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[13px] font-bold text-pc-ink leading-tight">
+                      {syncStatus === "syncing" ? "Synkroniserar…"
+                        : syncStatus === "error" ? "Synkfel – försöker snart igen"
+                        : syncedAt ? `Synkat ${new Date(syncedAt).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })}`
+                        : "Synkronisering aktiv"}
+                    </div>
+                    <div className="text-[11px] text-pc-muted mt-0.5">Data sparas på alla dina enheter</div>
+                  </div>
+                  <button
+                    onClick={handleDisconnectSync}
+                    className="shrink-0 text-[11px] font-semibold text-pc-muted underline"
+                  >
+                    Koppla från
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setSyncModal(true)}
+                  className="pc-press mt-3 w-full bg-white border border-pc-line rounded-[20px] py-3 font-semibold text-[13px] text-pc-muted flex items-center justify-center gap-2"
+                >
+                  ☁️ Synkronisera dina data
+                </button>
+              )}
             </div>
           )}
 
@@ -1313,6 +1407,13 @@ export default function PunchClock() {
         initialDepartment={department}
         onClose={() => setSettingsModal(false)}
         onSave={handleSettingsSave}
+      />
+
+      <SyncModal
+        open={syncModal}
+        onClose={() => setSyncModal(false)}
+        onToken={handleSyncToken}
+        onRestore={handleSyncRestore}
       />
     </div>
   );

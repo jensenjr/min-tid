@@ -5,14 +5,17 @@ import {
   DEFAULT_SCHEDULE,
   shiftMinutes, netDayMin, weeklyNetMin, fmtMin,
 } from "../lib/schedule";
+import { syncRegister, syncLogin, type SyncState } from "../lib/sync";
 
 export type OnboardingResult = {
   name: string;
   department?: string;
   schedule: WeekSchedule;
+  syncToken?: string;
+  restoredState?: SyncState;
 };
 
-type Step = "info" | "choice" | "schedule";
+type Step = "info" | "choice" | "schedule" | "sync";
 
 // ─── TimePicker — hour or minute select snapping to 5-min ─────
 function TimePicker({
@@ -243,8 +246,14 @@ export default function Onboarding({ onComplete }: { onComplete: (r: OnboardingR
   const [department, setDepartment] = useState("");
   const [schedule, setSchedule] = useState<WeekSchedule>(DEFAULT_SCHEDULE);
 
-  function finish(sched: WeekSchedule) {
-    onComplete({ name: name.trim(), department: department.trim() || undefined, schedule: sched });
+  function finish(sched: WeekSchedule, syncToken?: string, restoredState?: SyncState) {
+    onComplete({
+      name: name.trim(),
+      department: department.trim() || undefined,
+      schedule: sched,
+      syncToken,
+      restoredState,
+    });
   }
 
   // ── Step: Name + role ────────────────────────────────────────
@@ -299,7 +308,7 @@ export default function Onboarding({ onComplete }: { onComplete: (r: OnboardingR
   // ── Step: Set schedule or skip ───────────────────────────────
   if (step === "choice") return (
     <Screen>
-      <StepDots current={1} total={2} />
+      <StepDots current={1} total={3} />
       <h2 className="text-[24px] font-extrabold tracking-tight text-pc-ink mb-1 text-center">
         Vill du sätta ditt schema?
       </h2>
@@ -321,7 +330,7 @@ export default function Onboarding({ onComplete }: { onComplete: (r: OnboardingR
         </button>
 
         <button
-          onClick={() => finish(DEFAULT_SCHEDULE)}
+          onClick={() => { setSchedule(DEFAULT_SCHEDULE); setStep("sync"); }}
           className="pc-press w-full text-left bg-white border border-pc-line rounded-[20px] px-5 py-4 flex items-start gap-4 shadow-[0_2px_12px_rgba(81,43,43,0.04)]"
         >
           <span className="text-[26px] leading-none mt-0.5 shrink-0">⚡</span>
@@ -340,7 +349,7 @@ export default function Onboarding({ onComplete }: { onComplete: (r: OnboardingR
   // ── Step: Schedule editor ────────────────────────────────────
   if (step === "schedule") return (
     <Screen scroll>
-      <StepDots current={2} total={2} />
+      <StepDots current={2} total={3} />
       <h2 className="text-[22px] font-extrabold tracking-tight text-pc-ink mb-1 text-center">
         Din arbetsvecka
       </h2>
@@ -352,9 +361,19 @@ export default function Onboarding({ onComplete }: { onComplete: (r: OnboardingR
 
       <div className="grid grid-cols-2 gap-3 pt-4 w-full">
         <button onClick={() => setStep("choice")} className="ob-btn-ghost">← Tillbaka</button>
-        <button onClick={() => finish(schedule)} className="ob-btn-primary">Kom igång →</button>
+        <button onClick={() => setStep("sync")} className="ob-btn-primary">Nästa →</button>
       </div>
     </Screen>
+  );
+
+  // ── Step: Sync setup ─────────────────────────────────────────
+  if (step === "sync") return (
+    <SyncStep
+      schedule={schedule}
+      onBack={() => setStep("choice")}
+      onFinish={finish}
+      name={name.trim()}
+    />
   );
 
   return null;
@@ -434,4 +453,193 @@ function StepDots({ current, total }: { current: number; total: number }) {
 
 function Label({ children }: { children: React.ReactNode }) {
   return <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-pc-muted mb-2">{children}</div>;
+}
+
+type SyncSubStep = "choose" | "create" | "restore";
+
+function SyncStep({
+  schedule,
+  onBack,
+  onFinish,
+  name,
+}: {
+  schedule: WeekSchedule;
+  onBack: () => void;
+  onFinish: (sched: WeekSchedule, token?: string, state?: SyncState) => void;
+  name: string;
+}) {
+  void name; // reserved for future "push initial state" feature
+  const [sub, setSub]         = useState<SyncSubStep>("choose");
+  const [secret, setSecret]   = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [err, setErr]         = useState("");
+
+  const inputStyle: React.CSSProperties = {
+    width: "100%", boxSizing: "border-box", padding: "14px 16px", borderRadius: "16px",
+    border: "1.5px solid #ece6df", fontSize: "16px", outline: "none",
+    background: "#fdf6ee", fontWeight: 600, color: "#2d1717",
+    marginBottom: "14px",
+  };
+
+  if (sub === "choose") return (
+    <Screen>
+      <StepDots current={3} total={3} />
+      <h2 className="text-[24px] font-extrabold tracking-tight text-pc-ink mb-1 text-center">
+        Synkronisera enheter
+      </h2>
+      <p className="text-[13px] text-pc-muted mb-7 text-center leading-relaxed">
+        Synka data mellan dina enheter med en hemlig kod.
+        Ingen e-post eller konto krävs.
+      </p>
+
+      <div className="w-full space-y-3">
+        <button
+          onClick={() => setSub("create")}
+          className="pc-press w-full text-left bg-white border border-pc-line rounded-[20px] px-5 py-4 flex items-start gap-4 shadow-[0_2px_12px_rgba(81,43,43,0.04)]"
+        >
+          <span className="text-[26px] leading-none mt-0.5 shrink-0">🔑</span>
+          <div className="flex-1">
+            <div className="font-extrabold text-[15px] text-pc-ink leading-tight mb-0.5">Skapa ny synk-kod</div>
+            <div className="text-[12px] text-pc-muted leading-snug">Välj en hemlig kod för att synka till fler enheter.</div>
+          </div>
+          <svg viewBox="0 0 24 24" className="w-5 h-5 text-pc-muted shrink-0 mt-1" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
+        </button>
+
+        <button
+          onClick={() => setSub("restore")}
+          className="pc-press w-full text-left bg-white border border-pc-line rounded-[20px] px-5 py-4 flex items-start gap-4 shadow-[0_2px_12px_rgba(81,43,43,0.04)]"
+        >
+          <span className="text-[26px] leading-none mt-0.5 shrink-0">☁️</span>
+          <div className="flex-1">
+            <div className="font-extrabold text-[15px] text-pc-ink leading-tight mb-0.5">Återställ från annan enhet</div>
+            <div className="text-[12px] text-pc-muted leading-snug">Jag har redan en synk-kod och vill hämta min data.</div>
+          </div>
+          <svg viewBox="0 0 24 24" className="w-5 h-5 text-pc-muted shrink-0 mt-1" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
+        </button>
+
+        <button onClick={() => onFinish(schedule)} className="ob-btn-ghost w-full">
+          Hoppa över
+        </button>
+
+        <button onClick={onBack} className="ob-btn-ghost w-full">← Tillbaka</button>
+      </div>
+    </Screen>
+  );
+
+  if (sub === "create") {
+    async function handleCreate() {
+      if (secret.length < 6) { setErr("Minst 6 tecken."); return; }
+      if (secret !== confirm) { setErr("Koderna matchar inte."); return; }
+      setLoading(true); setErr("");
+      try {
+        const { token } = await syncRegister(secret);
+        onFinish(schedule, token);
+      } catch (e) {
+        setErr((e as Error).message);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    return (
+      <Screen>
+        <StepDots current={3} total={3} />
+        <h2 className="text-[22px] font-extrabold tracking-tight text-pc-ink mb-1 text-center">
+          Välj en synk-kod
+        </h2>
+        <p className="text-[13px] text-pc-muted mb-6 text-center leading-relaxed">
+          Välj en lång, unik fras. Du behöver den på alla dina enheter. Lagras aldrig i klartext.
+        </p>
+
+        <div className="w-full">
+          <Label>Synk-kod <span className="text-pc-orange">*</span></Label>
+          <input
+            type="password"
+            placeholder="Minst 6 tecken"
+            value={secret}
+            onChange={e => { setSecret(e.target.value); setErr(""); }}
+            className="ob-input"
+            style={inputStyle}
+          />
+          <Label>Bekräfta synk-koden <span className="text-pc-orange">*</span></Label>
+          <input
+            type="password"
+            placeholder="Upprepa koden"
+            value={confirm}
+            onChange={e => { setConfirm(e.target.value); setErr(""); }}
+            className="ob-input"
+            style={inputStyle}
+          />
+          {err && <p className="text-red-500 text-[13px] mb-3 font-semibold">{err}</p>}
+
+          <button
+            onClick={handleCreate}
+            disabled={loading}
+            className="ob-btn-primary w-full"
+            style={loading ? { background: "#f0e8df", color: "#c4a882", boxShadow: "none" } : undefined}
+          >
+            {loading ? "Skapar…" : "Skapa synk-kod →"}
+          </button>
+          <button onClick={() => { setSub("choose"); setErr(""); setSecret(""); setConfirm(""); }} className="ob-btn-ghost w-full mt-1">
+            ← Tillbaka
+          </button>
+        </div>
+      </Screen>
+    );
+  }
+
+  if (sub === "restore") {
+    async function handleRestore() {
+      if (!secret) { setErr("Ange din synk-kod."); return; }
+      setLoading(true); setErr("");
+      try {
+        const { token, state } = await syncLogin(secret);
+        onFinish(state?.schedule as WeekSchedule ?? schedule, token, state ?? undefined);
+      } catch (e) {
+        setErr((e as Error).message);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    return (
+      <Screen>
+        <StepDots current={3} total={3} />
+        <h2 className="text-[22px] font-extrabold tracking-tight text-pc-ink mb-1 text-center">
+          Återställ från synk
+        </h2>
+        <p className="text-[13px] text-pc-muted mb-6 text-center leading-relaxed">
+          Ange den synk-kod du skapade på din andra enhet. Din data hämtas och ersätter data på den här enheten.
+        </p>
+
+        <div className="w-full">
+          <Label>Synk-kod</Label>
+          <input
+            type="password"
+            placeholder="Din synk-kod"
+            value={secret}
+            onChange={e => { setSecret(e.target.value); setErr(""); }}
+            className="ob-input"
+            style={inputStyle}
+          />
+          {err && <p className="text-red-500 text-[13px] mb-3 font-semibold">{err}</p>}
+
+          <button
+            onClick={handleRestore}
+            disabled={loading}
+            className="ob-btn-primary w-full"
+            style={loading ? { background: "#f0e8df", color: "#c4a882", boxShadow: "none" } : undefined}
+          >
+            {loading ? "Hämtar data…" : "Återställ →"}
+          </button>
+          <button onClick={() => { setSub("choose"); setErr(""); setSecret(""); }} className="ob-btn-ghost w-full mt-1">
+            ← Tillbaka
+          </button>
+        </div>
+      </Screen>
+    );
+  }
+
+  return null;
 }
