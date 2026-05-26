@@ -251,7 +251,8 @@ function buildShareText(sessions: Session[], absences: AbsenceEntry[], expenses:
     let totalExpenses = 0;
     for (const e of periodExpenses) {
       const meta = EXPENSE_META[e.category];
-      lines.push(`  ${fmtDateLabel(e.date)}: ${meta.emoji} ${meta.label} — ${e.amount} kr${e.hasReceipt ? " 🧾" : ""}${e.note ? ` (${e.note})` : ""}`);
+      const kmPart = e.km != null ? ` ${e.km} km ·` : "";
+      lines.push(`  ${fmtDateLabel(e.date)}: ${meta.emoji} ${meta.label} —${kmPart} ${e.amount} kr${e.hasReceipt ? " 🧾" : ""}${e.note ? ` (${e.note})` : ""}`);
       totalExpenses += e.amount;
     }
     lines.push(`Total utlägg: ${totalExpenses} kr`);
@@ -265,7 +266,10 @@ function buildShareText(sessions: Session[], absences: AbsenceEntry[], expenses:
 function computeFlexMinutes(sessions: Session[], absences: AbsenceEntry[], schedule: WeekSchedule): number {
   const today = todayStr();
   const byDate = groupByDate(
-    sessions.filter(s => s.checkOut !== null && new Date(s.checkIn).toISOString().slice(0, 10) < today)
+    sessions.filter(s => {
+      const d = new Date(s.checkIn).toISOString().slice(0, 10);
+      return d < today ? s.checkOut !== null : d === today;
+    })
   );
 
   let flex = 0;
@@ -1203,7 +1207,9 @@ export default function PunchClock() {
                                 </div>
                                 {e.note && <div className="text-[12px] text-pc-muted font-medium mt-0.5 truncate">{e.note}</div>}
                               </div>
-                              <div className="shrink-0 font-extrabold tabular-nums text-[15px] text-pc-ink">{e.amount} kr</div>
+                              <div className="shrink-0 font-extrabold tabular-nums text-[15px] text-pc-ink">
+                                {e.km != null ? `${e.km} km · ` : ""}{e.amount} kr
+                              </div>
                               <button
                                 onClick={() => handleDeleteExpense(e.id)}
                                 className="w-8 h-8 shrink-0 flex items-center justify-center rounded-xl text-pc-muted hover:text-red-500 hover:bg-red-50 transition-colors"

@@ -14,6 +14,7 @@ export type ExpenseEntry = {
   category: ExpenseCategory;
   date: string;        // "YYYY-MM-DD"
   amount: number;      // SEK
+  km?: number;         // only for milersattning
   hasReceipt: boolean;
   note?: string;
   manual: true;
@@ -45,6 +46,7 @@ export default function ExpenseModal({
   const [category, setCategory] = useState<ExpenseCategory>("milersattning");
   const [date, setDate] = useState(todayStr());
   const [amount, setAmount] = useState("");
+  const [km, setKm] = useState("");
   const [hasReceipt, setHasReceipt] = useState(false);
   const [note, setNote] = useState("");
   const [err, setErr] = useState("");
@@ -54,6 +56,7 @@ export default function ExpenseModal({
       setCategory("milersattning");
       setDate(todayStr());
       setAmount("");
+      setKm("");
       setHasReceipt(false);
       setNote("");
       setErr("");
@@ -64,13 +67,19 @@ export default function ExpenseModal({
 
   function handleSave() {
     if (!date) { setErr("Ange datum."); return; }
-    const parsed = parseFloat(amount.replace(",", "."));
-    if (isNaN(parsed) || parsed <= 0) { setErr("Ange ett giltigt belopp."); return; }
+    const parsedAmount = parseFloat(amount.replace(",", "."));
+    if (isNaN(parsedAmount) || parsedAmount <= 0) { setErr("Ange ett giltigt belopp."); return; }
+    let parsedKm: number | undefined;
+    if (category === "milersattning") {
+      parsedKm = parseFloat(km.replace(",", "."));
+      if (isNaN(parsedKm) || parsedKm <= 0) { setErr("Ange antal km."); return; }
+    }
     onSave({
       id: crypto.randomUUID(),
       category,
       date,
-      amount: parsed,
+      amount: parsedAmount,
+      km: parsedKm,
       hasReceipt,
       note: note.trim() || undefined,
       manual: true,
@@ -132,6 +141,35 @@ export default function ExpenseModal({
             marginBottom: "16px",
           }}
         />
+
+        {/* km — only for milersattning */}
+        {category === "milersattning" && (
+          <>
+            <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-2">Antal km</div>
+            <div className="relative mb-4">
+              <input
+                type="number"
+                inputMode="decimal"
+                placeholder="0"
+                min={0}
+                step={1}
+                value={km}
+                onChange={e => setKm(e.target.value)}
+                style={{
+                  width: "100%", boxSizing: "border-box",
+                  padding: "12px 48px 12px 14px", borderRadius: "14px",
+                  border: "1.5px solid #ece6df", fontSize: "16px", outline: "none",
+                  background: "#fdf6ee", fontWeight: 600, color: "#2d1717",
+                }}
+                onFocus={e => { e.currentTarget.style.borderColor = "#ff5f00"; e.currentTarget.style.background = "#fff"; }}
+                onBlur={e => { e.currentTarget.style.borderColor = "#ece6df"; e.currentTarget.style.background = "#fdf6ee"; }}
+              />
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[14px] font-bold text-[#9c7c5c] pointer-events-none">
+                km
+              </span>
+            </div>
+          </>
+        )}
 
         {/* Amount */}
         <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-2">Belopp</div>
