@@ -1,5 +1,6 @@
 {
-  "name": "tanstack_start_ts",
+  "name": "min-tid",
+  "version": "1.0.0-beta.1",
   "private": true,
   "sideEffects": false,
   "type": "module",
