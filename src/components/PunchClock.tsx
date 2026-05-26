@@ -23,6 +23,7 @@ type StorageShape = {
   onboardingDone: boolean;
   sessions: Session[];
   absences: AbsenceEntry[];
+  flexBaseMinutes: number;
 };
 
 // ─── Time helpers ─────────────────────────────────────────────
@@ -241,6 +242,97 @@ function buildShareText(sessions: Session[], absences: AbsenceEntry[], name: str
   return lines.join("\n");
 }
 
+// ─── Flex bank ────────────────────────────────────────────────
+function computeFlexMinutes(sessions: Session[], absences: AbsenceEntry[], schedule: WeekSchedule): number {
+  const today = todayStr();
+  const byDate = groupByDate(
+    sessions.filter(s => s.checkOut !== null && new Date(s.checkIn).toISOString().slice(0, 10) < today)
+  );
+
+  let flex = 0;
+
+  // Each past day with sessions: actual net - scheduled net
+  for (const [date, daySessions] of Object.entries(byDate)) {
+    const { net } = computeDayMinutes(daySessions, date, schedule);
+    const dayCfg = schedule[dayKeyOf(new Date(date + "T12:00:00"))];
+    flex += net - netDayMin(dayCfg);
+  }
+
+  // Flex-leave absences on days without sessions: deduct hours from flex bank
+  for (const a of absences) {
+    if (a.category !== "flex") continue;
+    const dates = expandAbsenceDates(a).filter(d => d < today && !byDate[d]);
+    for (const date of dates) {
+      const dayCfg = schedule[dayKeyOf(new Date(date + "T12:00:00"))];
+      const absMin = a.hours !== undefined ? Math.round(a.hours * 60) : netDayMin(dayCfg);
+      flex -= absMin;
+    }
+  }
+
+  return flex;
+}
+
+// ─── CSV export ───────────────────────────────────────────────
+function buildCsvExport(sessions: Session[], absences: AbsenceEntry[], schedule: WeekSchedule, year: number, month: number): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const monthStart = `${year}-${pad(month + 1)}-01`;
+  const monthEnd = `${year}-${pad(month + 1)}-${pad(new Date(year, month + 1, 0).getDate())}`;
+
+  const header = ["Datum", "Veckodag", "Incheckning", "Utcheckning", "Netto (min)", "Netto (h)", "Typ", "Kategori", "Anteckning"];
+  const dataRows: string[][] = [];
+
+  for (const s of sessions) {
+    if (!s.checkOut) continue;
+    const d = new Date(s.checkIn).toISOString().slice(0, 10);
+    if (d < monthStart || d > monthEnd) continue;
+    const { net } = computeDayMinutes([s], d, schedule);
+    dataRows.push([
+      d,
+      new Date(d + "T12:00:00").toLocaleDateString("sv-SE", { weekday: "long" }),
+      fmtTime(s.checkIn),
+      fmtTime(s.checkOut),
+      String(Math.round(net)),
+      fmtDur(net),
+      "Arbete", "", "",
+    ]);
+  }
+
+  for (const a of absences) {
+    if (a.startDate > monthEnd || a.endDate < monthStart) continue;
+    const meta = ABSENCE_META[a.category];
+    for (const d of expandAbsenceDates(a).filter(x => x >= monthStart && x <= monthEnd)) {
+      const dayCfg = schedule[dayKeyOf(new Date(d + "T12:00:00"))];
+      const absMin = a.hours !== undefined ? Math.round(a.hours * 60) : netDayMin(dayCfg);
+      dataRows.push([
+        d,
+        new Date(d + "T12:00:00").toLocaleDateString("sv-SE", { weekday: "long" }),
+        "", "",
+        String(absMin),
+        fmtDur(absMin),
+        "Avvikelse",
+        meta.label,
+        a.note ?? "",
+      ]);
+    }
+  }
+
+  dataRows.sort((a, b) => a[0].localeCompare(b[0]) || a[2].localeCompare(b[2]));
+  const csv = [header, ...dataRows].map(row => row.map(c => `"${c.replace(/"/g, '""')}"`).join(",")).join("\r\n");
+  return "﻿" + csv; // BOM for Excel UTF-8 detection
+}
+
+function downloadCsv(content: string, filename: string) {
+  const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 // ─── Storage ──────────────────────────────────────────────────
 function load(): StorageShape {
   try {
@@ -262,6 +354,7 @@ function load(): StorageShape {
       onboardingDone: p.onboardingDone ?? false,
       sessions: p.sessions ?? [],
       absences: p.absences ?? [],
+      flexBaseMinutes: typeof p.flexBaseMinutes === "number" ? p.flexBaseMinutes : 0,
     };
   } catch {
     return { name: "", schedule: DEFAULT_SCHEDULE, onboardingDone: false, sessions: [], absences: [] };
@@ -347,6 +440,11 @@ export default function PunchClock() {
   const [shareText, setShareText] = useState("");
   const [shared, setShared] = useState(false);
   const [shortWarn, setShortWarn] = useState(false);
+  const [flexBaseMinutes, setFlexBaseMinutes] = useState(0);
+  const [historyMode, setHistoryMode] = useState<"list" | "calendar">("list");
+  const [exportMonth, setExportMonth] = useState<{ year: number; month: number }>(() => {
+    const n = new Date(); return { year: n.getFullYear(), month: n.getMonth() };
+  });
 
   useEffect(() => {
     const t = setInterval(() => {
@@ -374,11 +472,12 @@ export default function PunchClock() {
     setOnboardingDone(d.onboardingDone);
     setSessions(d.sessions);
     setAbsences(d.absences);
+    setFlexBaseMinutes(d.flexBaseMinutes ?? 0);
   }, []);
 
   useEffect(() => {
-    save({ name, schedule, department, onboardingDone, sessions, absences });
-  }, [name, schedule, department, onboardingDone, sessions, absences]);
+    save({ name, schedule, department, onboardingDone, sessions, absences, flexBaseMinutes });
+  }, [name, schedule, department, onboardingDone, sessions, absences, flexBaseMinutes]);
 
   const weeklyNorm = weeklyNetMin(schedule);
   const activeSession = sessions.find(s => !s.checkOut);
@@ -460,6 +559,8 @@ export default function PunchClock() {
       try { await navigator.share({ title: "Tidrapport", text: shareText }); setShared(true); } catch { /* ignore */ }
     } else { doCopy(); }
   }
+
+  const flexTotal = flexBaseMinutes + computeFlexMinutes(sessions, absences, schedule);
 
   const liveMs = activeSession ? (now() - activeSession.checkIn) : 0;
   const todayCfg = schedule[dayKeyOf(new Date(todayDate + "T12:00:00"))];
@@ -595,6 +696,14 @@ export default function PunchClock() {
                   <Stat label="Netto arbetstid" value={fmtDur(liveNet)} accent />
                   <Stat label="Antal pass" value={`${todaySessions.length} st`} />
                 </div>
+                <div className="mt-3 pt-3 border-t border-pc-line flex items-center justify-between">
+                  <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-pc-muted">Flexsaldo</div>
+                  <div className={`text-[17px] font-extrabold tabular-nums ${
+                    flexTotal > 0 ? "text-green-600" : flexTotal < 0 ? "text-red-500" : "text-pc-muted"
+                  }`}>
+                    {flexTotal > 0 ? "+" : flexTotal < 0 ? "−" : ""}{fmtMin(Math.abs(flexTotal))}
+                  </div>
+                </div>
                 {todaySessions.length > 0 && (
                   <div className="mt-4 pt-4 border-t border-pc-line space-y-1">
                     {todaySessions.map((s, i) => (
@@ -637,8 +746,29 @@ export default function PunchClock() {
           {/* ── HISTORY ── */}
           {view === "history" && (
             <div className="pc-fade pt-2">
-              <h1 className="text-[28px] font-extrabold tracking-tight mb-4">Historik</h1>
+              <div className="flex items-center justify-between mb-4">
+                <h1 className="text-[28px] font-extrabold tracking-tight">Historik</h1>
+                <div className="flex bg-white border border-pc-line rounded-full p-0.5">
+                  <button
+                    onClick={() => setHistoryMode("list")}
+                    className={`px-3 py-1 rounded-full text-[12px] font-bold transition-colors ${historyMode === "list" ? "bg-pc-orange text-white" : "text-pc-muted"}`}
+                  >
+                    Lista
+                  </button>
+                  <button
+                    onClick={() => setHistoryMode("calendar")}
+                    className={`px-3 py-1 rounded-full text-[12px] font-bold transition-colors ${historyMode === "calendar" ? "bg-pc-orange text-white" : "text-pc-muted"}`}
+                  >
+                    Kalender
+                  </button>
+                </div>
+              </div>
 
+              {historyMode === "calendar" && (
+                <CalendarView sessions={sessions} absences={absences} schedule={schedule} />
+              )}
+
+              {historyMode === "list" && (<>
               <div className="flex gap-2 mb-5 overflow-x-auto hide-scroll -mx-1 px-1">
                 {FILTERS.map(({ key, label }) => (
                   <button
@@ -735,9 +865,10 @@ export default function PunchClock() {
                                         <span className="text-[16px] leading-none shrink-0">{ABSENCE_META[a.category as AbsenceCategory].emoji}</span>
                                         <div className="min-w-0">
                                           <div className="font-bold text-[13px] leading-tight">{ABSENCE_META[a.category as AbsenceCategory].label}</div>
-                                          {a.startDate !== a.endDate && (
-                                            <div className="text-[11px] opacity-75 font-medium">{absenceDateRangeLabel(a)}</div>
-                                          )}
+                                          <div className="text-[11px] opacity-75 font-medium">
+                                            {a.hours !== undefined ? `${a.hours}h` : "Hel dag"}
+                                            {a.startDate !== a.endDate && ` · ${absenceDateRangeLabel(a)}`}
+                                          </div>
                                           {a.note && <div className="text-[11px] opacity-70 mt-0.5 truncate">{a.note}</div>}
                                         </div>
                                       </div>
@@ -778,6 +909,7 @@ export default function PunchClock() {
                   </div>
                 );
               })()}
+            </>)}
             </div>
           )}
 
@@ -800,6 +932,46 @@ export default function PunchClock() {
                 </button>
                 <button onClick={doNativeShare} className="pc-press py-4 rounded-[18px] bg-pc-orange text-white font-bold text-[15px] shadow-[0_8px_20px_-8px_rgba(255,95,0,0.6)]">
                   Dela
+                </button>
+              </div>
+
+              {/* Excel / CSV export */}
+              <div className="mt-6 pt-5 border-t border-pc-line">
+                <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-pc-muted mb-3">Exportera per månad</div>
+                <div className="flex gap-2 mb-4 overflow-x-auto hide-scroll -mx-1 px-1">
+                  {Array.from({ length: 6 }, (_, i) => {
+                    const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i);
+                    return { year: d.getFullYear(), month: d.getMonth() };
+                  }).map(({ year, month }) => (
+                    <button
+                      key={`${year}-${month}`}
+                      onClick={() => setExportMonth({ year, month })}
+                      className={`pc-press shrink-0 px-4 py-2 rounded-full text-[13px] font-bold transition-colors ${
+                        exportMonth.year === year && exportMonth.month === month
+                          ? "bg-pc-orange text-white shadow-[0_4px_12px_-4px_rgba(255,95,0,0.45)]"
+                          : "bg-white border border-pc-line text-pc-muted"
+                      }`}
+                    >
+                      {new Date(year, month).toLocaleDateString("sv-SE", { month: "short", year: "2-digit" })}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={() => {
+                    const { year, month } = exportMonth;
+                    const csv = buildCsvExport(sessions, absences, schedule, year, month);
+                    const pad = (n: number) => String(n).padStart(2, "0");
+                    downloadCsv(csv, `tidrapport-${year}-${pad(month + 1)}.csv`);
+                  }}
+                  className="pc-press w-full py-4 rounded-[18px] bg-white border border-pc-line text-pc-ink font-bold text-[15px] flex items-center justify-center gap-2"
+                >
+                  <svg viewBox="0 0 24 24" className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="12" y1="11" x2="12" y2="17" />
+                    <polyline points="9 14 12 17 15 14" />
+                  </svg>
+                  Ladda ner Excel (CSV)
                 </button>
               </div>
             </div>
@@ -1016,7 +1188,23 @@ function SessionModal({ session, defaultDate, schedule, onClose, onSave }: {
         <Label>Starttid</Label>
         <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className="pc-input" />
         <Label>Sluttid <span className="normal-case font-medium tracking-normal">(valfri — lämna tom om pågående)</span></Label>
-        <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} className="pc-input" />
+        <input
+          type="time"
+          value={endTime}
+          onChange={e => setEndTime(e.target.value)}
+          className="pc-input"
+          style={{ marginBottom: endTime ? "8px" : "16px" }}
+        />
+        {endTime && (
+          <button
+            type="button"
+            onClick={() => setEndTime("")}
+            className="w-full text-center text-[13px] text-pc-muted font-semibold mb-4 py-2 rounded-[12px] bg-pc-bg hover:text-red-500 hover:bg-red-50 transition-colors"
+            aria-label="Rensa sluttid"
+          >
+            Rensa sluttid
+          </button>
+        )}
 
         {previewMin !== null && previewMin > 0 && (
           <div className="bg-pc-peach rounded-2xl px-4 py-3 mb-4">
@@ -1100,6 +1288,133 @@ function ScheduleEditorModal({ open, schedule, onClose, onSave }: {
             Spara
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Calendar View ────────────────────────────────────────────
+function CalendarView({ sessions, absences, schedule }: {
+  sessions: Session[];
+  absences: AbsenceEntry[];
+  schedule: WeekSchedule;
+}) {
+  const [viewYM, setViewYM] = useState(() => {
+    const n = new Date(); return { year: n.getFullYear(), month: n.getMonth() };
+  });
+  const { year, month } = viewYM;
+
+  // Build cell array starting from the Monday of the week containing the 1st
+  const firstOfMonth = new Date(year, month, 1);
+  const dow1 = firstOfMonth.getDay();
+  const gridStart = new Date(firstOfMonth);
+  gridStart.setDate(gridStart.getDate() - (dow1 === 0 ? 6 : dow1 - 1));
+
+  const cells: Date[] = [];
+  const cur = new Date(gridStart);
+  do {
+    cells.push(new Date(cur));
+    cur.setDate(cur.getDate() + 1);
+  } while (cells.length < 35 || cur.getMonth() === month);
+  while (cells.length % 7 !== 0) { cells.push(new Date(cur)); cur.setDate(cur.getDate() + 1); }
+
+  const byDate = groupByDate(sessions.filter(s => s.checkOut !== null));
+  const todayS = todayStr();
+
+  return (
+    <div className="bg-white rounded-[22px] border border-pc-line shadow-[0_2px_14px_rgba(81,43,43,0.05)] p-4 mb-4">
+      {/* Month navigation */}
+      <div className="flex items-center justify-between mb-3">
+        <button
+          onClick={() => setViewYM(({ year, month }) => { const d = new Date(year, month - 1); return { year: d.getFullYear(), month: d.getMonth() }; })}
+          className="w-9 h-9 flex items-center justify-center rounded-xl text-pc-muted hover:text-pc-ink hover:bg-pc-peach transition-colors text-[22px] font-bold leading-none"
+          aria-label="Föregående månad"
+        >‹</button>
+        <div className="font-extrabold text-[16px] capitalize">
+          {new Date(year, month).toLocaleDateString("sv-SE", { month: "long", year: "numeric" })}
+        </div>
+        <button
+          onClick={() => setViewYM(({ year, month }) => { const d = new Date(year, month + 1); return { year: d.getFullYear(), month: d.getMonth() }; })}
+          className="w-9 h-9 flex items-center justify-center rounded-xl text-pc-muted hover:text-pc-ink hover:bg-pc-peach transition-colors text-[22px] font-bold leading-none"
+          aria-label="Nästa månad"
+        >›</button>
+      </div>
+
+      {/* Day-of-week headers */}
+      <div className="grid grid-cols-7 mb-1">
+        {["M", "T", "O", "T", "F", "L", "S"].map((d, i) => (
+          <div key={i} className="text-center text-[10px] font-bold text-pc-muted py-1">{d}</div>
+        ))}
+      </div>
+
+      {/* Calendar grid */}
+      <div className="grid grid-cols-7 gap-1">
+        {cells.map(day => {
+          const dateStr = day.toISOString().slice(0, 10);
+          const inMonth = day.getMonth() === month;
+          const isToday = dateStr === todayS;
+          const isPast = dateStr < todayS;
+          const daySessions = byDate[dateStr] ?? [];
+          const dayAbsences = getAbsencesForDate(absences, dateStr);
+          const dayCfg = schedule[dayKeyOf(new Date(dateStr + "T12:00:00"))];
+          const scheduledMin = netDayMin(dayCfg);
+          const { net } = daySessions.length > 0 ? computeDayMinutes(daySessions, dateStr, schedule) : { net: 0 };
+          const hasData = daySessions.length > 0 || dayAbsences.length > 0;
+
+          let dotColor = "";
+          if (isPast && inMonth && dayCfg.active) {
+            if (daySessions.length > 0) dotColor = net >= scheduledMin ? "bg-green-500" : "bg-amber-400";
+            else if (dayAbsences.length > 0) dotColor = dayAbsences.some(a => a.category === "flex") ? "bg-pc-orange" : "bg-blue-400";
+            else dotColor = "bg-red-300";
+          }
+
+          return (
+            <div
+              key={dateStr}
+              className={`flex flex-col items-center justify-center rounded-xl py-1.5 relative min-h-[44px]
+                ${!inMonth ? "opacity-25" : ""}
+                ${isToday ? "ring-2 ring-pc-orange ring-offset-1" : ""}
+                ${hasData && inMonth ? "bg-pc-apricot" : ""}
+              `}
+            >
+              <span
+                className="text-[12px] leading-none font-semibold"
+                style={{ fontWeight: isToday ? 800 : 600, color: isToday ? "var(--color-pc-orange, #ff5f00)" : !inMonth ? "#9c7c5c" : "#2d1717" }}
+              >
+                {day.getDate()}
+              </span>
+              {net > 0 && inMonth && (
+                <span className="text-pc-muted font-medium leading-none mt-0.5" style={{ fontSize: "9px" }}>
+                  {Math.floor(net / 60)}h{net % 60 >= 30 ? "30" : ""}
+                </span>
+              )}
+              {dayAbsences.length > 0 && !daySessions.length && inMonth && (
+                <span className="leading-none mt-0.5" style={{ fontSize: "9px" }}>
+                  {ABSENCE_META[dayAbsences[0].category as AbsenceCategory].emoji}
+                </span>
+              )}
+              {dotColor && (
+                <span className={`absolute bottom-0.5 w-1.5 h-1.5 rounded-full ${dotColor}`} />
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Legend */}
+      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-4 pt-3 border-t border-pc-line">
+        {[
+          { color: "bg-green-500", label: "Uppfyllt" },
+          { color: "bg-amber-400", label: "Deltid" },
+          { color: "bg-red-300", label: "Ingen tid" },
+          { color: "bg-blue-400", label: "Frånvaro" },
+          { color: "bg-pc-orange", label: "Flex" },
+        ].map(({ color, label }) => (
+          <div key={label} className="flex items-center gap-1.5">
+            <span className={`w-2 h-2 rounded-full shrink-0 ${color}`} />
+            <span className="text-pc-muted font-semibold" style={{ fontSize: "10px" }}>{label}</span>
+          </div>
+        ))}
       </div>
     </div>
   );

@@ -16,6 +16,7 @@ export type AbsenceEntry = {
   category: AbsenceCategory;
   startDate: string;
   endDate: string;
+  hours?: number; // undefined = full day (use schedule hours); number = manual hours per day
   note?: string;
   manual: true;
 };
@@ -48,15 +49,18 @@ export default function AbsenceModal({
   const [category, setCategory] = useState<AbsenceCategory>("sjuk");
   const [startDate, setStartDate] = useState(todayStr());
   const [endDate, setEndDate] = useState(todayStr());
+  const [fullDay, setFullDay] = useState(true);
+  const [manualHours, setManualHours] = useState("8");
   const [note, setNote] = useState("");
   const [err, setErr] = useState("");
 
-  // Reset fields every time the modal opens
   useEffect(() => {
     if (open) {
       setCategory("sjuk");
       setStartDate(todayStr());
       setEndDate(todayStr());
+      setFullDay(true);
+      setManualHours("8");
       setNote("");
       setErr("");
     }
@@ -68,17 +72,28 @@ export default function AbsenceModal({
     if (!startDate) { setErr("Ange startdatum."); return; }
     if (!endDate) { setErr("Ange slutdatum."); return; }
     if (endDate < startDate) { setErr("Slutdatum måste vara samma som eller efter startdatum."); return; }
+
+    let hours: number | undefined = undefined;
+    if (!fullDay) {
+      const parsed = parseFloat(manualHours);
+      if (isNaN(parsed) || parsed <= 0) { setErr("Ange ett giltigt antal timmar."); return; }
+      hours = parsed;
+    }
+
     onSave({
       id: crypto.randomUUID(),
       category,
       startDate,
       endDate,
+      hours,
       note: note.trim() || undefined,
       manual: true,
     });
     setCategory("sjuk");
     setStartDate(todayStr());
     setEndDate(todayStr());
+    setFullDay(true);
+    setManualHours("8");
     setNote("");
     setErr("");
   }
@@ -156,6 +171,54 @@ export default function AbsenceModal({
             />
           </div>
         </div>
+
+        {/* Duration */}
+        <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-2">Tid</div>
+        <div className="flex gap-2 mb-4">
+          <button
+            type="button"
+            onClick={() => setFullDay(true)}
+            className={`flex-1 py-2.5 rounded-[14px] text-[13px] font-bold border transition-colors ${
+              fullDay
+                ? "bg-pc-orange text-white border-pc-orange shadow-[0_4px_12px_-4px_rgba(255,95,0,0.45)]"
+                : "bg-[#fdf6ee] border-[#ece6df] text-[#2d1717]"
+            }`}
+          >
+            Hel dag
+          </button>
+          <button
+            type="button"
+            onClick={() => setFullDay(false)}
+            className={`flex-1 py-2.5 rounded-[14px] text-[13px] font-bold border transition-colors ${
+              !fullDay
+                ? "bg-pc-orange text-white border-pc-orange shadow-[0_4px_12px_-4px_rgba(255,95,0,0.45)]"
+                : "bg-[#fdf6ee] border-[#ece6df] text-[#2d1717]"
+            }`}
+          >
+            Ange timmar
+          </button>
+        </div>
+        {!fullDay && (
+          <>
+            <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-2">
+              Antal timmar <span className="normal-case font-medium tracking-normal text-[#9c7c5c]">(per dag)</span>
+            </div>
+            <input
+              type="number"
+              min={0.5}
+              max={24}
+              step={0.5}
+              value={manualHours}
+              onChange={e => setManualHours(e.target.value)}
+              style={{
+                width: "100%", padding: "12px 14px", borderRadius: "14px",
+                border: "1.5px solid #ece6df", fontSize: "16px", outline: "none",
+                background: "#fdf6ee", fontWeight: 600, color: "#2d1717",
+                marginBottom: "16px",
+              }}
+            />
+          </>
+        )}
 
         {/* Note */}
         <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-2">
