@@ -1,0 +1,11 @@
+[phases.install]
+cmds = ["npm ci", "cd server && npm ci --omit=dev"]
+
+[phases.build]
+cmds = ["npm run build"]
+
+[start]
+cmd = "node server/index.js"
+
+[variables]
+NODE_ENV = "production"
