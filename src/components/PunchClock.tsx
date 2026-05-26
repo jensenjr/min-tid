@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import Onboarding, { type OnboardingResult, WeekScheduleEditor } from "./Onboarding";
 import AbsenceModal, { type AbsenceEntry, type AbsenceCategory, ABSENCE_META } from "./AbsenceModal";
+import ExpenseModal, { type ExpenseEntry, type ExpenseCategory, EXPENSE_META } from "./ExpenseModal";
 import SettingsModal from "./SettingsModal";
 import {
   type WeekSchedule,
@@ -23,6 +24,7 @@ type StorageShape = {
   onboardingDone: boolean;
   sessions: Session[];
   absences: AbsenceEntry[];
+  expenses: ExpenseEntry[];
   flexBaseMinutes: number;
 };
 
@@ -177,7 +179,7 @@ function filterAbsences(absences: AbsenceEntry[], filter: HistoryFilter): Absenc
 }
 
 // ─── Share text ───────────────────────────────────────────────
-function buildShareText(sessions: Session[], absences: AbsenceEntry[], name: string, schedule: WeekSchedule) {
+function buildShareText(sessions: Session[], absences: AbsenceEntry[], expenses: ExpenseEntry[], name: string, schedule: WeekSchedule) {
   const wNorm = weeklyNetMin(schedule);
   const completed = sessions.filter(s => s.checkOut !== null);
 
@@ -238,6 +240,23 @@ function buildShareText(sessions: Session[], absences: AbsenceEntry[], name: str
   }
 
   lines.push(`Total: ${fmtMin(grandNet)}`);
+
+  // Expenses within the same 8-week window
+  const weekDates = new Set(weeks.flatMap(wk => [...(weekMap[wk] ?? [])]));
+  const periodExpenses = expenses
+    .filter(e => weekDates.has(e.date))
+    .sort((a, b) => a.date.localeCompare(b.date));
+  if (periodExpenses.length > 0) {
+    lines.push(`\n── Utlägg ──`);
+    let totalExpenses = 0;
+    for (const e of periodExpenses) {
+      const meta = EXPENSE_META[e.category];
+      lines.push(`  ${fmtDateLabel(e.date)}: ${meta.emoji} ${meta.label} — ${e.amount} kr${e.hasReceipt ? " 🧾" : ""}${e.note ? ` (${e.note})` : ""}`);
+      totalExpenses += e.amount;
+    }
+    lines.push(`Total utlägg: ${totalExpenses} kr`);
+  }
+
   lines.push(`\nGenererat ${new Date().toLocaleString("sv-SE")}`);
   return lines.join("\n");
 }
@@ -354,6 +373,7 @@ function load(): StorageShape {
       onboardingDone: p.onboardingDone ?? false,
       sessions: p.sessions ?? [],
       absences: p.absences ?? [],
+      expenses: p.expenses ?? [],
       flexBaseMinutes: typeof p.flexBaseMinutes === "number" ? p.flexBaseMinutes : 0,
     };
   } catch {
@@ -429,7 +449,7 @@ export default function PunchClock() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [absences, setAbsences] = useState<AbsenceEntry[]>([]);
   const [, setTick] = useState(0);
-  const [view, setView] = useState<"clock" | "history" | "share">("clock");
+  const [view, setView] = useState<"clock" | "history" | "share" | "expenses">("clock");
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("all");
   const [addModal, setAddModal] = useState(false);
   const [absenceModal, setAbsenceModal] = useState(false);
@@ -440,6 +460,11 @@ export default function PunchClock() {
   const [shareText, setShareText] = useState("");
   const [shared, setShared] = useState(false);
   const [shortWarn, setShortWarn] = useState(false);
+  const [expenses, setExpenses] = useState<ExpenseEntry[]>([]);
+  const [expenseModal, setExpenseModal] = useState(false);
+  const [expenseMonth, setExpenseMonth] = useState<{ year: number; month: number }>(() => {
+    const n = new Date(); return { year: n.getFullYear(), month: n.getMonth() };
+  });
   const [flexBaseMinutes, setFlexBaseMinutes] = useState(0);
   const [historyMode, setHistoryMode] = useState<"list" | "calendar">("list");
   const [calendarSelectedDate, setCalendarSelectedDate] = useState<string | null>(null);
@@ -473,12 +498,13 @@ export default function PunchClock() {
     setOnboardingDone(d.onboardingDone);
     setSessions(d.sessions);
     setAbsences(d.absences);
+    setExpenses(d.expenses ?? []);
     setFlexBaseMinutes(d.flexBaseMinutes ?? 0);
   }, []);
 
   useEffect(() => {
-    save({ name, schedule, department, onboardingDone, sessions, absences, flexBaseMinutes });
-  }, [name, schedule, department, onboardingDone, sessions, absences, flexBaseMinutes]);
+    save({ name, schedule, department, onboardingDone, sessions, absences, expenses, flexBaseMinutes });
+  }, [name, schedule, department, onboardingDone, sessions, absences, expenses, flexBaseMinutes]);
 
   const weeklyNorm = weeklyNetMin(schedule);
   const activeSession = sessions.find(s => !s.checkOut);
@@ -532,6 +558,8 @@ export default function PunchClock() {
     setAbsences(prev => [...prev, entry]);
     setAbsenceModal(false);
   }
+  function handleSaveExpense(entry: ExpenseEntry) { setExpenses(prev => [...prev, entry]); setExpenseModal(false); }
+  function handleDeleteExpense(id: string) { setExpenses(prev => prev.filter(e => e.id !== id)); }
   function handleOnboardingComplete(result: OnboardingResult) {
     setName(result.name);
     setSchedule(result.schedule);
@@ -546,7 +574,7 @@ export default function PunchClock() {
   }
 
   function handleShare() {
-    setShareText(buildShareText(sessions, absences, name, schedule));
+    setShareText(buildShareText(sessions, absences, expenses, name, schedule));
     setView("share");
     setShared(false);
   }
@@ -1027,6 +1055,25 @@ export default function PunchClock() {
                 </button>
               </div>
 
+              {/* Receipt reminder */}
+              {(() => {
+                const receiptExpenses = expenses.filter(e => e.hasReceipt).sort((a, b) => a.date.localeCompare(b.date));
+                if (receiptExpenses.length === 0) return null;
+                return (
+                  <div className="mt-4 bg-amber-50 border border-amber-200 rounded-[18px] p-4">
+                    <div className="font-bold text-[14px] text-amber-800 mb-2">⚠️ Kvitton att bifoga</div>
+                    <div className="space-y-1">
+                      {receiptExpenses.map(e => (
+                        <div key={e.id} className="text-[13px] text-amber-700 font-medium">
+                          • {EXPENSE_META[e.category as ExpenseCategory].emoji} {EXPENSE_META[e.category as ExpenseCategory].label} — {e.date} — {e.amount} kr
+                          {e.note && <span className="opacity-70"> ({e.note})</span>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Excel / CSV export */}
               <div className="mt-6 pt-5 border-t border-pc-line">
                 <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-pc-muted mb-3">Exportera per månad</div>
@@ -1068,6 +1115,124 @@ export default function PunchClock() {
               </div>
             </div>
           )}
+          {/* ── EXPENSES ── */}
+          {view === "expenses" && (() => {
+            const months = Array.from({ length: 6 }, (_, i) => {
+              const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i);
+              return { year: d.getFullYear(), month: d.getMonth() };
+            });
+            const pad = (n: number) => String(n).padStart(2, "0");
+            const monthStart = `${expenseMonth.year}-${pad(expenseMonth.month + 1)}-01`;
+            const monthEnd = `${expenseMonth.year}-${pad(expenseMonth.month + 1)}-${pad(new Date(expenseMonth.year, expenseMonth.month + 1, 0).getDate())}`;
+            const visible = expenses
+              .filter(e => e.date >= monthStart && e.date <= monthEnd)
+              .sort((a, b) => b.date.localeCompare(a.date));
+            const total = visible.reduce((s, e) => s + e.amount, 0);
+
+            // Group by date
+            const byDate: Record<string, ExpenseEntry[]> = {};
+            for (const e of visible) {
+              if (!byDate[e.date]) byDate[e.date] = [];
+              byDate[e.date].push(e);
+            }
+            const sortedDates = Object.keys(byDate).sort((a, b) => b.localeCompare(a));
+
+            return (
+              <div className="pc-fade pt-2">
+                <h1 className="text-[28px] font-extrabold tracking-tight mb-4">Utlägg</h1>
+
+                {/* Month filter */}
+                <div className="flex gap-2 mb-4 overflow-x-auto hide-scroll -mx-1 px-1">
+                  {months.map(({ year, month }) => (
+                    <button
+                      key={`${year}-${month}`}
+                      onClick={() => setExpenseMonth({ year, month })}
+                      className={`pc-press shrink-0 px-4 py-2 rounded-full text-[13px] font-bold transition-colors ${
+                        expenseMonth.year === year && expenseMonth.month === month
+                          ? "bg-pc-orange text-white shadow-[0_4px_12px_-4px_rgba(255,95,0,0.45)]"
+                          : "bg-white border border-pc-line text-pc-muted"
+                      }`}
+                    >
+                      {new Date(year, month).toLocaleDateString("sv-SE", { month: "short", year: "2-digit" })}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Summary card */}
+                {visible.length > 0 && (
+                  <div className="bg-white rounded-[22px] border border-pc-line shadow-[0_2px_12px_rgba(81,43,43,0.04)] p-5 mb-4">
+                    <div className="flex items-baseline justify-between">
+                      <div>
+                        <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-pc-muted mb-1">
+                          {new Date(expenseMonth.year, expenseMonth.month).toLocaleDateString("sv-SE", { month: "long", year: "numeric" })}
+                        </div>
+                        <div className="text-[28px] font-extrabold tabular-nums tracking-tight">{total} <span className="text-[18px] font-bold text-pc-muted">kr</span></div>
+                      </div>
+                      <div className="text-[13px] text-pc-muted font-semibold">{visible.length} utlägg</div>
+                    </div>
+                    {visible.some(e => e.hasReceipt) && (
+                      <div className="mt-3 pt-3 border-t border-pc-line text-[12px] text-amber-700 font-semibold">
+                        🧾 {visible.filter(e => e.hasReceipt).length} kräver kvitto
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Expense list */}
+                {sortedDates.length === 0 ? (
+                  <div className="text-center text-pc-muted py-16 text-[15px]">
+                    <div className="text-4xl mb-3 opacity-40">🧾</div>
+                    Inga utlägg denna månad.
+                  </div>
+                ) : (
+                  <div className="space-y-3 mb-4">
+                    {sortedDates.map(date => (
+                      <div key={date} className="bg-white rounded-[20px] border border-pc-line shadow-[0_2px_12px_rgba(81,43,43,0.04)] overflow-hidden">
+                        <div className="px-4 pt-3 pb-1">
+                          <div className="text-[12px] font-bold text-pc-muted capitalize">{fmtDateLabel(date)}</div>
+                        </div>
+                        {byDate[date].map(e => {
+                          const meta = EXPENSE_META[e.category as ExpenseCategory];
+                          return (
+                            <div key={e.id} className="px-4 py-3 border-t border-pc-line flex items-center gap-3">
+                              <span className="text-[22px] leading-none shrink-0">{meta.emoji}</span>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-[14px]">{meta.label}</span>
+                                  {e.hasReceipt && <span className="text-[12px] leading-none" title="Kvitto finns">🧾</span>}
+                                </div>
+                                {e.note && <div className="text-[12px] text-pc-muted font-medium mt-0.5 truncate">{e.note}</div>}
+                              </div>
+                              <div className="shrink-0 font-extrabold tabular-nums text-[15px] text-pc-ink">{e.amount} kr</div>
+                              <button
+                                onClick={() => handleDeleteExpense(e.id)}
+                                className="w-8 h-8 shrink-0 flex items-center justify-center rounded-xl text-pc-muted hover:text-red-500 hover:bg-red-50 transition-colors"
+                                aria-label="Ta bort utlägg"
+                              >
+                                <IconTrash />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Add expense button */}
+                <button
+                  onClick={() => setExpenseModal(true)}
+                  className="pc-press w-full rounded-[20px] py-4 font-bold text-[15px] text-white flex items-center justify-center gap-2"
+                  style={{
+                    background: "linear-gradient(135deg, #ff5f00 0%, #e04d00 100%)",
+                    boxShadow: "0 6px 20px -6px rgba(255,95,0,0.5)",
+                  }}
+                >
+                  <span className="text-xl leading-none">+</span> Lägg till utlägg
+                </button>
+              </div>
+            );
+          })()}
         </main>
 
         {/* Bottom nav */}
@@ -1075,12 +1240,15 @@ export default function PunchClock() {
           className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] bg-white/85 backdrop-blur-xl border-t border-pc-line px-2"
           style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 6px)" }}
         >
-          <div className="grid grid-cols-3 gap-1 pt-2">
+          <div className="grid grid-cols-4 gap-1 pt-2">
             <NavItem active={view === "clock"} onClick={() => setView("clock")} label="Klocka" icon={
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
             } />
             <NavItem active={view === "history"} onClick={() => setView("history")} label="Historik" icon={
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /><path d="M12 7v5l3 2" /></svg>
+            } />
+            <NavItem active={view === "expenses"} onClick={() => setView("expenses")} label="Utlägg" icon={
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" /><rect x="9" y="3" width="6" height="4" rx="1" /><path d="M9 12h6M9 16h4" /></svg>
             } />
             <NavItem active={view === "share"} onClick={handleShare} label="Dela" icon={
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6"><path d="M12 3v13" /><path d="m7 8 5-5 5 5" /><path d="M5 21h14" /></svg>
@@ -1118,6 +1286,12 @@ export default function PunchClock() {
         open={absenceModal}
         onClose={() => setAbsenceModal(false)}
         onSave={handleSaveAbsence}
+      />
+
+      <ExpenseModal
+        open={expenseModal}
+        onClose={() => setExpenseModal(false)}
+        onSave={handleSaveExpense}
       />
 
       <ScheduleEditorModal
