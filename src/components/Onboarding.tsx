@@ -15,7 +15,7 @@ export type OnboardingResult = {
   restoredState?: SyncState;
 };
 
-type Step = "info" | "choice" | "schedule" | "sync";
+type Step = "welcome" | "login" | "info" | "choice" | "schedule" | "sync";
 
 // ─── TimePicker — hour or minute select snapping to 5-min ─────
 function TimePicker({
@@ -240,7 +240,7 @@ export function WeekScheduleEditor({
 
 // ─── Main Onboarding ──────────────────────────────────────────
 export default function Onboarding({ onComplete }: { onComplete: (r: OnboardingResult) => void }) {
-  const [step, setStep] = useState<Step>("info");
+  const [step, setStep] = useState<Step>("welcome");
   const [name, setName] = useState("");
   const [nameErr, setNameErr] = useState("");
   const [department, setDepartment] = useState("");
@@ -255,6 +255,63 @@ export default function Onboarding({ onComplete }: { onComplete: (r: OnboardingR
       restoredState,
     });
   }
+
+  function finishFromLogin(token: string, state: SyncState) {
+    // Returning user: use the synced name/department/schedule so the local
+    // `name`/`department` fields (which were never filled in) don't blank things out.
+    onComplete({
+      name: (state.name ?? "").trim(),
+      department: state.department?.trim() || undefined,
+      schedule: (state.schedule as WeekSchedule) ?? DEFAULT_SCHEDULE,
+      syncToken: token,
+      restoredState: state,
+    });
+  }
+
+  // ── Step: Welcome — new vs returning ─────────────────────────
+  if (step === "welcome") return (
+    <Screen>
+      <Logo />
+      <h1 className="text-[28px] font-extrabold tracking-tight text-pc-ink mb-2">Välkommen!</h1>
+      <p className="text-[14px] text-pc-muted mb-7 leading-relaxed text-center max-w-[300px]">
+        Är det här första gången du använder appen, eller har du redan ett synk-konto?
+      </p>
+
+      <div className="w-full space-y-3">
+        <button
+          onClick={() => setStep("info")}
+          className="pc-press w-full text-left bg-white border border-pc-line rounded-[20px] px-5 py-4 flex items-start gap-4 shadow-[0_2px_12px_rgba(81,43,43,0.04)]"
+        >
+          <span className="text-[26px] leading-none mt-0.5 shrink-0">✨</span>
+          <div className="flex-1">
+            <div className="font-extrabold text-[15px] text-pc-ink leading-tight mb-0.5">Ny användare</div>
+            <div className="text-[12px] text-pc-muted leading-snug">Sätt upp appen från början.</div>
+          </div>
+          <svg viewBox="0 0 24 24" className="w-5 h-5 text-pc-muted shrink-0 mt-1" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
+        </button>
+
+        <button
+          onClick={() => setStep("login")}
+          className="pc-press w-full text-left bg-white border border-pc-line rounded-[20px] px-5 py-4 flex items-start gap-4 shadow-[0_2px_12px_rgba(81,43,43,0.04)]"
+        >
+          <span className="text-[26px] leading-none mt-0.5 shrink-0">☁️</span>
+          <div className="flex-1">
+            <div className="font-extrabold text-[15px] text-pc-ink leading-tight mb-0.5">Återkommande användare</div>
+            <div className="text-[12px] text-pc-muted leading-snug">Logga in med ditt användarnamn och din synk-kod.</div>
+          </div>
+          <svg viewBox="0 0 24 24" className="w-5 h-5 text-pc-muted shrink-0 mt-1" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
+        </button>
+      </div>
+    </Screen>
+  );
+
+  // ── Step: Login (returning user) ─────────────────────────────
+  if (step === "login") return (
+    <LoginStep
+      onBack={() => setStep("welcome")}
+      onLogin={finishFromLogin}
+    />
+  );
 
   // ── Step: Name + role ────────────────────────────────────────
   if (step === "info") return (
@@ -301,6 +358,7 @@ export default function Onboarding({ onComplete }: { onComplete: (r: OnboardingR
         >
           Fortsätt →
         </button>
+        <button onClick={() => setStep("welcome")} className="ob-btn-ghost w-full">← Tillbaka</button>
       </div>
     </Screen>
   );
@@ -453,6 +511,92 @@ function StepDots({ current, total }: { current: number; total: number }) {
 
 function Label({ children }: { children: React.ReactNode }) {
   return <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-pc-muted mb-2">{children}</div>;
+}
+
+function LoginStep({
+  onBack,
+  onLogin,
+}: {
+  onBack: () => void;
+  onLogin: (token: string, state: SyncState) => void;
+}) {
+  const [username, setUsername] = useState("");
+  const [secret, setSecret]     = useState("");
+  const [loading, setLoading]   = useState(false);
+  const [err, setErr]           = useState("");
+
+  const inputStyle: React.CSSProperties = {
+    width: "100%", boxSizing: "border-box", padding: "14px 16px", borderRadius: "16px",
+    border: "1.5px solid #ece6df", fontSize: "16px", outline: "none",
+    background: "#fdf6ee", fontWeight: 600, color: "#2d1717",
+    marginBottom: "14px",
+  };
+
+  async function handleLogin() {
+    if (!username) { setErr("Ange ditt användarnamn."); return; }
+    if (!secret) { setErr("Ange din synk-kod."); return; }
+    setLoading(true); setErr("");
+    try {
+      const { token, state } = await syncLogin(username, secret);
+      if (!state) {
+        setErr("Inga sparade data hittades. Skapa ett nytt konto istället.");
+        setLoading(false);
+        return;
+      }
+      onLogin(token, state);
+    } catch (e) {
+      setErr((e as Error).message);
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Screen>
+      <Logo />
+      <h2 className="text-[24px] font-extrabold tracking-tight text-pc-ink mb-1 text-center">
+        Logga in
+      </h2>
+      <p className="text-[13px] text-pc-muted mb-7 text-center leading-relaxed">
+        Ange ditt användarnamn och din synk-kod för att hämta dina data.
+      </p>
+
+      <div className="w-full">
+        <Label>Användarnamn <span className="text-pc-orange">*</span></Label>
+        <input
+          autoFocus
+          type="text"
+          placeholder="t.ex. carl eller carl2"
+          value={username}
+          onChange={e => { setUsername(e.target.value); setErr(""); }}
+          className="ob-input"
+          style={inputStyle}
+          autoCapitalize="none"
+          autoCorrect="off"
+        />
+        <Label>Synk-kod <span className="text-pc-orange">*</span></Label>
+        <input
+          type="password"
+          placeholder="Din synk-kod"
+          value={secret}
+          onChange={e => { setSecret(e.target.value); setErr(""); }}
+          onKeyDown={e => { if (e.key === "Enter" && username && secret) handleLogin(); }}
+          className="ob-input"
+          style={inputStyle}
+        />
+        {err && <p className="text-red-500 text-[13px] mb-3 font-semibold">{err}</p>}
+
+        <button
+          onClick={handleLogin}
+          disabled={loading}
+          className="ob-btn-primary w-full"
+          style={loading ? { background: "#f0e8df", color: "#c4a882", boxShadow: "none" } : undefined}
+        >
+          {loading ? "Loggar in…" : "Logga in →"}
+        </button>
+        <button onClick={onBack} className="ob-btn-ghost w-full mt-1">← Tillbaka</button>
+      </div>
+    </Screen>
+  );
 }
 
 type SyncSubStep = "choose" | "create" | "restore";
