@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> **Current version: 1.0.0-beta.1.** Exposed to the UI via `__APP_VERSION__` (set by Vite from the root `package.json`) and shown at the bottom of the settings modal. Bump versions in both `package.json` and `server/package.json` together.
+
 ## Commands
 
 ```bash
@@ -46,6 +48,17 @@ localStorage["punchclock_v2"] = {
 localStorage["sync_token"] = "<JWT>"   // set only when sync is configured
 ```
 
+### Mobile layout invariant
+
+The bottom nav is **not** `fixed bottom-0` — that breaks on mobile Safari when the URL bar appears/disappears. Instead:
+
+- Outer wrapper: `fixed inset-0` (locks to viewport)
+- Inner container: `h-full flex flex-col`
+- `<header>` and `<nav>`: `shrink-0`
+- `<main>`: `flex-1 min-h-0 overflow-y-auto`
+
+This keeps the nav anchored to the visible viewport bottom while only the main area scrolls. Don't reintroduce `min-h-screen` + `fixed bottom-0`.
+
 ### Schedule data model (`src/lib/schedule.ts`)
 
 Everything time-related flows through this file. Key types and functions:
@@ -61,18 +74,42 @@ weeklyNetMin(schedule) // sum of netDayMin across all 7 days
 
 `migrateSchedule()` handles three historical storage formats — always pass raw localStorage data through it when loading.
 
+### Flex bank
+
+`computeFlexMinutes(sessions, absences, schedule)` in `PunchClock.tsx`:
+
+- Includes today's sessions (active sessions count via `now()` in `computeDayMinutes`)
+- For each past day with sessions: `flex += net − netDayMin(scheduledCfg)`
+- For each flex-leave absence day with no sessions: `flex -= absMin` (uses absence.hours if set, otherwise the scheduled day's net)
+- Total shown = `flexBaseMinutes + computeFlexMinutes(...)` — the base is a one-time correction users can set on first sync.
+
 ### Components
 
 | File | Responsibility |
 |---|---|
 | `PunchClock.tsx` | Main app shell — clock, history, expenses, share views; all inline sub-components |
-| `Onboarding.tsx` | 4-step first-run flow (name → schedule choice → schedule editor → sync). Exports `WeekScheduleEditor` used by both onboarding and the "Planera dagar" modal |
-| `SettingsModal.tsx` | Bottom sheet for editing name + department only |
+| `Onboarding.tsx` | First-run flow with welcome → info/login → choice → schedule → sync. Exports `WeekScheduleEditor` used by both onboarding and the "Planera dagar" modal |
+| `SettingsModal.tsx` | Bottom sheet for editing name + department, controlling sync (activate / disconnect), and showing app version |
 | `AbsenceModal.tsx` | Bottom sheet for logging absence entries (VAB, semester, etc.) |
-| `ExpenseModal.tsx` | Bottom sheet for logging expense entries (milersättning, kost, etc.) |
-| `SyncModal.tsx` | Bottom sheet for setting up sync on an existing device (create code or restore) |
+| `ExpenseModal.tsx` | Bottom sheet for logging expense entries (milersättning with km, kost, etc.) |
+| `SyncModal.tsx` | Bottom sheet for setting up sync on an existing device (create code or restore) — collects username + secret |
 | `src/lib/schedule.ts` | Pure schedule types, constants, calculations, and localStorage migration |
-| `src/lib/sync.ts` | Thin fetch wrapper for all sync API calls |
+| `src/lib/sync.ts` | Thin fetch wrapper for all sync API calls; passes `username` + `secret` |
+
+### Onboarding flow
+
+The onboarding component is a small state machine on `step`:
+
+```
+welcome ─┬─► info → choice → schedule → sync (create / restore / skip) → done
+         └─► login (username + secret → syncLogin) → done
+```
+
+- **welcome** asks "Ny användare" vs "Återkommande användare"
+- **login** is a returning-user shortcut: one screen with username + secret, calls `syncLogin`, and seeds the local state from the synced payload (name, department, schedule, sessions, absences, expenses, flexBaseMinutes) — the user never re-enters anything
+- **sync** within the new-user flow has three sub-steps: choose / create / restore. "Create" requires a unique username paired with a secret.
+
+`StepDots` shows `current={N} total={3}` only for the post-welcome screens.
 
 ### Modal pattern
 
@@ -94,7 +131,7 @@ Tailwind CSS v4 with custom `pc-*` design tokens defined in `src/styles.css`. Ke
 
 ### Overview
 
-A minimal Express + Node.js server. No database — state is stored in a single JSON file (`data.json`). No personal identifiers — only a bcrypt-hashed secret and a generated UUID per user.
+A minimal Express + Node.js server. No database — state is stored in a single JSON file (`data.json`). Users are identified by a username paired with a bcrypt-hashed secret; no e-mail or other personal identifiers are stored.
 
 **Zero native dependencies.** All packages are pure JavaScript (`express`, `bcryptjs`, `jsonwebtoken`). This is intentional: native C++ modules (like `better-sqlite3`) fail to compile in Nixpacks/Alpine environments.
 
@@ -102,7 +139,7 @@ A minimal Express + Node.js server. No database — state is stored in a single 
 
 | File | Purpose |
 |---|---|
-| `server/index.js` | Express app — all routes + JSON store logic |
+| `server/index.js` | Express app — all routes, JSON store logic, and 60-day inactive-account cleanup |
 | `server/package.json` | Server dependencies |
 | `server/package-lock.json` | **Must be committed.** Required for `npm ci` in Docker/Nixpacks. If missing, builds fail with `EUSAGE`. Regenerate with `npm run server:install`. |
 | `server/data.json` | Runtime data file — gitignored, created automatically on first write |
@@ -112,28 +149,41 @@ A minimal Express + Node.js server. No database — state is stored in a single 
 ```
 data.json = {
   users: {
-    "<lookupKey>": {
-      id: "<uuid>",
-      secretHash: "<bcrypt>",
-      state: <StorageShape without onboardingDone> | null,
-      createdAt: <ms>,
-      updatedAt: <ms>
+    "<username_lower>": {
+      id:           "<uuid>",
+      username:     "<original-case username>",
+      secretHash:   "<bcrypt>",
+      state:        <StorageShape without onboardingDone> | null,
+      createdAt:    <ms>,
+      lastActivity: <ms>
     }
   }
 }
 ```
 
-`lookupKey` = `HMAC-SHA256("min-tid-lookup", secret).slice(0, 32)` — allows login with only the secret (no username), with timing-safe lookup.
+- The map key is the lowercased username, enforcing case-insensitive uniqueness (`carl` blocks another `carl` but `carl2` is fine).
+- `lastActivity` is updated on every login and every `PUT /api/sync`.
+- Usernames must match `^[a-zA-Z0-9_-]{3,20}$`. Validation lives in both server (`isValidUsername` in `server/index.js`) and client (regex in `SyncModal.tsx` + `Onboarding.tsx`).
+
+### 60-day inactivity cleanup
+
+`cleanupInactive()` in `server/index.js`:
+
+- Runs on server startup and every 24 hours via `setInterval`.
+- Deletes any user whose `lastActivity` is older than `60 * 24 * 60 * 60 * 1000` ms.
+- Logs `Cleaned up N inactive account(s).` when it removes anything.
 
 ### API endpoints
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| POST | `/api/auth/register` | none | Hash secret, create user, return JWT |
-| POST | `/api/auth/login` | none | Verify secret, return JWT + stored state |
+| POST | `/api/auth/register` | none | Body: `{ username, secret }`. Hash secret, create user, return JWT. 409 if username taken. |
+| POST | `/api/auth/login` | none | Body: `{ username, secret }`. Verify, update `lastActivity`, return JWT + stored state. |
 | GET | `/api/sync` | Bearer JWT | Return current stored state |
-| PUT | `/api/sync` | Bearer JWT | Replace stored state |
+| PUT | `/api/sync` | Bearer JWT | Replace stored state, update `lastActivity` |
 | DELETE | `/api/account` | Bearer JWT | Delete user record |
+
+Login errors are deliberately ambiguous ("Fel användarnamn eller synk-kod") so the existence of a username can't be probed.
 
 ### Environment variables
 
@@ -149,7 +199,7 @@ data.json = {
 1. On mount: reads `sync_token` from `localStorage`, sets `syncToken` state.
 2. Save effect (`useEffect` on all state deps): after writing to `localStorage`, if `syncToken` is set, schedules a `syncPush` call via a 3-second debounce timer.
 3. `syncPush` calls `PUT /api/sync` with the full state payload (excluding `onboardingDone`).
-4. `syncStatus` state (`"idle" | "syncing" | "ok" | "error"`) drives the sync status card in the clock view.
+4. `syncStatus` state (`"idle" | "syncing" | "ok" | "error"`) drives the sync status card inside `SettingsModal`.
 5. On restore (login): replaces all state variables from the server response, stores token.
 
 **Key invariant:** `onboardingDone` is never synced — it is always set to `true` on the local device after any onboarding path completes.
@@ -159,7 +209,7 @@ data.json = {
 A 405 from `Allow: GET, HEAD` always means a static file server (Caddy or nginx) is handling the request instead of Express. Common causes:
 
 1. **Build failed, old container still running.** Check deployment logs for errors. Most common failure: `npm ci` in `server/` fails with `EUSAGE` because `server/package-lock.json` is missing. Fix: run `npm run server:install` locally, commit `server/package-lock.json`, redeploy.
-2. **Coolify switched back to Nixpacks.** Verify the build pack is set to "Dockerfile" in Coolify → app settings. The `nixpacks.toml` in the repo should prevent Caddy if Nixpacks is used, but Dockerfile mode is preferred.
+2. **Coolify switched back to Nixpacks.** Verify the build pack is set to "Dockerfile" in Coolify → app settings. The `nixpacks.toml` in the repo overrides Caddy if Nixpacks is used, but Dockerfile mode is preferred.
 3. **`NODE_ENV` not set to `production`.** Without it, Express does not serve static files and the SPA catch-all is not registered — but this would cause 404, not 405.
 
 ---
@@ -173,12 +223,19 @@ The `Dockerfile` builds the frontend and packages the Express server into a sing
 ```bash
 # Via docker-compose (local production test)
 docker compose up --build
-
-# In Coolify
-# Build pack: Dockerfile
-# Persistent volume: /app/data  (prevents data loss on redeploy)
-# Environment variable: JWT_SECRET=<long random string>
+# → http://localhost
 ```
+
+`docker-compose.yml` uses:
+
+- `expose: "3000"` (no host port binding) — Coolify's reverse proxy already owns port 80, so binding `80:3000` fails with `port is already allocated`. If you want to run outside Coolify, pass `-p 80:3000` to `docker run`.
+- A bind mount `./data:/app/data` so the JSON store is on the host filesystem (gitignored via `data/`) and easy to back up.
+
+In Coolify:
+
+- Build pack: **Dockerfile** (preferred). If Nixpacks is selected instead, the `nixpacks.toml` in the repo overrides Caddy with `node server/index.js`.
+- Persistent volume: `/app/data`
+- Environment variable: `JWT_SECRET=<long random string>`
 
 ### Development
 
@@ -191,3 +248,21 @@ npm run server:dev     # Express on :3001
 ```
 
 The Vite proxy (`server.proxy` in `vite.config.ts`) forwards all `/api` requests to the backend automatically — no CORS configuration needed.
+
+---
+
+## Versioning
+
+This project follows semver with `-beta.N` suffixes during pre-1.0.
+
+- Source of truth: root `package.json` `version` field.
+- `server/package.json` must be bumped in lockstep.
+- `vite.config.ts` reads `package.json` and exposes the version as the `__APP_VERSION__` global; `src/env.d.ts` declares the type.
+- The version is rendered in the footer of `SettingsModal.tsx` as `min-tid v{__APP_VERSION__}`.
+
+When making a version bump:
+
+1. Edit `package.json` and `server/package.json`.
+2. Run `npm install` once at the root if the lockfile cares about `name`/`version` drift (it doesn't usually).
+3. `npm run build` to confirm Vite injects the new value.
+4. Commit both files plus any `CHANGELOG.md` updates.
