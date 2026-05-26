@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
+    "server:install": "cd server && npm install",
     "server:dev": "node --watch server/index.js",
     "build": "vite build",
     "build:dev": "vite build --mode development",
