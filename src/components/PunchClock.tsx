@@ -13,7 +13,7 @@ const STORAGE_KEY = "punchclock_v2";
 const SHORT_SESSION_THRESHOLD_MS = 60 * 1000;
 
 // ─── Types ────────────────────────────────────────────────────
-type Session = { id: string; checkIn: number; checkOut: number | null; manual: boolean };
+type Session = { id: string; checkIn: number; checkOut: number | null; manual: boolean; note?: string };
 type HistoryFilter = "week" | "lastweek" | "month" | "all";
 
 type StorageShape = {
@@ -601,9 +601,11 @@ export default function PunchClock() {
         .pc-overlay { animation: pcOverlay 0.25s ease; }
         @keyframes pcOverlay { from { opacity: 0; } to { opacity: 1; } }
         .pc-input {
-          width: 100%; padding: 14px 16px; border-radius: 16px;
+          width: 100%; max-width: 100%; box-sizing: border-box;
+          padding: 14px 16px; border-radius: 16px;
           border: 1px solid #ece6df; font-size: 16px; outline: none;
           margin-bottom: 16px; background: #fdf6ee; font-weight: 600; color: #2d1717;
+          -webkit-appearance: none; appearance: none;
         }
         .pc-input:focus { border-color: #ff5f00; background: #fff; }
         .hide-scroll { scrollbar-width: none; }
@@ -1156,6 +1158,9 @@ function SessionRow({ session, index, onEdit, onDelete }: {
           <span className="text-[13px] text-pc-muted tabular-nums font-medium">{timeRange}</span>
           {session.checkOut && <span className="text-[12px] text-pc-orange-deep font-semibold tabular-nums">{dur}</span>}
         </div>
+        {session.note && (
+          <div className="text-[11px] text-pc-muted font-medium mt-0.5 leading-snug">{session.note}</div>
+        )}
       </div>
       <div className="flex items-center gap-1 shrink-0">
         {session.checkOut && (
@@ -1244,6 +1249,7 @@ function SessionModal({ session, defaultDate, schedule, onClose, onSave }: {
   const [date, setDate] = useState(initDate);
   const [startTime, setStartTime] = useState(initStart);
   const [endTime, setEndTime] = useState(initEnd);
+  const [note, setNote] = useState(session?.note ?? "");
   const [err, setErr] = useState("");
 
   const dayCfg = schedule[dayKeyOf(new Date(date + "T12:00:00"))];
@@ -1254,7 +1260,7 @@ function SessionModal({ session, defaultDate, schedule, onClose, onSave }: {
     const checkIn = new Date(`${date}T${startTime}`).getTime();
     const checkOut = endTime ? new Date(`${date}T${endTime}`).getTime() : null;
     if (checkOut && checkOut <= checkIn) { setErr("Sluttid måste vara efter starttid."); return; }
-    onSave({ id: session?.id ?? crypto.randomUUID(), checkIn, checkOut, manual: true });
+    onSave({ id: session?.id ?? crypto.randomUUID(), checkIn, checkOut, manual: true, note: note.trim() || undefined });
   }
 
   const previewMs = startTime && endTime
@@ -1295,6 +1301,22 @@ function SessionModal({ session, defaultDate, schedule, onClose, onSave }: {
             Rensa sluttid
           </button>
         )}
+
+        <Label>Anteckning <span className="normal-case font-medium tracking-normal">(valfri)</span></Label>
+        <textarea
+          rows={2}
+          placeholder="t.ex. Startade tidigt, jobbade ikapp på kvällen…"
+          value={note}
+          onChange={e => setNote(e.target.value)}
+          style={{
+            width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: "14px",
+            border: "1px solid #ece6df", fontSize: "15px", outline: "none",
+            background: "#fdf6ee", fontWeight: 500, color: "#2d1717",
+            resize: "none", marginBottom: "16px", fontFamily: "inherit",
+          }}
+          onFocus={e => { e.currentTarget.style.borderColor = "#ff5f00"; e.currentTarget.style.background = "#fff"; }}
+          onBlur={e => { e.currentTarget.style.borderColor = "#ece6df"; e.currentTarget.style.background = "#fdf6ee"; }}
+        />
 
         {previewMin !== null && previewMin > 0 && (
           <div className="bg-pc-peach rounded-2xl px-4 py-3 mb-4">

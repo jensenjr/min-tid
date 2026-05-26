@@ -140,22 +140,22 @@ export default function AbsenceModal({
         </div>
 
         {/* Dates */}
-        <div className="grid grid-cols-2 gap-3 mb-4" style={{ minWidth: 0 }}>
-          <div style={{ minWidth: 0 }}>
+        <div className="flex flex-col gap-3 mb-4">
+          <div>
             <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-2">Startdatum</div>
             <input
               type="date"
               value={startDate}
               onChange={e => { setStartDate(e.target.value); if (e.target.value > endDate) setEndDate(e.target.value); }}
               style={{
-                width: "100%", minWidth: 0, boxSizing: "border-box",
-                padding: "12px 10px", borderRadius: "14px",
-                border: "1.5px solid #ece6df", fontSize: "14px", outline: "none",
+                width: "100%", boxSizing: "border-box", WebkitAppearance: "none",
+                padding: "12px 14px", borderRadius: "14px",
+                border: "1.5px solid #ece6df", fontSize: "16px", outline: "none",
                 background: "#fdf6ee", fontWeight: 600, color: "#2d1717",
               }}
             />
           </div>
-          <div style={{ minWidth: 0 }}>
+          <div>
             <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-2">Slutdatum</div>
             <input
               type="date"
@@ -163,9 +163,9 @@ export default function AbsenceModal({
               min={startDate}
               onChange={e => setEndDate(e.target.value)}
               style={{
-                width: "100%", minWidth: 0, boxSizing: "border-box",
-                padding: "12px 10px", borderRadius: "14px",
-                border: "1.5px solid #ece6df", fontSize: "14px", outline: "none",
+                width: "100%", boxSizing: "border-box", WebkitAppearance: "none",
+                padding: "12px 14px", borderRadius: "14px",
+                border: "1.5px solid #ece6df", fontSize: "16px", outline: "none",
                 background: "#fdf6ee", fontWeight: 600, color: "#2d1717",
               }}
             />
