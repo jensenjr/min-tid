@@ -9,14 +9,24 @@ export default function SettingsModal({
   open,
   initialName,
   initialDepartment,
+  syncToken,
+  syncStatus,
+  syncedAt,
   onClose,
   onSave,
+  onSetupSync,
+  onDisconnectSync,
 }: {
   open: boolean;
   initialName: string;
   initialDepartment?: string;
+  syncToken: string | null;
+  syncStatus: "idle" | "syncing" | "ok" | "error";
+  syncedAt: number | null;
   onClose: () => void;
   onSave: (r: SettingsResult) => void;
+  onSetupSync: () => void;
+  onDisconnectSync: () => void;
 }) {
   const [name, setName] = useState(initialName);
   const [department, setDepartment] = useState(initialDepartment ?? "");
@@ -82,6 +92,42 @@ export default function SettingsModal({
           style={INPUT}
           placeholder="t.ex. Lager, Kontor…"
         />
+
+        {/* Sync section */}
+        <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-2 mt-2">Synkronisering</div>
+        {syncToken ? (
+          <div className="bg-[#fdf6ee] border border-[#ece6df] rounded-[16px] px-4 py-3 mb-4 flex items-center gap-3">
+            <span className="text-[20px] leading-none shrink-0">
+              {syncStatus === "syncing" ? "⏳" : syncStatus === "error" ? "⚠️" : "☁️"}
+            </span>
+            <div className="flex-1 min-w-0">
+              <div className="text-[13px] font-bold text-[#2d1717] leading-tight">
+                {syncStatus === "syncing" ? "Synkroniserar…"
+                  : syncStatus === "error" ? "Synkfel – försöker snart igen"
+                  : syncedAt ? `Synkat ${new Date(syncedAt).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })}`
+                  : "Synkronisering aktiv"}
+              </div>
+              <div className="text-[11px] text-[#9c7c5c] mt-0.5">Data sparas på alla dina enheter</div>
+            </div>
+            <button
+              onClick={onDisconnectSync}
+              className="shrink-0 text-[11px] font-semibold text-[#9c7c5c] underline"
+            >
+              Koppla från
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={onSetupSync}
+            style={{ width: "100%", padding: "13px 16px", borderRadius: "14px", border: "1.5px solid #ece6df", fontSize: "14px", outline: "none", background: "#fdf6ee", fontWeight: 600, color: "#2d1717", marginBottom: "16px", boxSizing: "border-box", textAlign: "left", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px" }}
+          >
+            <span>☁️</span>
+            <div>
+              <div className="font-bold text-[13px]">Aktivera synkronisering</div>
+              <div className="text-[11px] text-[#9c7c5c] font-medium">Synka data mellan dina enheter</div>
+            </div>
+          </button>
+        )}
 
         {/* Actions */}
         <div className="grid grid-cols-2 gap-3 mt-4">

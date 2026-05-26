@@ -469,11 +469,12 @@ function SyncStep({
   name: string;
 }) {
   void name; // reserved for future "push initial state" feature
-  const [sub, setSub]         = useState<SyncSubStep>("choose");
-  const [secret, setSecret]   = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [err, setErr]         = useState("");
+  const [sub, setSub]           = useState<SyncSubStep>("choose");
+  const [username, setUsername] = useState("");
+  const [secret, setSecret]     = useState("");
+  const [confirm, setConfirm]   = useState("");
+  const [loading, setLoading]   = useState(false);
+  const [err, setErr]           = useState("");
 
   const inputStyle: React.CSSProperties = {
     width: "100%", boxSizing: "border-box", padding: "14px 16px", borderRadius: "16px",
@@ -529,11 +530,12 @@ function SyncStep({
 
   if (sub === "create") {
     async function handleCreate() {
-      if (secret.length < 6) { setErr("Minst 6 tecken."); return; }
+      if (!/^[a-zA-Z0-9_-]{3,20}$/.test(username)) { setErr("Användarnamnet måste vara 3–20 tecken (a–z, 0–9, _ eller -)."); return; }
+      if (secret.length < 6) { setErr("Minst 6 tecken i synk-koden."); return; }
       if (secret !== confirm) { setErr("Koderna matchar inte."); return; }
       setLoading(true); setErr("");
       try {
-        const { token } = await syncRegister(secret);
+        const { token } = await syncRegister(username, secret);
         onFinish(schedule, token);
       } catch (e) {
         setErr((e as Error).message);
@@ -546,13 +548,24 @@ function SyncStep({
       <Screen>
         <StepDots current={3} total={3} />
         <h2 className="text-[22px] font-extrabold tracking-tight text-pc-ink mb-1 text-center">
-          Välj en synk-kod
+          Skapa synk-konto
         </h2>
         <p className="text-[13px] text-pc-muted mb-6 text-center leading-relaxed">
-          Välj en lång, unik fras. Du behöver den på alla dina enheter. Lagras aldrig i klartext.
+          Välj ett unikt användarnamn och en hemlig kod. Du behöver dem på alla dina enheter.
         </p>
 
         <div className="w-full">
+          <Label>Användarnamn <span className="text-pc-orange">*</span></Label>
+          <input
+            type="text"
+            placeholder="t.ex. carl eller carl2"
+            value={username}
+            onChange={e => { setUsername(e.target.value); setErr(""); }}
+            className="ob-input"
+            style={inputStyle}
+            autoCapitalize="none"
+            autoCorrect="off"
+          />
           <Label>Synk-kod <span className="text-pc-orange">*</span></Label>
           <input
             type="password"
@@ -579,9 +592,9 @@ function SyncStep({
             className="ob-btn-primary w-full"
             style={loading ? { background: "#f0e8df", color: "#c4a882", boxShadow: "none" } : undefined}
           >
-            {loading ? "Skapar…" : "Skapa synk-kod →"}
+            {loading ? "Skapar…" : "Skapa konto →"}
           </button>
-          <button onClick={() => { setSub("choose"); setErr(""); setSecret(""); setConfirm(""); }} className="ob-btn-ghost w-full mt-1">
+          <button onClick={() => { setSub("choose"); setErr(""); setUsername(""); setSecret(""); setConfirm(""); }} className="ob-btn-ghost w-full mt-1">
             ← Tillbaka
           </button>
         </div>
@@ -591,10 +604,11 @@ function SyncStep({
 
   if (sub === "restore") {
     async function handleRestore() {
+      if (!username) { setErr("Ange ditt användarnamn."); return; }
       if (!secret) { setErr("Ange din synk-kod."); return; }
       setLoading(true); setErr("");
       try {
-        const { token, state } = await syncLogin(secret);
+        const { token, state } = await syncLogin(username, secret);
         onFinish(state?.schedule as WeekSchedule ?? schedule, token, state ?? undefined);
       } catch (e) {
         setErr((e as Error).message);
@@ -610,10 +624,21 @@ function SyncStep({
           Återställ från synk
         </h2>
         <p className="text-[13px] text-pc-muted mb-6 text-center leading-relaxed">
-          Ange den synk-kod du skapade på din andra enhet. Din data hämtas och ersätter data på den här enheten.
+          Ange det användarnamn och den synk-kod du skapade på din andra enhet.
         </p>
 
         <div className="w-full">
+          <Label>Användarnamn</Label>
+          <input
+            type="text"
+            placeholder="t.ex. carl eller carl2"
+            value={username}
+            onChange={e => { setUsername(e.target.value); setErr(""); }}
+            className="ob-input"
+            style={inputStyle}
+            autoCapitalize="none"
+            autoCorrect="off"
+          />
           <Label>Synk-kod</Label>
           <input
             type="password"
@@ -633,7 +658,7 @@ function SyncStep({
           >
             {loading ? "Hämtar data…" : "Återställ →"}
           </button>
-          <button onClick={() => { setSub("choose"); setErr(""); setSecret(""); }} className="ob-btn-ghost w-full mt-1">
+          <button onClick={() => { setSub("choose"); setErr(""); setUsername(""); setSecret(""); }} className="ob-btn-ghost w-full mt-1">
             ← Tillbaka
           </button>
         </div>

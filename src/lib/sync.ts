@@ -24,12 +24,12 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
-export async function syncRegister(secret: string): Promise<{ userId: string; token: string }> {
-  return call("/api/auth/register", { method: "POST", body: JSON.stringify({ secret }) });
+export async function syncRegister(username: string, secret: string): Promise<{ userId: string; token: string }> {
+  return call("/api/auth/register", { method: "POST", body: JSON.stringify({ username, secret }) });
 }
 
-export async function syncLogin(secret: string): Promise<{ userId: string; token: string; state: SyncState | null }> {
-  return call("/api/auth/login", { method: "POST", body: JSON.stringify({ secret }) });
+export async function syncLogin(username: string, secret: string): Promise<{ userId: string; token: string; state: SyncState | null }> {
+  return call("/api/auth/login", { method: "POST", body: JSON.stringify({ username, secret }) });
 }
 
 export async function syncPush(token: string, state: SyncState): Promise<void> {

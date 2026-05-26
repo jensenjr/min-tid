@@ -676,7 +676,7 @@ export default function PunchClock() {
   }
 
   return (
-    <div className="min-h-screen bg-pc-bg font-display text-pc-ink antialiased">
+    <div className="fixed inset-0 bg-pc-bg font-display text-pc-ink antialiased">
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
         .pc-fade { animation: pcFade 0.35s cubic-bezier(0.16,1,0.3,1); }
@@ -707,11 +707,11 @@ export default function PunchClock() {
         .hide-scroll::-webkit-scrollbar { display: none; }
       `}</style>
 
-      <div className="mx-auto max-w-[480px] min-h-screen flex flex-col relative pb-[88px]">
-        <div className="h-[env(safe-area-inset-top,0px)]" />
+      <div className="mx-auto max-w-[480px] h-full flex flex-col">
+        <div className="shrink-0 h-[env(safe-area-inset-top,0px)]" />
 
         {/* Header */}
-        <header className="px-5 pt-6 pb-4 flex items-center justify-between">
+        <header className="shrink-0 px-5 pt-6 pb-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-pc-orange flex items-center justify-center shadow-[0_4px_14px_rgba(255,95,0,0.35)]">
               <svg viewBox="0 0 24 24" className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -744,7 +744,7 @@ export default function PunchClock() {
           </div>
         </header>
 
-        <main className="flex-1 px-5">
+        <main className="flex-1 min-h-0 overflow-y-auto px-5">
 
           {/* ── CLOCK ── */}
           {view === "clock" && (
@@ -839,36 +839,6 @@ export default function PunchClock() {
                 <IconCalendar /> Planera dagar
               </button>
 
-              {/* Sync status card */}
-              {syncToken ? (
-                <div className="mt-3 bg-white border border-pc-line rounded-[20px] px-4 py-3 flex items-center gap-3">
-                  <span className="text-[20px] leading-none shrink-0">
-                    {syncStatus === "syncing" ? "⏳" : syncStatus === "error" ? "⚠️" : "☁️"}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[13px] font-bold text-pc-ink leading-tight">
-                      {syncStatus === "syncing" ? "Synkroniserar…"
-                        : syncStatus === "error" ? "Synkfel – försöker snart igen"
-                        : syncedAt ? `Synkat ${new Date(syncedAt).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })}`
-                        : "Synkronisering aktiv"}
-                    </div>
-                    <div className="text-[11px] text-pc-muted mt-0.5">Data sparas på alla dina enheter</div>
-                  </div>
-                  <button
-                    onClick={handleDisconnectSync}
-                    className="shrink-0 text-[11px] font-semibold text-pc-muted underline"
-                  >
-                    Koppla från
-                  </button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setSyncModal(true)}
-                  className="pc-press mt-3 w-full bg-white border border-pc-line rounded-[20px] py-3 font-semibold text-[13px] text-pc-muted flex items-center justify-center gap-2"
-                >
-                  ☁️ Synkronisera dina data
-                </button>
-              )}
             </div>
           )}
 
@@ -1337,7 +1307,7 @@ export default function PunchClock() {
 
         {/* Bottom nav */}
         <nav
-          className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] bg-white/85 backdrop-blur-xl border-t border-pc-line px-2"
+          className="shrink-0 w-full bg-white/85 backdrop-blur-xl border-t border-pc-line px-2"
           style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 6px)" }}
         >
           <div className="grid grid-cols-4 gap-1 pt-2">
@@ -1405,8 +1375,13 @@ export default function PunchClock() {
         open={settingsModal}
         initialName={name}
         initialDepartment={department}
+        syncToken={syncToken}
+        syncStatus={syncStatus}
+        syncedAt={syncedAt}
         onClose={() => setSettingsModal(false)}
         onSave={handleSettingsSave}
+        onSetupSync={() => { setSettingsModal(false); setSyncModal(true); }}
+        onDisconnectSync={handleDisconnectSync}
       />
 
       <SyncModal

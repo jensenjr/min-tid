@@ -15,6 +15,7 @@ export default function SyncModal({
   onRestore: (token: string, state: SyncState) => void;
 }) {
   const [tab, setTab]           = useState<Tab>("create");
+  const [username, setUsername] = useState("");
   const [secret, setSecret]     = useState("");
   const [confirm, setConfirm]   = useState("");
   const [loading, setLoading]   = useState(false);
@@ -23,6 +24,7 @@ export default function SyncModal({
 
   function reset() {
     setTab("create");
+    setUsername("");
     setSecret("");
     setConfirm("");
     setLoading(false);
@@ -35,11 +37,15 @@ export default function SyncModal({
   function handleClose() { reset(); onClose(); }
 
   async function handleCreate() {
-    if (secret.length < 6) { setErr("Minst 6 tecken."); return; }
+    if (!/^[a-zA-Z0-9_-]{3,20}$/.test(username)) {
+      setErr("Användarnamnet måste vara 3–20 tecken (a–z, 0–9, _ eller -).");
+      return;
+    }
+    if (secret.length < 6) { setErr("Minst 6 tecken i synk-koden."); return; }
     if (secret !== confirm) { setErr("Koderna matchar inte."); return; }
     setLoading(true); setErr("");
     try {
-      const { token } = await syncRegister(secret);
+      const { token } = await syncRegister(username, secret);
       onToken(token);
       setDone(true);
     } catch (e) {
@@ -50,10 +56,11 @@ export default function SyncModal({
   }
 
   async function handleRestore() {
+    if (!username) { setErr("Ange ditt användarnamn."); return; }
     if (!secret) { setErr("Ange din synk-kod."); return; }
     setLoading(true); setErr("");
     try {
-      const { token, state } = await syncLogin(secret);
+      const { token, state } = await syncLogin(username, secret);
       if (state) {
         onRestore(token, state);
       } else {
@@ -75,6 +82,11 @@ export default function SyncModal({
     marginBottom: "12px",
   };
 
+  const focusStyle = {
+    onFocus: (e: React.FocusEvent<HTMLInputElement>) => { e.currentTarget.style.borderColor = "#ff5f00"; e.currentTarget.style.background = "#fff"; },
+    onBlur:  (e: React.FocusEvent<HTMLInputElement>) => { e.currentTarget.style.borderColor = "#ece6df"; e.currentTarget.style.background = "#fdf6ee"; },
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center"
@@ -94,7 +106,7 @@ export default function SyncModal({
 
         <div className="font-extrabold text-[22px] tracking-tight mb-1">☁️ Synkronisering</div>
         <div className="text-[13px] text-[#9c7c5c] mb-5 leading-relaxed">
-          Synka dina data mellan enheter med en hemlig kod — ingen e-post, inga konton.
+          Synka dina data mellan enheter med ett användarnamn och en hemlig kod — ingen e-post, inga konton.
         </div>
 
         {done ? (
@@ -124,7 +136,7 @@ export default function SyncModal({
               {(["create", "restore"] as Tab[]).map(t => (
                 <button
                   key={t}
-                  onClick={() => { setTab(t); setErr(""); setSecret(""); setConfirm(""); }}
+                  onClick={() => { setTab(t); setErr(""); setUsername(""); setSecret(""); setConfirm(""); }}
                   className={`flex-1 py-2 rounded-[12px] text-[13px] font-bold transition-colors ${
                     tab === t ? "bg-white text-[#2d1717] shadow-sm" : "text-[#9c7c5c]"
                   }`}
@@ -133,6 +145,21 @@ export default function SyncModal({
                 </button>
               ))}
             </div>
+
+            {/* Username field (shared across both tabs) */}
+            <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-2">
+              Användarnamn
+            </div>
+            <input
+              type="text"
+              placeholder="t.ex. carl eller carl2"
+              value={username}
+              onChange={e => { setUsername(e.target.value); setErr(""); }}
+              style={inputStyle}
+              autoCapitalize="none"
+              autoCorrect="off"
+              {...focusStyle}
+            />
 
             {tab === "create" && (
               <>
@@ -148,8 +175,7 @@ export default function SyncModal({
                   value={secret}
                   onChange={e => { setSecret(e.target.value); setErr(""); }}
                   style={inputStyle}
-                  onFocus={e => { e.currentTarget.style.borderColor = "#ff5f00"; e.currentTarget.style.background = "#fff"; }}
-                  onBlur={e => { e.currentTarget.style.borderColor = "#ece6df"; e.currentTarget.style.background = "#fdf6ee"; }}
+                  {...focusStyle}
                 />
                 <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-2">
                   Bekräfta synk-koden
@@ -160,8 +186,7 @@ export default function SyncModal({
                   value={confirm}
                   onChange={e => { setConfirm(e.target.value); setErr(""); }}
                   style={inputStyle}
-                  onFocus={e => { e.currentTarget.style.borderColor = "#ff5f00"; e.currentTarget.style.background = "#fff"; }}
-                  onBlur={e => { e.currentTarget.style.borderColor = "#ece6df"; e.currentTarget.style.background = "#fdf6ee"; }}
+                  {...focusStyle}
                 />
               </>
             )}
@@ -172,7 +197,7 @@ export default function SyncModal({
                   Din synk-kod
                 </div>
                 <div className="text-[12px] text-[#9c7c5c] mb-3 leading-relaxed">
-                  Ange den synk-kod du skapade på din andra enhet. Din data hämtas och ersätter data på den här enheten.
+                  Ange det användarnamn och den synk-kod du skapade på din andra enhet. Din data hämtas och ersätter data på den här enheten.
                 </div>
                 <input
                   type="password"
@@ -180,8 +205,7 @@ export default function SyncModal({
                   value={secret}
                   onChange={e => { setSecret(e.target.value); setErr(""); }}
                   style={inputStyle}
-                  onFocus={e => { e.currentTarget.style.borderColor = "#ff5f00"; e.currentTarget.style.background = "#fff"; }}
-                  onBlur={e => { e.currentTarget.style.borderColor = "#ece6df"; e.currentTarget.style.background = "#fdf6ee"; }}
+                  {...focusStyle}
                 />
               </>
             )}
@@ -211,7 +235,7 @@ export default function SyncModal({
                   boxShadow: loading ? "none" : "0 8px 20px -8px rgba(255,95,0,0.6)",
                 }}
               >
-                {loading ? "Vänta…" : tab === "create" ? "Skapa kod" : "Återställ"}
+                {loading ? "Vänta…" : tab === "create" ? "Skapa konto" : "Återställ"}
               </button>
             </div>
           </>
