@@ -12,6 +12,16 @@ All notable changes to **min-tid** are recorded here. Format loosely follows [Ke
 
 _Nothing yet._
 
+## [1.0.0-beta.3] — 2026-05-27
+
+### Fixed
+- **Leave-time predictor was telling users to leave too early.** The line assumed sessions were pure work (lunch punched out), but the flex calc auto-deducts `lunchMinutes` from raw punched time. So a user with an 8 h target + 1 h lunch who punched in continuously was told to leave at 8 h raw — and got penalised −1 h flex when net came out to 7 h. The predictor now uses `target + lunch` raw minutes (matching `computeDayMinutes.net`) so the predicted leave-time, the "Mål uppnått" banner, and the flex contribution all agree.
+- **Late punch-out modal was firing on normal workdays.** The 4 h threshold triggered the "långt pass — välj sluttid" sheet at 8 h 09 min on a regular 8 h day. Threshold is now schedule-aware: `max(10 h, scheduled shift duration + 4 h)`. A standard 8-17 shift won't trigger it until ~13 h punched in; a 6 h shift not until 10 h. Real forgotten-punch-out cases (overnight, 12+ h) still fire.
+- The "Sätt annan sluttid" picker in `LatePunchoutModal` defaults to `sessionStart + (target + lunch)` to match the predictor, so confirming the default credits a full day's net.
+
+### Internal
+- `shiftMinutes` is now imported from `schedule.ts`. `LONG_SESSION_THRESHOLD_MS` constant replaced by the `lateThresholdMs(todayCfg)` helper.
+
 ## [1.0.0-beta.2] — 2026-05-27
 
 ### Added
@@ -80,3 +90,4 @@ First public beta. The app is feature-complete for time, absence and expense tra
 
 [1.0.0-beta.1]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.1
 [1.0.0-beta.2]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.2
+[1.0.0-beta.3]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.3

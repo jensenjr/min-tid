@@ -9,14 +9,22 @@ import LatePunchoutModal from "./LatePunchoutModal";
 import { syncPush, syncDeleteAccount, SYNC_TOKEN_KEY, type SyncState } from "../lib/sync";
 import {
   type WeekSchedule, type DayConfig,
-  DEFAULT_SCHEDULE, dayKeyOf, netDayMin, weeklyNetMin, fmtMin,
+  DEFAULT_SCHEDULE, dayKeyOf, netDayMin, shiftMinutes, weeklyNetMin, fmtMin,
   migrateNormHours, migrateSchedule,
 } from "../lib/schedule";
 
 // ─── Constants ────────────────────────────────────────────────
 const STORAGE_KEY = "punchclock_v2";
 const SHORT_SESSION_THRESHOLD_MS = 60 * 1000;
-const LONG_SESSION_THRESHOLD_MS = 4 * 60 * 60 * 1000;
+
+// Late punch-out modal fires only when you're meaningfully past today's shift,
+// not during routine overtime. Schedule-aware: scheduled shift duration + 4 h
+// buffer, with a 10 h floor so short shifts / off-days still get a sane cutoff.
+function lateThresholdMs(todayCfg: DayConfig): number {
+  const shift = todayCfg.active ? shiftMinutes(todayCfg) : 0;
+  const minutes = Math.max(10 * 60, shift + 4 * 60);
+  return minutes * 60 * 1000;
+}
 
 // ─── Types ────────────────────────────────────────────────────
 type Session = { id: string; checkIn: number; checkOut: number | null; manual: boolean; note?: string };
@@ -691,7 +699,7 @@ export default function PunchClock() {
     if (isIn && activeSession) {
       const elapsed = now() - activeSession.checkIn;
       if (elapsed < SHORT_SESSION_THRESHOLD_MS) { setShortWarn(true); return; }
-      if (elapsed > LONG_SESSION_THRESHOLD_MS) { setLatePunchoutOpen(true); return; }
+      if (elapsed > lateThresholdMs(todayCfg)) { setLatePunchoutOpen(true); return; }
       doCheckOut();
     } else {
       const checkInTime = now();
@@ -823,13 +831,16 @@ export default function PunchClock() {
   const todayDelta = computeTodayDelta(todaySessions, todayCfg);
 
   // Leave-time predictor — only on active workdays with an ongoing session.
-  // Treats session time as pure work (lunch is opted-in by punching out, not auto-deducted).
+  // Lunch is auto-deducted from punched-in time (net = raw − lunchMinutes), so to
+  // credit a full day's net target the user must be punched in for target + lunch
+  // raw minutes. This stays consistent with `computeDayMinutes.net` and the flex
+  // calculation — leaving when raw = net target would short-change you by `lunch`.
   const showLeaveTime  = isIn && todayCfg.active;
-  const todaysTarget   = todayCfg.active ? netDayMin(todayCfg) : 0;
+  const targetRawMin   = todayCfg.active ? netDayMin(todayCfg) + todayCfg.lunchMinutes : 0;
   const todayWorkedRaw = todaySessions.reduce((sum, s) => sum + ((s.checkOut ?? now()) - s.checkIn) / 60000, 0);
-  const leaveRemaining = Math.max(0, todaysTarget - todayWorkedRaw);
+  const leaveRemaining = Math.max(0, targetRawMin - todayWorkedRaw);
   const leaveAtMs      = now() + leaveRemaining * 60000;
-  const leaveReached   = todayWorkedRaw >= todaysTarget;
+  const leaveReached   = todayWorkedRaw >= targetRawMin;
 
   const FILTERS: { key: HistoryFilter; label: string }[] = [
     { key: "week",     label: "Den här veckan" },
@@ -1620,7 +1631,7 @@ export default function PunchClock() {
       {latePunchoutOpen && activeSession && (
         <LatePunchoutModal
           activeSession={activeSession}
-          todaysTargetMin={todayCfg.active ? netDayMin(todayCfg) : 0}
+          todaysTargetMin={todayCfg.active ? netDayMin(todayCfg) + todayCfg.lunchMinutes : 0}
           onCancel={() => setLatePunchoutOpen(false)}
           onSave={handleLatePunchoutSave}
         />
