@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> **Current version: 1.0.0-beta.1.** Exposed to the UI via `__APP_VERSION__` (set by Vite from the root `package.json`) and shown at the bottom of the settings modal. Bump versions in both `package.json` and `server/package.json` together.
+> **Current version: 1.0.0-beta.2.** Exposed to the UI via `__APP_VERSION__` (set by Vite from the root `package.json`) and shown at the bottom of the settings modal. Bump versions in both `package.json` and `server/package.json` together.
 
 ## Commands
 
@@ -280,9 +280,27 @@ This project follows semver with `-beta.N` suffixes during pre-1.0.
 - `vite.config.ts` reads `package.json` and exposes the version as the `__APP_VERSION__` global; `src/env.d.ts` declares the type.
 - The version is rendered in the footer of `SettingsModal.tsx` as `min-tid v{__APP_VERSION__}`.
 
-When making a version bump:
+### Policy
 
-1. Edit `package.json` and `server/package.json`.
-2. Run `npm install` once at the root if the lockfile cares about `name`/`version` drift (it doesn't usually).
+**Pre-1.0 (we are here):** every batch of changes that ships → bump `-beta.N`. So beta.1 → beta.2 → beta.3, etc. There is no patch suffix inside a beta — each shipped beta is the next integer. The "1.0.0" prefix doesn't move until we declare 1.0.0 stable.
+
+**Post-1.0 stable:** standard semver:
+- `1.0.1` — backwards-compatible bug fixes
+- `1.1.0` — backwards-compatible new features
+- `2.0.0` — breaking change (storage shape, API, etc.)
+
+### When to bump
+
+Bump (and add a `CHANGELOG.md` section) whenever you ship anything user-visible — a feature, a UI tweak, a bug fix, a behavioural change. Not for pure internal refactors that have no observable effect, but err on the side of bumping. Traceability matters more than version-number frugality.
+
+### How to bump
+
+1. Edit `package.json` and `server/package.json` to the new version (lockstep).
+2. In `CHANGELOG.md`: move whatever is under `[Unreleased]` into a new `[X.Y.Z] — YYYY-MM-DD` section just above the previous release. Leave a fresh `_Nothing yet._` under `[Unreleased]`. Add the link at the bottom.
 3. `npm run build` to confirm Vite injects the new value.
-4. Commit both files plus any `CHANGELOG.md` updates.
+4. Commit (`package.json`, `server/package.json`, `CHANGELOG.md`, plus the actual change). Push.
+5. If publishing a GitHub release: tag `v1.0.0-beta.N` and the changelog links resolve.
+
+### When work is in flight
+
+Smaller in-progress changes can land under `[Unreleased]` in the changelog without a version bump. When the next deploy goes out, roll `[Unreleased]` into the new beta number. Don't ship to users without bumping.

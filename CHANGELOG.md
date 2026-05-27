@@ -1,20 +1,24 @@
 # Changelog
 
-All notable changes to **min-tid** are recorded here. Format loosely follows [Keep a Changelog](https://keepachangelog.com); the project follows semver with `-beta.N` suffixes during pre-1.0.
+All notable changes to **min-tid** are recorded here. Format loosely follows [Keep a Changelog](https://keepachangelog.com).
+
+**Versioning policy:**
+- Pre-1.0 we use `1.0.0-beta.N`. Each batch of changes that ships → bump `-beta.N` (no patch suffix inside a beta).
+- After 1.0.0 stable: standard semver — `1.0.1` for bug fixes, `1.1.0` for new features, `2.0.0` for breaking changes.
+- The version in `package.json` and `server/package.json` must move in lockstep. The running version is shown at the bottom of the settings modal.
+- Add a section here for every bump. Never let it slip — traceability over polish.
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [1.0.0-beta.2] — 2026-05-27
+
 ### Added
-- **Per-day "Avvikelse" button** in the calendar day card and per-day rows of the history list — alongside the existing "Tid" button, so you can register absence on any day directly from history. AbsenceModal now accepts `initialDate` and `schedule` props.
+- **Per-day "Avvikelse" button** in the calendar day card and per-day rows of the history list — alongside the existing "Tid" button, so you can register absence on any day directly from history. `AbsenceModal` now accepts `initialDate` and `schedule` props.
 - **Percentage presets** (100% / 75% / 50% / 25%) in `AbsenceModal` when "Ange timmar" is active. Each preset fills the manual-hours field with that fraction of the start day's scheduled net hours (or 8 h fallback). Snapped to 0.5 h. Numeric input still editable.
-- **`amount` is now optional on `ExpenseEntry`** — milersättning entries can be saved with only km, no SEK amount required. The label gets a "(valfri — räcker med km)" hint when the milersättning category is selected.
-
-### Changed
-- **Expense displays** (list, share text, receipt reminder, month total) handle missing amounts gracefully — km and amount are shown only if present, joined by " · ", with the total summing `e.amount ?? 0`.
-- The single "Lägg till tid" action button per day in history split into two compact buttons ("+ Tid" / "+ Avvikelse").
-
-### Added
-- **Flex section on home view** — replaces the small flex line in the today card. Shows total flex, "Den här månaden", "Den här veckan", and opens a bottom sheet with the last 12 weeks broken down individually.
+- **Optional `amount` on `ExpenseEntry`** — milersättning entries can be saved with only km, no SEK amount required. The label gets a "(valfri — räcker med km)" hint when milersättning is selected.
+- **Flex section on home view** — replaces the small flex line in the today card. Shows total flex plus an "Idag · Veckan · Månaden" 3-stat row and opens a bottom sheet with the last 12 weeks broken down individually.
 - **`trackingStartDate`** in root state — flex accrues from this day forward. Set automatically on first punch; existing users get it backfilled from their earliest session so historic flex stays consistent.
 - **Leave-time predictor** — when an active session is running on an active workday, the clock view shows "Du kan gå hem kl. HH:MM" (or "Mål uppnått — du kan gå hem" once today's net target is reached). Sessions are treated as pure work time — lunch is not auto-added.
 - **Late punch-out modal** — punching out after a 4+ hour session opens a bottom sheet offering "Stämpla ut nu", a custom end-time picker (defaults to start + today's net target), or cancel. Saving with end ≤ start or end > now is disabled with inline validation.
@@ -23,8 +27,10 @@ All notable changes to **min-tid** are recorded here. Format loosely follows [Ke
 ### Changed
 - **`computeFlexMinutes`** rewritten for day-by-day accrual from `trackingStartDate`. Every scheduled workday strictly **before today** contributes `actual − scheduled net`; non-flex absences (VAB, semester, etc.) reduce that day's norm but don't drain the bank; flex-leave absences still deduct from the bank.
 - **Today rolls in when you punch out — not the next morning.** New `computeTodayContribution` adds today's `actual − target` to the total flex (and the week/month sub-stats + the current-week row in the breakdown) the moment the day is "settled" (no active session AND at least one completed session today). During an active session today contributes 0 — no red −8 h in the morning.
-- **New "Idag" sub-stat in the flex section** — live `worked today − today's target`. Green if ≥ 0, red if < 0. Shows you in real time how today is going against the target, independent of whether the contribution has rolled into total yet. Flex section is now a 3-column grid: Idag · Veckan · Månaden.
-- **Active sessions still never count toward total flex.** Only completed sessions feed the bank; the "Idag" sub-stat is the in-progress signal.
+- **Live "Idag" sub-stat** = `worked today − today's target`. Green if ≥ 0, red if < 0. Independent of whether the contribution has rolled into total yet.
+- **Active sessions never count toward total flex.** Only completed sessions feed the bank; the "Idag" sub-stat is the in-progress signal.
+- **Expense displays** (list, share text, receipt reminder, month total) handle missing amounts gracefully — km and amount are shown only if present, joined by " · ", with the total summing `e.amount ?? 0`.
+- The single "Lägg till tid" action per day in history split into two compact buttons ("+ Tid" / "+ Avvikelse").
 - Sync `SyncState` includes `trackingStartDate`; it round-trips with login/restore and the debounced push.
 
 ### Skipped (intentionally)
@@ -73,3 +79,4 @@ First public beta. The app is feature-complete for time, absence and expense tra
 - **Zero native deps** on the server — `better-sqlite3` was replaced with a plain JSON file store.
 
 [1.0.0-beta.1]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.1
+[1.0.0-beta.2]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.2
