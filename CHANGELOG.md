@@ -2,6 +2,23 @@
 
 All notable changes to **min-tid** are recorded here. Format loosely follows [Keep a Changelog](https://keepachangelog.com); the project follows semver with `-beta.N` suffixes during pre-1.0.
 
+## [Unreleased]
+
+### Added
+- **Flex section on home view** — replaces the small flex line in the today card. Shows total flex, "Den här månaden", "Den här veckan", and opens a bottom sheet with the last 12 weeks broken down individually.
+- **`trackingStartDate`** in root state — flex accrues from this day forward. Set automatically on first punch; existing users get it backfilled from their earliest session so historic flex stays consistent.
+- **Leave-time predictor** — when an active session is running on an active workday, the clock view shows "Du kan gå hem kl. HH:MM" (or "Mål uppnått — du kan gå hem" once today's net target is reached). Sessions are treated as pure work time — lunch is not auto-added.
+- **Late punch-out modal** — punching out after a 4+ hour session opens a bottom sheet offering "Stämpla ut nu", a custom end-time picker (defaults to start + today's net target), or cancel. Saving with end ≤ start or end > now is disabled with inline validation.
+- New components: `FlexBreakdownModal.tsx`, `LatePunchoutModal.tsx`.
+
+### Changed
+- **`computeFlexMinutes`** rewritten for strict day-by-day accrual from `trackingStartDate`. Every active scheduled workday in range contributes `actual − scheduled net`; non-flex absences (VAB, semester, etc.) reduce that day's norm but don't drain the bank; flex-leave absences still deduct from the bank.
+- **Active sessions no longer count toward flex.** Only completed sessions contribute — the live running timer doesn't shift the saldo until you punch out.
+- Sync `SyncState` includes `trackingStartDate`; it round-trips with login/restore and the debounced push.
+
+### Skipped (intentionally)
+- Push notifications for long sessions — reliable background firing on iOS PWAs requires Service Worker + Web Push + backend infra. The late punch-out modal is the durable safety net instead.
+
 ## [1.0.0-beta.1] — 2026-05-26
 
 First public beta. The app is feature-complete for time, absence and expense tracking; the optional sync backend is self-hostable; the deployment story is settled.

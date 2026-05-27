@@ -9,6 +9,7 @@ export interface SyncState {
   absences: unknown[];
   expenses: unknown[];
   flexBaseMinutes: number;
+  trackingStartDate?: string;
 }
 
 // Base URL — empty string in dev (Vite proxies /api → localhost:3001)

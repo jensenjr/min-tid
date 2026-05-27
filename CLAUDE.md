@@ -43,10 +43,13 @@ TanStack Router with file-based routes. There is one real route:
 ```
 localStorage["punchclock_v2"] = {
   name, department, schedule, onboardingDone,
-  sessions, absences, expenses, flexBaseMinutes
+  sessions, absences, expenses,
+  flexBaseMinutes, trackingStartDate
 }
 localStorage["sync_token"] = "<JWT>"   // set only when sync is configured
 ```
+
+`trackingStartDate` (YYYY-MM-DD, optional) anchors flex accrual. Set automatically to today on a user's first punch-in; for migrating users it's backfilled in `load()` from the earliest session date so historic flex stays sensible. It also round-trips through sync (`SyncState.trackingStartDate`).
 
 ### Mobile layout invariant
 
@@ -76,12 +79,13 @@ weeklyNetMin(schedule) // sum of netDayMin across all 7 days
 
 ### Flex bank
 
-`computeFlexMinutes(sessions, absences, schedule)` in `PunchClock.tsx`:
+`computeFlexMinutes(sessions, absences, schedule, trackingStartDate, rangeStart?, rangeEnd?)` in `PunchClock.tsx`:
 
-- Includes today's sessions (active sessions count via `now()` in `computeDayMinutes`)
-- For each past day with sessions: `flex += net − netDayMin(scheduledCfg)`
-- For each flex-leave absence day with no sessions: `flex -= absMin` (uses absence.hours if set, otherwise the scheduled day's net)
-- Total shown = `flexBaseMinutes + computeFlexMinutes(...)` — the base is a one-time correction users can set on first sync.
+- Strict day-by-day accrual from `trackingStartDate` to today (or the provided range).
+- For each day in range: `flex += actual_net − norm`, where `norm = netDayMin(cfg) − non_flex_absence_min` (clamped at 0). Flex-leave absences additionally drain the bank by their own minutes.
+- **Only completed sessions count** — active sessions never shift the saldo. The live running timer stays in the "Idag" card only.
+- Total displayed = `flexBaseMinutes + computeFlexMinutes(...)`; `flexBaseMinutes` is a one-time correction users can set on first sync. The month/week sub-stats and 12-week breakdown call the same function with a `rangeStart`/`rangeEnd` and intentionally exclude `flexBaseMinutes`.
+- `computeWeeklyFlexBreakdown(...)` is a thin wrapper that calls the per-week computation for the last N weeks (newest first), stopping when a week ends before `trackingStartDate`.
 
 ### Components
 
@@ -93,6 +97,8 @@ weeklyNetMin(schedule) // sum of netDayMin across all 7 days
 | `AbsenceModal.tsx` | Bottom sheet for logging absence entries (VAB, semester, etc.) |
 | `ExpenseModal.tsx` | Bottom sheet for logging expense entries (milersättning with km, kost, etc.) |
 | `SyncModal.tsx` | Bottom sheet for setting up sync on an existing device (create code or restore) — collects username + secret |
+| `FlexBreakdownModal.tsx` | Bottom sheet showing total flex + the last 12 weeks of flex broken down individually |
+| `LatePunchoutModal.tsx` | Bottom sheet that intercepts punch-outs after a 4+ hour active session — offers "use now", a custom end-time picker, or cancel |
 | `src/lib/schedule.ts` | Pure schedule types, constants, calculations, and localStorage migration |
 | `src/lib/sync.ts` | Thin fetch wrapper for all sync API calls; passes `username` + `secret` |
 

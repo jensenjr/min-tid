@@ -4,6 +4,8 @@ import AbsenceModal, { type AbsenceEntry, type AbsenceCategory, ABSENCE_META } f
 import ExpenseModal, { type ExpenseEntry, type ExpenseCategory, EXPENSE_META } from "./ExpenseModal";
 import SettingsModal from "./SettingsModal";
 import SyncModal from "./SyncModal";
+import FlexBreakdownModal from "./FlexBreakdownModal";
+import LatePunchoutModal from "./LatePunchoutModal";
 import { syncPush, syncDeleteAccount, SYNC_TOKEN_KEY, type SyncState } from "../lib/sync";
 import {
   type WeekSchedule,
@@ -14,6 +16,7 @@ import {
 // ─── Constants ────────────────────────────────────────────────
 const STORAGE_KEY = "punchclock_v2";
 const SHORT_SESSION_THRESHOLD_MS = 60 * 1000;
+const LONG_SESSION_THRESHOLD_MS = 4 * 60 * 60 * 1000;
 
 // ─── Types ────────────────────────────────────────────────────
 type Session = { id: string; checkIn: number; checkOut: number | null; manual: boolean; note?: string };
@@ -28,6 +31,7 @@ type StorageShape = {
   absences: AbsenceEntry[];
   expenses: ExpenseEntry[];
   flexBaseMinutes: number;
+  trackingStartDate?: string; // YYYY-MM-DD — flex accrues from this day forward
 };
 
 // ─── Time helpers ─────────────────────────────────────────────
@@ -265,36 +269,88 @@ function buildShareText(sessions: Session[], absences: AbsenceEntry[], expenses:
 }
 
 // ─── Flex bank ────────────────────────────────────────────────
-function computeFlexMinutes(sessions: Session[], absences: AbsenceEntry[], schedule: WeekSchedule): number {
+// Strict day-by-day accrual: for every active scheduled workday between
+// `trackingStartDate` and `today` (inclusive), flex += (actual net − scheduled net).
+// Non-flex absences (VAB, semester, etc.) excuse the day — they reduce the norm but
+// don't drain flex. Flex absences deduct their minutes from the bank as intended.
+// Active (ongoing) sessions are ignored — only completed sessions count.
+function computeFlexMinutes(
+  sessions: Session[],
+  absences: AbsenceEntry[],
+  schedule: WeekSchedule,
+  trackingStartDate: string | undefined,
+  rangeStart?: string,
+  rangeEnd?: string,
+): number {
+  if (!trackingStartDate) return 0;
   const today = todayStr();
-  const byDate = groupByDate(
-    sessions.filter(s => {
-      const d = new Date(s.checkIn).toISOString().slice(0, 10);
-      return d < today ? s.checkOut !== null : d === today;
-    })
-  );
+  const start = rangeStart && rangeStart > trackingStartDate ? rangeStart : trackingStartDate;
+  const end = rangeEnd && rangeEnd < today ? rangeEnd : today;
+  if (start > end) return 0;
 
-  let flex = 0;
-
-  // Each past day with sessions: actual net - scheduled net
-  for (const [date, daySessions] of Object.entries(byDate)) {
-    const { net } = computeDayMinutes(daySessions, date, schedule);
-    const dayCfg = schedule[dayKeyOf(new Date(date + "T12:00:00"))];
-    flex += net - netDayMin(dayCfg);
+  // Group completed sessions by date for the iteration window
+  const byDate: Record<string, Session[]> = {};
+  for (const s of sessions) {
+    if (s.checkOut === null) continue;
+    const d = new Date(s.checkIn).toISOString().slice(0, 10);
+    if (d < start || d > end) continue;
+    (byDate[d] ??= []).push(s);
   }
 
-  // Flex-leave absences on days without sessions: deduct hours from flex bank
-  for (const a of absences) {
-    if (a.category !== "flex") continue;
-    const dates = expandAbsenceDates(a).filter(d => d < today && !byDate[d]);
-    for (const date of dates) {
-      const dayCfg = schedule[dayKeyOf(new Date(date + "T12:00:00"))];
-      const absMin = a.hours !== undefined ? Math.round(a.hours * 60) : netDayMin(dayCfg);
-      flex -= absMin;
+  let flex = 0;
+  const cur = new Date(start + "T12:00:00");
+  const endDate = new Date(end + "T12:00:00");
+
+  while (cur <= endDate) {
+    const dateStr = cur.toISOString().slice(0, 10);
+    const dayCfg = schedule[dayKeyOf(cur)];
+    const dayAbsences = getAbsencesForDate(absences, dateStr);
+    const daySessions = byDate[dateStr] ?? [];
+
+    let flexAbsMin = 0;
+    let nonFlexAbsMin = 0;
+    for (const a of dayAbsences) {
+      const min = a.hours !== undefined ? Math.round(a.hours * 60) : netDayMin(dayCfg);
+      if (a.category === "flex") flexAbsMin += min;
+      else nonFlexAbsMin += min;
     }
+
+    const scheduledNorm = dayCfg.active ? netDayMin(dayCfg) : 0;
+    const norm = Math.max(0, scheduledNorm - nonFlexAbsMin);
+    const actual = daySessions.length > 0 ? computeDayMinutes(daySessions, dateStr, schedule).net : 0;
+
+    flex += actual - norm;
+    flex -= flexAbsMin;
+
+    cur.setDate(cur.getDate() + 1);
   }
 
   return flex;
+}
+
+// Week-by-week flex breakdown for the last N weeks (newest first).
+function computeWeeklyFlexBreakdown(
+  sessions: Session[],
+  absences: AbsenceEntry[],
+  schedule: WeekSchedule,
+  trackingStartDate: string | undefined,
+  weeks: number,
+): { mondayStr: string; minutes: number }[] {
+  if (!trackingStartDate) return [];
+  const out: { mondayStr: string; minutes: number }[] = [];
+  const thisMonday = getWeekMonday(new Date());
+  for (let i = 0; i < weeks; i++) {
+    const mon = new Date(thisMonday);
+    mon.setDate(mon.getDate() - i * 7);
+    const sun = new Date(mon);
+    sun.setDate(sun.getDate() + 6);
+    const monStr = mon.toISOString().slice(0, 10);
+    const sunStr = sun.toISOString().slice(0, 10);
+    if (sunStr < trackingStartDate) break;
+    const minutes = computeFlexMinutes(sessions, absences, schedule, trackingStartDate, monStr, sunStr);
+    out.push({ mondayStr: monStr, minutes });
+  }
+  return out;
 }
 
 // ─── CSV export ───────────────────────────────────────────────
@@ -372,6 +428,15 @@ function load(): StorageShape {
     } else {
       schedule = DEFAULT_SCHEDULE;
     }
+    // Derive trackingStartDate for existing users who don't have it yet:
+    // use the earliest session date, so historic flex isn't blown up by missing days.
+    let trackingStartDate: string | undefined = p.trackingStartDate;
+    if (!trackingStartDate && Array.isArray(p.sessions) && p.sessions.length > 0) {
+      const dates = (p.sessions as Session[])
+        .map(s => new Date(s.checkIn).toISOString().slice(0, 10))
+        .sort();
+      trackingStartDate = dates[0];
+    }
     return {
       name: p.name ?? "",
       schedule,
@@ -381,9 +446,10 @@ function load(): StorageShape {
       absences: p.absences ?? [],
       expenses: p.expenses ?? [],
       flexBaseMinutes: typeof p.flexBaseMinutes === "number" ? p.flexBaseMinutes : 0,
+      trackingStartDate,
     };
   } catch {
-    return { name: "", schedule: DEFAULT_SCHEDULE, onboardingDone: false, sessions: [], absences: [] };
+    return { name: "", schedule: DEFAULT_SCHEDULE, onboardingDone: false, sessions: [], absences: [], expenses: [], flexBaseMinutes: 0 };
   }
 }
 
@@ -472,6 +538,9 @@ export default function PunchClock() {
     const n = new Date(); return { year: n.getFullYear(), month: n.getMonth() };
   });
   const [flexBaseMinutes, setFlexBaseMinutes] = useState(0);
+  const [trackingStartDate, setTrackingStartDate] = useState<string | undefined>();
+  const [flexBreakdownOpen, setFlexBreakdownOpen] = useState(false);
+  const [latePunchoutOpen, setLatePunchoutOpen] = useState(false);
   const [historyMode, setHistoryMode] = useState<"list" | "calendar">("list");
   const [calendarSelectedDate, setCalendarSelectedDate] = useState<string | null>(null);
   const [exportMonth, setExportMonth] = useState<{ year: number; month: number }>(() => {
@@ -511,16 +580,17 @@ export default function PunchClock() {
     setAbsences(d.absences);
     setExpenses(d.expenses ?? []);
     setFlexBaseMinutes(d.flexBaseMinutes ?? 0);
+    setTrackingStartDate(d.trackingStartDate);
     const token = localStorage.getItem(SYNC_TOKEN_KEY);
     if (token) { setSyncToken(token); setSyncStatus("idle"); }
   }, []);
 
   useEffect(() => {
-    save({ name, schedule, department, onboardingDone, sessions, absences, expenses, flexBaseMinutes });
+    save({ name, schedule, department, onboardingDone, sessions, absences, expenses, flexBaseMinutes, trackingStartDate });
     if (syncToken) {
       if (syncTimer.current) clearTimeout(syncTimer.current);
       const token = syncToken;
-      const payload: SyncState = { name, schedule, department, sessions, absences, expenses, flexBaseMinutes };
+      const payload: SyncState = { name, schedule, department, sessions, absences, expenses, flexBaseMinutes, trackingStartDate };
       syncTimer.current = setTimeout(() => {
         setSyncStatus("syncing");
         syncPush(token, payload)
@@ -528,7 +598,7 @@ export default function PunchClock() {
           .catch(() => setSyncStatus("error"));
       }, 3000);
     }
-  }, [name, schedule, department, onboardingDone, sessions, absences, expenses, flexBaseMinutes, syncToken]);
+  }, [name, schedule, department, onboardingDone, sessions, absences, expenses, flexBaseMinutes, trackingStartDate, syncToken]);
 
   const weeklyNorm = weeklyNetMin(schedule);
   const activeSession = sessions.find(s => !s.checkOut);
@@ -553,10 +623,21 @@ export default function PunchClock() {
     if (isIn && activeSession) {
       const elapsed = now() - activeSession.checkIn;
       if (elapsed < SHORT_SESSION_THRESHOLD_MS) { setShortWarn(true); return; }
+      if (elapsed > LONG_SESSION_THRESHOLD_MS) { setLatePunchoutOpen(true); return; }
       doCheckOut();
     } else {
-      setSessions(prev => [...prev, { id: crypto.randomUUID(), checkIn: now(), checkOut: null, manual: false }]);
+      const checkInTime = now();
+      if (!trackingStartDate) {
+        setTrackingStartDate(new Date(checkInTime).toISOString().slice(0, 10));
+      }
+      setSessions(prev => [...prev, { id: crypto.randomUUID(), checkIn: checkInTime, checkOut: null, manual: false }]);
     }
+  }
+
+  function handleLatePunchoutSave(endTime: number) {
+    if (!activeSession) return;
+    setSessions(prev => prev.map(s => s.id === activeSession.id ? { ...s, checkOut: endTime } : s));
+    setLatePunchoutOpen(false);
   }
 
   function doCheckOut() {
@@ -598,6 +679,7 @@ export default function PunchClock() {
       setAbsences((s.absences ?? []) as AbsenceEntry[]);
       setExpenses((s.expenses ?? []) as ExpenseEntry[]);
       setFlexBaseMinutes(typeof s.flexBaseMinutes === "number" ? s.flexBaseMinutes : 0);
+      setTrackingStartDate(s.trackingStartDate);
     } else {
       setName(result.name);
       setSchedule(result.schedule);
@@ -628,6 +710,7 @@ export default function PunchClock() {
     setAbsences((state.absences ?? []) as AbsenceEntry[]);
     setExpenses((state.expenses ?? []) as ExpenseEntry[]);
     setFlexBaseMinutes(typeof state.flexBaseMinutes === "number" ? state.flexBaseMinutes : 0);
+    setTrackingStartDate(state.trackingStartDate);
     setSyncModal(false);
   }
 
@@ -656,12 +739,25 @@ export default function PunchClock() {
     } else { doCopy(); }
   }
 
-  const flexTotal = flexBaseMinutes + computeFlexMinutes(sessions, absences, schedule);
+  const flexTotal = flexBaseMinutes + computeFlexMinutes(sessions, absences, schedule, trackingStartDate);
+  const monthStartStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-01`;
+  const weekStartStr  = getWeekMonday(new Date()).toISOString().slice(0, 10);
+  const flexMonth = computeFlexMinutes(sessions, absences, schedule, trackingStartDate, monthStartStr, todayDate);
+  const flexWeek  = computeFlexMinutes(sessions, absences, schedule, trackingStartDate, weekStartStr,  todayDate);
 
   const liveMs = activeSession ? (now() - activeSession.checkIn) : 0;
   const todayCfg = schedule[dayKeyOf(new Date(todayDate + "T12:00:00"))];
   const liveNetRaw = todaySessions.reduce((a, s) => a + ((s.checkOut ?? now()) - s.checkIn), 0) / 60000;
   const liveNet = Math.max(0, liveNetRaw - (todayCfg.active ? todayCfg.lunchMinutes : 0));
+
+  // Leave-time predictor — only on active workdays with an ongoing session.
+  // Treats session time as pure work (lunch is opted-in by punching out, not auto-deducted).
+  const showLeaveTime  = isIn && todayCfg.active;
+  const todaysTarget   = todayCfg.active ? netDayMin(todayCfg) : 0;
+  const todayWorkedRaw = todaySessions.reduce((sum, s) => sum + ((s.checkOut ?? now()) - s.checkIn) / 60000, 0);
+  const leaveRemaining = Math.max(0, todaysTarget - todayWorkedRaw);
+  const leaveAtMs      = now() + leaveRemaining * 60000;
+  const leaveReached   = todayWorkedRaw >= todaysTarget;
 
   const FILTERS: { key: HistoryFilter; label: string }[] = [
     { key: "week",     label: "Den här veckan" },
@@ -779,6 +875,15 @@ export default function PunchClock() {
                   <div className="mt-7 pc-pop">
                     <div className="text-[34px] font-extrabold tabular-nums tracking-tight text-pc-ink">{fmtDur(liveMs / 60000)}</div>
                     <div className="text-[13px] text-pc-muted font-medium mt-0.5">Sedan {fmtTime(activeSession.checkIn)}</div>
+                    {showLeaveTime && (
+                      leaveReached ? (
+                        <div className="text-[13px] mt-2 font-bold text-green-600">Mål uppnått — du kan gå hem</div>
+                      ) : (
+                        <div className="text-[13px] mt-2 text-pc-muted font-semibold">
+                          Du kan gå hem kl. <span className="text-pc-ink font-extrabold tabular-nums">{fmtTime(leaveAtMs)}</span>
+                        </div>
+                      )
+                    )}
                   </div>
                 )}
               </div>
@@ -794,14 +899,6 @@ export default function PunchClock() {
                   <Stat label="Netto arbetstid" value={fmtDur(liveNet)} accent />
                   <Stat label="Antal pass" value={`${todaySessions.length} st`} />
                 </div>
-                <div className="mt-3 pt-3 border-t border-pc-line flex items-center justify-between">
-                  <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-pc-muted">Flexsaldo</div>
-                  <div className={`text-[17px] font-extrabold tabular-nums ${
-                    flexTotal > 0 ? "text-green-600" : flexTotal < 0 ? "text-red-500" : "text-pc-muted"
-                  }`}>
-                    {flexTotal > 0 ? "+" : flexTotal < 0 ? "−" : ""}{fmtMin(Math.abs(flexTotal))}
-                  </div>
-                </div>
                 {todaySessions.length > 0 && (
                   <div className="mt-4 pt-4 border-t border-pc-line space-y-1">
                     {todaySessions.map((s, i) => (
@@ -812,6 +909,26 @@ export default function PunchClock() {
                   </div>
                 )}
               </section>
+
+              {/* Flex section */}
+              <button
+                onClick={() => setFlexBreakdownOpen(true)}
+                className="pc-press w-full bg-white rounded-[24px] p-5 mb-3 shadow-[0_2px_12px_rgba(81,43,43,0.04)] border border-pc-line text-left"
+              >
+                <div className="flex items-baseline justify-between mb-3">
+                  <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-pc-muted">Flexsaldo</div>
+                  <div className="text-[11px] font-semibold text-pc-muted">Visa veckor →</div>
+                </div>
+                <div className={`text-[34px] font-extrabold tabular-nums tracking-tight leading-none ${
+                  flexTotal > 0 ? "text-green-600" : flexTotal < 0 ? "text-red-500" : "text-pc-ink"
+                }`}>
+                  {flexTotal >= 0 ? "+" : "−"}{fmtMin(Math.abs(flexTotal))}
+                </div>
+                <div className="grid grid-cols-2 gap-3 mt-4">
+                  <FlexSubStat label="Den här månaden" minutes={flexMonth} />
+                  <FlexSubStat label="Den här veckan"  minutes={flexWeek} />
+                </div>
+              </button>
 
               {/* Action buttons */}
               <div className="grid grid-cols-2 gap-3 mb-3">
@@ -1390,6 +1507,23 @@ export default function PunchClock() {
         onToken={handleSyncToken}
         onRestore={handleSyncRestore}
       />
+
+      <FlexBreakdownModal
+        open={flexBreakdownOpen}
+        onClose={() => setFlexBreakdownOpen(false)}
+        trackingStartDate={trackingStartDate}
+        weeks={computeWeeklyFlexBreakdown(sessions, absences, schedule, trackingStartDate, 12)}
+        total={flexTotal}
+      />
+
+      {latePunchoutOpen && activeSession && (
+        <LatePunchoutModal
+          activeSession={activeSession}
+          todaysTargetMin={todayCfg.active ? netDayMin(todayCfg) : 0}
+          onCancel={() => setLatePunchoutOpen(false)}
+          onSave={handleLatePunchoutSave}
+        />
+      )}
     </div>
   );
 }
@@ -1469,6 +1603,19 @@ function Stat({ label, value, accent }: { label: string; value: string; accent?:
     <div className="bg-pc-apricot rounded-2xl px-4 py-3">
       <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-1">{label}</div>
       <div className={`text-[22px] font-extrabold tabular-nums tracking-tight ${accent ? "text-pc-orange-deep" : "text-pc-ink"}`}>{value}</div>
+    </div>
+  );
+}
+
+function FlexSubStat({ label, minutes }: { label: string; minutes: number }) {
+  const color = minutes > 0 ? "text-green-600" : minutes < 0 ? "text-red-500" : "text-pc-muted";
+  const sign  = minutes >= 0 ? "+" : "−";
+  return (
+    <div className="bg-pc-apricot rounded-2xl px-4 py-3">
+      <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-1">{label}</div>
+      <div className={`text-[17px] font-extrabold tabular-nums tracking-tight ${color}`}>
+        {sign}{fmtMin(Math.abs(minutes))}
+      </div>
     </div>
   );
 }
