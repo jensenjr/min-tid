@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { type WeekSchedule, dayKeyOf, netDayMin } from "../lib/schedule";
 
 export type AbsenceCategory =
   | "sjuk"
@@ -39,10 +40,14 @@ function todayStr() { return new Date().toISOString().slice(0, 10); }
 
 export default function AbsenceModal({
   open,
+  initialDate,
+  schedule,
   onClose,
   onSave,
 }: {
   open: boolean;
+  initialDate?: string;
+  schedule?: WeekSchedule;
   onClose: () => void;
   onSave: (entry: AbsenceEntry) => void;
 }) {
@@ -56,15 +61,27 @@ export default function AbsenceModal({
 
   useEffect(() => {
     if (open) {
+      const d = initialDate ?? todayStr();
       setCategory("sjuk");
-      setStartDate(todayStr());
-      setEndDate(todayStr());
+      setStartDate(d);
+      setEndDate(d);
       setFullDay(true);
       setManualHours("8");
       setNote("");
       setErr("");
     }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reference hours = scheduled net minutes for the start day (fall back to 8h)
+  const refDay = schedule ? schedule[dayKeyOf(new Date((startDate || todayStr()) + "T12:00:00"))] : undefined;
+  const refHours = refDay && refDay.active ? netDayMin(refDay) / 60 : 8;
+  const presetPcts = [100, 75, 50, 25] as const;
+  function applyPreset(pct: number) {
+    const v = Math.round(refHours * pct) / 100;
+    // Snap to 0.5h increments, keep at least 0.5h
+    const snapped = Math.max(0.5, Math.round(v * 2) / 2);
+    setManualHours(String(snapped));
+  }
 
   if (!open) return null;
 
@@ -200,6 +217,29 @@ export default function AbsenceModal({
         </div>
         {!fullDay && (
           <>
+            <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-2">
+              Snabbval <span className="normal-case font-medium tracking-normal text-[#9c7c5c]">(av {refHours.toString().replace(".", ",")} h)</span>
+            </div>
+            <div className="grid grid-cols-4 gap-2 mb-3">
+              {presetPcts.map(pct => {
+                const hoursForPct = Math.max(0.5, Math.round(refHours * pct / 100 * 2) / 2);
+                const active = Math.abs(parseFloat(manualHours) - hoursForPct) < 0.01;
+                return (
+                  <button
+                    key={pct}
+                    type="button"
+                    onClick={() => applyPreset(pct)}
+                    className={`py-2 rounded-[12px] text-[12px] font-bold border transition-colors ${
+                      active
+                        ? "bg-pc-orange text-white border-pc-orange shadow-[0_4px_12px_-4px_rgba(255,95,0,0.45)]"
+                        : "bg-[#fdf6ee] border-[#ece6df] text-[#2d1717]"
+                    }`}
+                  >
+                    {pct}%
+                  </button>
+                );
+              })}
+            </div>
             <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-2">
               Antal timmar <span className="normal-case font-medium tracking-normal text-[#9c7c5c]">(per dag)</span>
             </div>

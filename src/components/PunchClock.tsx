@@ -257,9 +257,12 @@ function buildShareText(sessions: Session[], absences: AbsenceEntry[], expenses:
     let totalExpenses = 0;
     for (const e of periodExpenses) {
       const meta = EXPENSE_META[e.category];
-      const kmPart = e.km != null ? ` ${e.km} km ·` : "";
-      lines.push(`  ${fmtDateLabel(e.date)}: ${meta.emoji} ${meta.label} —${kmPart} ${e.amount} kr${e.hasReceipt ? " 🧾" : ""}${e.note ? ` (${e.note})` : ""}`);
-      totalExpenses += e.amount;
+      const parts: string[] = [];
+      if (e.km != null) parts.push(`${e.km} km`);
+      if (e.amount != null) parts.push(`${e.amount} kr`);
+      const detail = parts.length ? ` — ${parts.join(" · ")}` : "";
+      lines.push(`  ${fmtDateLabel(e.date)}: ${meta.emoji} ${meta.label}${detail}${e.hasReceipt ? " 🧾" : ""}${e.note ? ` (${e.note})` : ""}`);
+      totalExpenses += e.amount ?? 0;
     }
     lines.push(`Total utlägg: ${totalExpenses} kr`);
   }
@@ -592,6 +595,7 @@ export default function PunchClock() {
   const [scheduleModal, setScheduleModal] = useState(false);
   const [settingsModal, setSettingsModal] = useState(false);
   const [addForDate, setAddForDate] = useState<string | null>(null);
+  const [absenceForDate, setAbsenceForDate] = useState<string | null>(null);
   const [editSession, setEditSession] = useState<Session | null>(null);
   const [shareText, setShareText] = useState("");
   const [shared, setShared] = useState(false);
@@ -723,10 +727,6 @@ export default function PunchClock() {
     setEditSession(null);
   }
   function handleDeleteAbsence(id: string) { setAbsences(prev => prev.filter(a => a.id !== id)); }
-  function handleSaveAbsence(entry: AbsenceEntry) {
-    setAbsences(prev => [...prev, entry]);
-    setAbsenceModal(false);
-  }
   function handleSaveExpense(entry: ExpenseEntry) { setExpenses(prev => [...prev, entry]); setExpenseModal(false); }
   function handleDeleteExpense(id: string) { setExpenses(prev => prev.filter(e => e.id !== id)); }
   function handleOnboardingComplete(result: OnboardingResult) {
@@ -1133,12 +1133,20 @@ export default function PunchClock() {
                             <div className="text-pc-muted text-[13px] text-center py-1">Inga registreringar denna dag.</div>
                           )}
 
-                          <button
-                            onClick={() => setAddForDate(calendarSelectedDate)}
-                            className="pc-press w-full flex items-center justify-center gap-1.5 py-2.5 rounded-[12px] border border-dashed border-pc-line text-pc-muted text-[13px] font-semibold hover:border-pc-orange hover:text-pc-orange transition-colors"
-                          >
-                            <span className="text-[15px] leading-none">+</span> Lägg till tid
-                          </button>
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              onClick={() => setAddForDate(calendarSelectedDate)}
+                              className="pc-press flex items-center justify-center gap-1.5 py-2.5 rounded-[12px] border border-dashed border-pc-line text-pc-muted text-[13px] font-semibold hover:border-pc-orange hover:text-pc-orange transition-colors"
+                            >
+                              <span className="text-[15px] leading-none">+</span> Tid
+                            </button>
+                            <button
+                              onClick={() => setAbsenceForDate(calendarSelectedDate)}
+                              className="pc-press flex items-center justify-center gap-1.5 py-2.5 rounded-[12px] border border-dashed border-pc-line text-pc-muted text-[13px] font-semibold hover:border-pc-orange hover:text-pc-orange transition-colors"
+                            >
+                              <span className="text-[15px] leading-none">+</span> Avvikelse
+                            </button>
+                          </div>
                         </div>
                       </div>
                     );
@@ -1272,12 +1280,20 @@ export default function PunchClock() {
                                     </div>
                                   )}
 
-                                  <button
-                                    onClick={() => setAddForDate(date)}
-                                    className="pc-press mt-2 w-full flex items-center justify-center gap-1.5 py-2 rounded-[12px] border border-dashed border-pc-line text-pc-muted text-[12px] font-semibold hover:border-pc-orange hover:text-pc-orange transition-colors"
-                                  >
-                                    <span className="text-[14px] leading-none">+</span> Lägg till tid
-                                  </button>
+                                  <div className="mt-2 grid grid-cols-2 gap-2">
+                                    <button
+                                      onClick={() => setAddForDate(date)}
+                                      className="pc-press flex items-center justify-center gap-1.5 py-2 rounded-[12px] border border-dashed border-pc-line text-pc-muted text-[12px] font-semibold hover:border-pc-orange hover:text-pc-orange transition-colors"
+                                    >
+                                      <span className="text-[14px] leading-none">+</span> Tid
+                                    </button>
+                                    <button
+                                      onClick={() => setAbsenceForDate(date)}
+                                      className="pc-press flex items-center justify-center gap-1.5 py-2 rounded-[12px] border border-dashed border-pc-line text-pc-muted text-[12px] font-semibold hover:border-pc-orange hover:text-pc-orange transition-colors"
+                                    >
+                                      <span className="text-[14px] leading-none">+</span> Avvikelse
+                                    </button>
+                                  </div>
                                 </div>
                               );
                             })}
@@ -1321,12 +1337,18 @@ export default function PunchClock() {
                   <div className="mt-4 bg-amber-50 border border-amber-200 rounded-[18px] p-4">
                     <div className="font-bold text-[14px] text-amber-800 mb-2">⚠️ Kvitton att bifoga</div>
                     <div className="space-y-1">
-                      {receiptExpenses.map(e => (
-                        <div key={e.id} className="text-[13px] text-amber-700 font-medium">
-                          • {EXPENSE_META[e.category as ExpenseCategory].emoji} {EXPENSE_META[e.category as ExpenseCategory].label} — {e.date} — {e.amount} kr
-                          {e.note && <span className="opacity-70"> ({e.note})</span>}
-                        </div>
-                      ))}
+                      {receiptExpenses.map(e => {
+                        const parts: string[] = [];
+                        if (e.km != null) parts.push(`${e.km} km`);
+                        if (e.amount != null) parts.push(`${e.amount} kr`);
+                        const detail = parts.length ? ` — ${parts.join(" · ")}` : "";
+                        return (
+                          <div key={e.id} className="text-[13px] text-amber-700 font-medium">
+                            • {EXPENSE_META[e.category as ExpenseCategory].emoji} {EXPENSE_META[e.category as ExpenseCategory].label} — {e.date}{detail}
+                            {e.note && <span className="opacity-70"> ({e.note})</span>}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 );
@@ -1385,7 +1407,7 @@ export default function PunchClock() {
             const visible = expenses
               .filter(e => e.date >= monthStart && e.date <= monthEnd)
               .sort((a, b) => b.date.localeCompare(a.date));
-            const total = visible.reduce((s, e) => s + e.amount, 0);
+            const total = visible.reduce((s, e) => s + (e.amount ?? 0), 0);
 
             // Group by date
             const byDate: Record<string, ExpenseEntry[]> = {};
@@ -1462,7 +1484,7 @@ export default function PunchClock() {
                                 {e.note && <div className="text-[12px] text-pc-muted font-medium mt-0.5 truncate">{e.note}</div>}
                               </div>
                               <div className="shrink-0 font-extrabold tabular-nums text-[15px] text-pc-ink">
-                                {e.km != null ? `${e.km} km · ` : ""}{e.amount} kr
+                                {[e.km != null ? `${e.km} km` : null, e.amount != null ? `${e.amount} kr` : null].filter(Boolean).join(" · ") || "—"}
                               </div>
                               <button
                                 onClick={() => handleDeleteExpense(e.id)}
@@ -1543,9 +1565,15 @@ export default function PunchClock() {
       )}
 
       <AbsenceModal
-        open={absenceModal}
-        onClose={() => setAbsenceModal(false)}
-        onSave={handleSaveAbsence}
+        open={absenceModal || absenceForDate !== null}
+        initialDate={absenceForDate ?? undefined}
+        schedule={schedule}
+        onClose={() => { setAbsenceModal(false); setAbsenceForDate(null); }}
+        onSave={(entry) => {
+          setAbsences(prev => [...prev, entry]);
+          setAbsenceModal(false);
+          setAbsenceForDate(null);
+        }}
       />
 
       <ExpenseModal

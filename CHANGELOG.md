@@ -5,6 +5,15 @@ All notable changes to **min-tid** are recorded here. Format loosely follows [Ke
 ## [Unreleased]
 
 ### Added
+- **Per-day "Avvikelse" button** in the calendar day card and per-day rows of the history list — alongside the existing "Tid" button, so you can register absence on any day directly from history. AbsenceModal now accepts `initialDate` and `schedule` props.
+- **Percentage presets** (100% / 75% / 50% / 25%) in `AbsenceModal` when "Ange timmar" is active. Each preset fills the manual-hours field with that fraction of the start day's scheduled net hours (or 8 h fallback). Snapped to 0.5 h. Numeric input still editable.
+- **`amount` is now optional on `ExpenseEntry`** — milersättning entries can be saved with only km, no SEK amount required. The label gets a "(valfri — räcker med km)" hint when the milersättning category is selected.
+
+### Changed
+- **Expense displays** (list, share text, receipt reminder, month total) handle missing amounts gracefully — km and amount are shown only if present, joined by " · ", with the total summing `e.amount ?? 0`.
+- The single "Lägg till tid" action button per day in history split into two compact buttons ("+ Tid" / "+ Avvikelse").
+
+### Added
 - **Flex section on home view** — replaces the small flex line in the today card. Shows total flex, "Den här månaden", "Den här veckan", and opens a bottom sheet with the last 12 weeks broken down individually.
 - **`trackingStartDate`** in root state — flex accrues from this day forward. Set automatically on first punch; existing users get it backfilled from their earliest session so historic flex stays consistent.
 - **Leave-time predictor** — when an active session is running on an active workday, the clock view shows "Du kan gå hem kl. HH:MM" (or "Mål uppnått — du kan gå hem" once today's net target is reached). Sessions are treated as pure work time — lunch is not auto-added.

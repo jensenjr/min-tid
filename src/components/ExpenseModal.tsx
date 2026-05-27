@@ -13,7 +13,7 @@ export type ExpenseEntry = {
   id: string;
   category: ExpenseCategory;
   date: string;        // "YYYY-MM-DD"
-  amount: number;      // SEK
+  amount?: number;     // SEK — optional for milersättning (km-only entries)
   km?: number;         // only for milersattning
   hasReceipt: boolean;
   note?: string;
@@ -67,10 +67,19 @@ export default function ExpenseModal({
 
   function handleSave() {
     if (!date) { setErr("Ange datum."); return; }
-    const parsedAmount = parseFloat(amount.replace(",", "."));
-    if (isNaN(parsedAmount) || parsedAmount <= 0) { setErr("Ange ett giltigt belopp."); return; }
+    const isMileage = category === "milersattning";
+    let parsedAmount: number | undefined;
+    if (!isMileage) {
+      const v = parseFloat(amount.replace(",", "."));
+      if (isNaN(v) || v <= 0) { setErr("Ange ett giltigt belopp."); return; }
+      parsedAmount = v;
+    } else if (amount.trim()) {
+      // Allow optional amount for milersättning if the user wants to record one
+      const v = parseFloat(amount.replace(",", "."));
+      if (!isNaN(v) && v > 0) parsedAmount = v;
+    }
     let parsedKm: number | undefined;
-    if (category === "milersattning") {
+    if (isMileage) {
       parsedKm = parseFloat(km.replace(",", "."));
       if (isNaN(parsedKm) || parsedKm <= 0) { setErr("Ange antal km."); return; }
     }
@@ -172,7 +181,12 @@ export default function ExpenseModal({
         )}
 
         {/* Amount */}
-        <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-2">Belopp</div>
+        <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-2">
+          Belopp
+          {category === "milersattning" && (
+            <span className="normal-case font-medium tracking-normal text-[#9c7c5c]"> (valfri — räcker med km)</span>
+          )}
+        </div>
         <div className="relative mb-4">
           <input
             type="number"
