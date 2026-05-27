@@ -269,11 +269,12 @@ function buildShareText(sessions: Session[], absences: AbsenceEntry[], expenses:
 }
 
 // ─── Flex bank ────────────────────────────────────────────────
-// Strict day-by-day accrual: for every active scheduled workday between
-// `trackingStartDate` and `today` (inclusive), flex += (actual net − scheduled net).
+// Day-by-day accrual over completed (past) days only. For every day strictly
+// before today between `trackingStartDate` and the range end, flex += (actual − norm).
 // Non-flex absences (VAB, semester, etc.) excuse the day — they reduce the norm but
 // don't drain flex. Flex absences deduct their minutes from the bank as intended.
-// Active (ongoing) sessions are ignored — only completed sessions count.
+// **Today never contributes to flex.** A day's contribution rolls in the morning after
+// it ends — that way an unworked or partly-worked today doesn't show as red flex.
 function computeFlexMinutes(
   sessions: Session[],
   absences: AbsenceEntry[],
@@ -293,7 +294,7 @@ function computeFlexMinutes(
   for (const s of sessions) {
     if (s.checkOut === null) continue;
     const d = new Date(s.checkIn).toISOString().slice(0, 10);
-    if (d < start || d > end) continue;
+    if (d < start || d >= today) continue;
     (byDate[d] ??= []).push(s);
   }
 
@@ -303,6 +304,9 @@ function computeFlexMinutes(
 
   while (cur <= endDate) {
     const dateStr = cur.toISOString().slice(0, 10);
+    // Skip today and any future date — only past, completed days contribute.
+    if (dateStr >= today) break;
+
     const dayCfg = schedule[dayKeyOf(cur)];
     const dayAbsences = getAbsencesForDate(absences, dateStr);
     const daySessions = byDate[dateStr] ?? [];

@@ -12,7 +12,8 @@ All notable changes to **min-tid** are recorded here. Format loosely follows [Ke
 - New components: `FlexBreakdownModal.tsx`, `LatePunchoutModal.tsx`.
 
 ### Changed
-- **`computeFlexMinutes`** rewritten for strict day-by-day accrual from `trackingStartDate`. Every active scheduled workday in range contributes `actual − scheduled net`; non-flex absences (VAB, semester, etc.) reduce that day's norm but don't drain the bank; flex-leave absences still deduct from the bank.
+- **`computeFlexMinutes`** rewritten for day-by-day accrual from `trackingStartDate`. Every scheduled workday strictly **before today** contributes `actual − scheduled net`; non-flex absences (VAB, semester, etc.) reduce that day's norm but don't drain the bank; flex-leave absences still deduct from the bank.
+- **Today never contributes to flex.** A day's impact rolls in the morning after it ends, so an unworked or partly-worked today never shows as red flex. The leave-time predictor in the clock view is the live signal for the in-progress day.
 - **Active sessions no longer count toward flex.** Only completed sessions contribute — the live running timer doesn't shift the saldo until you punch out.
 - Sync `SyncState` includes `trackingStartDate`; it round-trips with login/restore and the debounced push.
 

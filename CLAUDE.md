@@ -81,9 +81,10 @@ weeklyNetMin(schedule) // sum of netDayMin across all 7 days
 
 `computeFlexMinutes(sessions, absences, schedule, trackingStartDate, rangeStart?, rangeEnd?)` in `PunchClock.tsx`:
 
-- Strict day-by-day accrual from `trackingStartDate` to today (or the provided range).
+- Day-by-day accrual from `trackingStartDate` over **completed past days only** (date < today).
+- **Today never contributes** — a day's flex impact rolls in the morning after it ends. This prevents an unworked or partly-worked today from showing as red flex; the live running timer + leave-time predictor handle the in-progress signal separately.
 - For each day in range: `flex += actual_net − norm`, where `norm = netDayMin(cfg) − non_flex_absence_min` (clamped at 0). Flex-leave absences additionally drain the bank by their own minutes.
-- **Only completed sessions count** — active sessions never shift the saldo. The live running timer stays in the "Idag" card only.
+- Only completed sessions count — active sessions never shift the saldo.
 - Total displayed = `flexBaseMinutes + computeFlexMinutes(...)`; `flexBaseMinutes` is a one-time correction users can set on first sync. The month/week sub-stats and 12-week breakdown call the same function with a `rangeStart`/`rangeEnd` and intentionally exclude `flexBaseMinutes`.
 - `computeWeeklyFlexBreakdown(...)` is a thin wrapper that calls the per-week computation for the last N weeks (newest first), stopping when a week ends before `trackingStartDate`.
 
