@@ -8,7 +8,7 @@ import FlexBreakdownModal from "./FlexBreakdownModal";
 import LatePunchoutModal from "./LatePunchoutModal";
 import { syncPush, syncDeleteAccount, SYNC_TOKEN_KEY, type SyncState } from "../lib/sync";
 import {
-  type WeekSchedule,
+  type WeekSchedule, type DayConfig,
   DEFAULT_SCHEDULE, dayKeyOf, netDayMin, weeklyNetMin, fmtMin,
   migrateNormHours, migrateSchedule,
 } from "../lib/schedule";
@@ -332,6 +332,64 @@ function computeFlexMinutes(
   return flex;
 }
 
+// Today's contribution to the flex bank — added once today's shift looks settled.
+// "Settled" = no active session AND at least one completed session today (or a flex
+// absence on today). During an active session, today contributes 0 — the live
+// running timer and the "Idag" sub-stat are the in-progress signals.
+function computeTodayContribution(
+  sessions: Session[],
+  absences: AbsenceEntry[],
+  schedule: WeekSchedule,
+  today: string,
+  trackingStartDate: string | undefined,
+): number {
+  if (!trackingStartDate || today < trackingStartDate) return 0;
+
+  const todaySessions = sessions.filter(s => new Date(s.checkIn).toISOString().slice(0, 10) === today);
+  const hasActive = todaySessions.some(s => s.checkOut === null);
+  if (hasActive) return 0;
+  const completedToday = todaySessions.filter(s => s.checkOut !== null);
+
+  const dayCfg = schedule[dayKeyOf(new Date(today + "T12:00:00"))];
+  const dayAbsences = getAbsencesForDate(absences, today);
+
+  let flexAbsMin = 0;
+  let nonFlexAbsMin = 0;
+  for (const a of dayAbsences) {
+    const min = a.hours !== undefined ? Math.round(a.hours * 60) : netDayMin(dayCfg);
+    if (a.category === "flex") flexAbsMin += min;
+    else nonFlexAbsMin += min;
+  }
+
+  // Don't commit anything until the user has actually interacted with today
+  // (punched in/out at least once or has a flex absence).
+  if (completedToday.length === 0 && flexAbsMin === 0) return 0;
+
+  const scheduledNorm = dayCfg.active ? netDayMin(dayCfg) : 0;
+  const norm = Math.max(0, scheduledNorm - nonFlexAbsMin);
+  const actual = completedToday.length > 0 ? computeDayMinutes(completedToday, today, schedule).net : 0;
+
+  return (actual - norm) - flexAbsMin;
+}
+
+// Live per-day flex shown on the dashboard. Unlike `computeTodayContribution`,
+// this updates continuously while you're punched in so you can see "how today is
+// going" in real time — even mid-shift.
+function computeTodayDelta(
+  todaySessions: Session[],
+  todayCfg: DayConfig,
+): number {
+  let raw = 0;
+  for (const s of todaySessions) {
+    const end = s.checkOut ?? now();
+    raw += (end - s.checkIn) / 60000;
+  }
+  const lunch = todayCfg.active ? todayCfg.lunchMinutes : 0;
+  const liveNet = Math.max(0, raw - lunch);
+  const target = todayCfg.active ? netDayMin(todayCfg) : 0;
+  return liveNet - target;
+}
+
 // Week-by-week flex breakdown for the last N weeks (newest first).
 function computeWeeklyFlexBreakdown(
   sessions: Session[],
@@ -339,6 +397,7 @@ function computeWeeklyFlexBreakdown(
   schedule: WeekSchedule,
   trackingStartDate: string | undefined,
   weeks: number,
+  todayContribution: number,
 ): { mondayStr: string; minutes: number }[] {
   if (!trackingStartDate) return [];
   const out: { mondayStr: string; minutes: number }[] = [];
@@ -351,7 +410,8 @@ function computeWeeklyFlexBreakdown(
     const monStr = mon.toISOString().slice(0, 10);
     const sunStr = sun.toISOString().slice(0, 10);
     if (sunStr < trackingStartDate) break;
-    const minutes = computeFlexMinutes(sessions, absences, schedule, trackingStartDate, monStr, sunStr);
+    let minutes = computeFlexMinutes(sessions, absences, schedule, trackingStartDate, monStr, sunStr);
+    if (i === 0) minutes += todayContribution; // current week picks up today's committed flex
     out.push({ mondayStr: monStr, minutes });
   }
   return out;
@@ -743,16 +803,24 @@ export default function PunchClock() {
     } else { doCopy(); }
   }
 
-  const flexTotal = flexBaseMinutes + computeFlexMinutes(sessions, absences, schedule, trackingStartDate);
-  const monthStartStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-01`;
-  const weekStartStr  = getWeekMonday(new Date()).toISOString().slice(0, 10);
-  const flexMonth = computeFlexMinutes(sessions, absences, schedule, trackingStartDate, monthStartStr, todayDate);
-  const flexWeek  = computeFlexMinutes(sessions, absences, schedule, trackingStartDate, weekStartStr,  todayDate);
+  const monthStartStr   = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-01`;
+  const weekStartStr    = getWeekMonday(new Date()).toISOString().slice(0, 10);
+  const flexPastTotal   = computeFlexMinutes(sessions, absences, schedule, trackingStartDate);
+  const flexPastMonth   = computeFlexMinutes(sessions, absences, schedule, trackingStartDate, monthStartStr, todayDate);
+  const flexPastWeek    = computeFlexMinutes(sessions, absences, schedule, trackingStartDate, weekStartStr,  todayDate);
+  const todayCommitted  = computeTodayContribution(sessions, absences, schedule, todayDate, trackingStartDate);
+  const flexTotal       = flexBaseMinutes + flexPastTotal + todayCommitted;
+  const flexMonth       = flexPastMonth + todayCommitted;
+  const flexWeek        = flexPastWeek  + todayCommitted;
 
   const liveMs = activeSession ? (now() - activeSession.checkIn) : 0;
   const todayCfg = schedule[dayKeyOf(new Date(todayDate + "T12:00:00"))];
   const liveNetRaw = todaySessions.reduce((a, s) => a + ((s.checkOut ?? now()) - s.checkIn), 0) / 60000;
   const liveNet = Math.max(0, liveNetRaw - (todayCfg.active ? todayCfg.lunchMinutes : 0));
+
+  // Live today delta — shown live in the "Idag" flex sub-stat, regardless of
+  // active state. Negative early in the day, positive once you overshoot target.
+  const todayDelta = computeTodayDelta(todaySessions, todayCfg);
 
   // Leave-time predictor — only on active workdays with an ongoing session.
   // Treats session time as pure work (lunch is opted-in by punching out, not auto-deducted).
@@ -928,9 +996,10 @@ export default function PunchClock() {
                 }`}>
                   {flexTotal >= 0 ? "+" : "−"}{fmtMin(Math.abs(flexTotal))}
                 </div>
-                <div className="grid grid-cols-2 gap-3 mt-4">
-                  <FlexSubStat label="Den här månaden" minutes={flexMonth} />
-                  <FlexSubStat label="Den här veckan"  minutes={flexWeek} />
+                <div className="grid grid-cols-3 gap-2 mt-4">
+                  <FlexSubStat label="Idag"    minutes={todayDelta} />
+                  <FlexSubStat label="Veckan"  minutes={flexWeek} />
+                  <FlexSubStat label="Månaden" minutes={flexMonth} />
                 </div>
               </button>
 
@@ -1516,7 +1585,7 @@ export default function PunchClock() {
         open={flexBreakdownOpen}
         onClose={() => setFlexBreakdownOpen(false)}
         trackingStartDate={trackingStartDate}
-        weeks={computeWeeklyFlexBreakdown(sessions, absences, schedule, trackingStartDate, 12)}
+        weeks={computeWeeklyFlexBreakdown(sessions, absences, schedule, trackingStartDate, 12, todayCommitted)}
         total={flexTotal}
       />
 
@@ -1615,9 +1684,9 @@ function FlexSubStat({ label, minutes }: { label: string; minutes: number }) {
   const color = minutes > 0 ? "text-green-600" : minutes < 0 ? "text-red-500" : "text-pc-muted";
   const sign  = minutes >= 0 ? "+" : "−";
   return (
-    <div className="bg-pc-apricot rounded-2xl px-4 py-3">
-      <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-1">{label}</div>
-      <div className={`text-[17px] font-extrabold tabular-nums tracking-tight ${color}`}>
+    <div className="bg-pc-apricot rounded-2xl px-3 py-3 min-w-0">
+      <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-1 truncate">{label}</div>
+      <div className={`text-[15px] font-extrabold tabular-nums tracking-tight ${color} truncate`}>
         {sign}{fmtMin(Math.abs(minutes))}
       </div>
     </div>

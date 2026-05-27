@@ -13,8 +13,9 @@ All notable changes to **min-tid** are recorded here. Format loosely follows [Ke
 
 ### Changed
 - **`computeFlexMinutes`** rewritten for day-by-day accrual from `trackingStartDate`. Every scheduled workday strictly **before today** contributes `actual − scheduled net`; non-flex absences (VAB, semester, etc.) reduce that day's norm but don't drain the bank; flex-leave absences still deduct from the bank.
-- **Today never contributes to flex.** A day's impact rolls in the morning after it ends, so an unworked or partly-worked today never shows as red flex. The leave-time predictor in the clock view is the live signal for the in-progress day.
-- **Active sessions no longer count toward flex.** Only completed sessions contribute — the live running timer doesn't shift the saldo until you punch out.
+- **Today rolls in when you punch out — not the next morning.** New `computeTodayContribution` adds today's `actual − target` to the total flex (and the week/month sub-stats + the current-week row in the breakdown) the moment the day is "settled" (no active session AND at least one completed session today). During an active session today contributes 0 — no red −8 h in the morning.
+- **New "Idag" sub-stat in the flex section** — live `worked today − today's target`. Green if ≥ 0, red if < 0. Shows you in real time how today is going against the target, independent of whether the contribution has rolled into total yet. Flex section is now a 3-column grid: Idag · Veckan · Månaden.
+- **Active sessions still never count toward total flex.** Only completed sessions feed the bank; the "Idag" sub-stat is the in-progress signal.
 - Sync `SyncState` includes `trackingStartDate`; it round-trips with login/restore and the debounced push.
 
 ### Skipped (intentionally)

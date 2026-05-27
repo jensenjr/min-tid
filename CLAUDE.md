@@ -79,14 +79,27 @@ weeklyNetMin(schedule) // sum of netDayMin across all 7 days
 
 ### Flex bank
 
-`computeFlexMinutes(sessions, absences, schedule, trackingStartDate, rangeStart?, rangeEnd?)` in `PunchClock.tsx`:
+Three flex functions in `PunchClock.tsx`:
 
-- Day-by-day accrual from `trackingStartDate` over **completed past days only** (date < today).
-- **Today never contributes** — a day's flex impact rolls in the morning after it ends. This prevents an unworked or partly-worked today from showing as red flex; the live running timer + leave-time predictor handle the in-progress signal separately.
-- For each day in range: `flex += actual_net − norm`, where `norm = netDayMin(cfg) − non_flex_absence_min` (clamped at 0). Flex-leave absences additionally drain the bank by their own minutes.
-- Only completed sessions count — active sessions never shift the saldo.
-- Total displayed = `flexBaseMinutes + computeFlexMinutes(...)`; `flexBaseMinutes` is a one-time correction users can set on first sync. The month/week sub-stats and 12-week breakdown call the same function with a `rangeStart`/`rangeEnd` and intentionally exclude `flexBaseMinutes`.
-- `computeWeeklyFlexBreakdown(...)` is a thin wrapper that calls the per-week computation for the last N weeks (newest first), stopping when a week ends before `trackingStartDate`.
+**`computeFlexMinutes(sessions, absences, schedule, trackingStartDate, rangeStart?, rangeEnd?)`**
+
+- Day-by-day accrual over **completed past days only** (date < today).
+- For each day in range: `flex += actual_net − norm`, where `norm = netDayMin(cfg) − non_flex_absence_min` (clamped at 0). Flex-leave absences additionally drain the bank.
+- Only completed sessions count. Today is excluded — see the two helpers below for in-progress and just-finished signals.
+
+**`computeTodayContribution(sessions, absences, schedule, today, trackingStartDate)`**
+
+- Returns today's `actual − norm` only when today looks "settled": no active session AND ≥ 1 completed session today (or a flex absence on today).
+- Added to total flex, the week/month sub-stats and the current-week row in the breakdown the moment the user punches out. During an active session it returns 0 — keeps the morning from going red on an unworked day.
+
+**`computeTodayDelta(todaySessions, todayCfg)`**
+
+- Pure live computation: `liveNet − todayTarget`. Updates every tick. Drives the "Idag" sub-stat in the flex section so the user can see in-progress status (− while behind, + once overshoot).
+- Never feeds total flex — it's display-only.
+
+Total displayed = `flexBaseMinutes + computeFlexMinutes(...) + computeTodayContribution(...)`. `flexBaseMinutes` is a one-time correction users can set on first sync. The "Idag" sub-stat uses `computeTodayDelta`; "Veckan" / "Månaden" use the past-day range computation plus `todayContribution`.
+
+`computeWeeklyFlexBreakdown(...)` is a thin wrapper that calls the per-week computation for the last N weeks (newest first); the current week's row adds `todayContribution` so it stays consistent with the "Veckan" sub-stat. Stops when a week ends before `trackingStartDate`.
 
 ### Components
 
