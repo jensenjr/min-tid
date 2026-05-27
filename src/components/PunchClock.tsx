@@ -959,13 +959,20 @@ export default function PunchClock() {
                     <div className="text-[34px] font-extrabold tabular-nums tracking-tight text-pc-ink">{fmtDur(liveMs / 60000)}</div>
                     <div className="text-[13px] text-pc-muted font-medium mt-0.5">Sedan {fmtTime(activeSession.checkIn)}</div>
                     {showLeaveTime && (
-                      leaveReached ? (
-                        <div className="text-[13px] mt-2 font-bold text-green-600">Mål uppnått — du kan gå hem</div>
-                      ) : (
-                        <div className="text-[13px] mt-2 text-pc-muted font-semibold">
-                          Du kan gå hem kl. <span className="text-pc-ink font-extrabold tabular-nums">{fmtTime(leaveAtMs)}</span>
-                        </div>
-                      )
+                      <>
+                        {leaveReached ? (
+                          <div className="text-[13px] mt-2 font-bold text-green-600">Mål uppnått — du kan gå hem</div>
+                        ) : (
+                          <div className="text-[13px] mt-2 text-pc-muted font-semibold">
+                            Du kan gå hem kl. <span className="text-pc-ink font-extrabold tabular-nums">{fmtTime(leaveAtMs)}</span>
+                          </div>
+                        )}
+                        {todayCfg.lunchMinutes > 0 && (
+                          <div className="text-[11px] mt-1 text-pc-muted">
+                            🍽️ Inkl. {todayCfg.lunchMinutes} min lunch (räknas av automatiskt)
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 )}

@@ -141,6 +141,12 @@ export function WeekScheduleEditor({
 
   return (
     <div className="w-full space-y-2">
+      {/* Lunch convention hint */}
+      <div className="bg-pc-peach/60 border border-pc-line rounded-[14px] px-3 py-2 text-[12px] text-pc-ink leading-snug mb-1">
+        <span className="font-bold">🍽️ Lunch räknas av automatiskt</span>
+        <span className="text-pc-muted"> — stämpla inte ut för lunch, minuterna nedan dras från din punchade tid.</span>
+      </div>
+
       {/* Quick-fill */}
       <div className="bg-pc-apricot rounded-[18px] px-4 py-3 border border-pc-line mb-1">
         <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-2">

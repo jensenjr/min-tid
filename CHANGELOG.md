@@ -12,6 +12,12 @@ All notable changes to **min-tid** are recorded here. Format loosely follows [Ke
 
 _Nothing yet._
 
+## [1.0.0-beta.4] — 2026-05-27
+
+### Added
+- **Lunch convention surfaced in the UI.** The schedule editor (both onboarding and "Planera dagar") now opens with a small info card: 🍽️ Lunch räknas av automatiskt — stämpla inte ut för lunch, minuterna nedan dras från din punchade tid. Removes a hidden assumption that bit users by tying lunch deduction to a number they couldn't see acting.
+- **Lunch reminder under the leave-time predictor.** When today's schedule has `lunchMinutes > 0` and a session is active, a faint line below "Du kan gå hem kl. HH:MM" reads `🍽️ Inkl. NN min lunch (räknas av automatiskt)` so users see exactly why the predicted leave time is later than `start + target`.
+
 ## [1.0.0-beta.3] — 2026-05-27
 
 ### Fixed
@@ -91,3 +97,4 @@ First public beta. The app is feature-complete for time, absence and expense tra
 [1.0.0-beta.1]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.1
 [1.0.0-beta.2]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.2
 [1.0.0-beta.3]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.3
+[1.0.0-beta.4]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.4
