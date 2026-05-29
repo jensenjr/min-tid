@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> **Current version: 1.0.0-beta.4.** Exposed to the UI via `__APP_VERSION__` (set by Vite from the root `package.json`) and shown at the bottom of the settings modal. Bump versions in both `package.json` and `server/package.json` together.
+> **Current version: 1.0.0-beta.5.** Exposed to the UI via `__APP_VERSION__` (set by Vite from the root `package.json`) and shown at the bottom of the settings modal. Bump versions in both `package.json` and `server/package.json` together.
 
 ## Commands
 
@@ -105,7 +105,7 @@ Total displayed = `flexBaseMinutes + computeFlexMinutes(...) + computeTodayContr
 
 | File | Responsibility |
 |---|---|
-| `PunchClock.tsx` | Main app shell — clock, history, expenses, share views; all inline sub-components |
+| `PunchClock.tsx` | Main app shell — clock, history, expenses, share views; all inline sub-components. `SessionModal` ("Lägg till tid") supports single-day time entry and a "Flera dagar" mode that fills a date range with a percentage (100/75/50/25) of each scheduled day's net, skipping inactive/weekend days and days that already have a session |
 | `Onboarding.tsx` | First-run flow with welcome → info/login → choice → schedule → sync. Exports `WeekScheduleEditor` used by both onboarding and the "Planera dagar" modal |
 | `SettingsModal.tsx` | Bottom sheet for editing name + department, controlling sync (activate / disconnect), and showing app version |
 | `AbsenceModal.tsx` | Bottom sheet for logging absence entries (VAB, semester, etc.) |

@@ -58,6 +58,14 @@ function fmtDur(minutes: number) {
   return h > 0 ? `${h}h ${m}min` : `${m}min`;
 }
 
+// Local YYYY-MM-DD (avoids the UTC date-shift `toISOString` can cause near midnight).
+function ymdLocal(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 function computeDayMinutes(sessions: Session[], dateStr: string, schedule: WeekSchedule) {
   const cfg = schedule[dayKeyOf(new Date(dateStr + "T12:00:00"))];
   let raw = 0;
@@ -1566,14 +1574,16 @@ export default function PunchClock() {
       )}
 
       {addModal && (
-        <SessionModal schedule={schedule} onClose={() => setAddModal(false)}
-          onSave={s => { setSessions(prev => [...prev, s]); setAddModal(false); }} />
+        <SessionModal schedule={schedule} existingSessions={sessions} onClose={() => setAddModal(false)}
+          onSave={s => { setSessions(prev => [...prev, s]); setAddModal(false); }}
+          onSaveMany={list => { setSessions(prev => [...prev, ...list]); setAddModal(false); }} />
       )}
 
       {addForDate && (
-        <SessionModal schedule={schedule} defaultDate={addForDate}
+        <SessionModal schedule={schedule} defaultDate={addForDate} existingSessions={sessions}
           onClose={() => setAddForDate(null)}
-          onSave={s => { setSessions(prev => [...prev, s]); setAddForDate(null); }} />
+          onSave={s => { setSessions(prev => [...prev, s]); setAddForDate(null); }}
+          onSaveMany={list => { setSessions(prev => [...prev, ...list]); setAddForDate(null); }} />
       )}
 
       {editSession && (
@@ -1750,13 +1760,18 @@ function NavItem({ active, onClick, label, icon }: { active: boolean; onClick: (
 }
 
 // ─── Session Modal ─────────────────────────────────────────────
-function SessionModal({ session, defaultDate, schedule, onClose, onSave }: {
+const MULTI_DAY_MAX_SPAN = 120; // days — guardrail against fat-finger ranges
+
+function SessionModal({ session, defaultDate, schedule, existingSessions, onClose, onSave, onSaveMany }: {
   session?: Session; defaultDate?: string; schedule: WeekSchedule;
-  onClose: () => void; onSave: (s: Session) => void;
+  existingSessions?: Session[];
+  onClose: () => void;
+  onSave: (s: Session) => void;
+  onSaveMany?: (s: Session[]) => void;
 }) {
   const isEdit = !!session;
   const initDate = session
-    ? new Date(session.checkIn).toISOString().slice(0, 10)
+    ? ymdLocal(new Date(session.checkIn))
     : (defaultDate ?? todayStr());
   const initCfg = schedule[dayKeyOf(new Date(initDate + "T12:00:00"))];
 
@@ -1768,14 +1783,53 @@ function SessionModal({ session, defaultDate, schedule, onClose, onSave }: {
     ? new Date(session.checkOut).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })
     : (initCfg.active ? initCfg.endTime : "");
 
+  const [multiDay, setMultiDay] = useState(false);
   const [date, setDate] = useState(initDate);
   const [startTime, setStartTime] = useState(initStart);
   const [endTime, setEndTime] = useState(initEnd);
+  // Multi-day range + percentage of each day's scheduled net
+  const [fromDate, setFromDate] = useState(initDate);
+  const [toDate, setToDate] = useState(initDate);
+  const [pct, setPct] = useState(100);
   const [note, setNote] = useState(session?.note ?? "");
   const [err, setErr] = useState("");
 
   const dayCfg = schedule[dayKeyOf(new Date(date + "T12:00:00"))];
   const scheduledMins = netDayMin(dayCfg);
+
+  const presetPcts = [100, 75, 50, 25] as const;
+
+  // Build the list of sessions a multi-day save would create: one per active,
+  // scheduled day in [fromDate, toDate]. Inactive days (weekends) and days that
+  // already have a session are skipped. Net per day = pct% of that day's
+  // scheduled net; raw = net + lunch (lunch is auto-deducted on read).
+  function buildMultiDayPlan() {
+    const days: { dateStr: string; netMin: number; rawMin: number; cfg: DayConfig }[] = [];
+    let skippedInactive = 0;
+    let skippedExisting = 0;
+    const start = new Date(fromDate + "T12:00:00");
+    const end = new Date(toDate + "T12:00:00");
+    if (isNaN(start.getTime()) || isNaN(end.getTime()) || end < start) {
+      return { days, skippedInactive, skippedExisting, totalNet: 0, tooLong: false };
+    }
+    const span = Math.round((end.getTime() - start.getTime()) / 86400000);
+    if (span > MULTI_DAY_MAX_SPAN) {
+      return { days, skippedInactive, skippedExisting, totalNet: 0, tooLong: true };
+    }
+    const existDates = new Set((existingSessions ?? []).map(s => ymdLocal(new Date(s.checkIn))));
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const dateStr = ymdLocal(d);
+      const cfg = schedule[dayKeyOf(d)];
+      const netSched = netDayMin(cfg);
+      if (!cfg.active || netSched <= 0) { skippedInactive++; continue; }
+      if (existDates.has(dateStr)) { skippedExisting++; continue; }
+      const netMin = Math.round(netSched * pct / 100);
+      const rawMin = netMin + cfg.lunchMinutes;
+      days.push({ dateStr, netMin, rawMin, cfg });
+    }
+    const totalNet = days.reduce((sum, x) => sum + x.netMin, 0);
+    return { days, skippedInactive, skippedExisting, totalNet, tooLong: false };
+  }
 
   function handleSave() {
     if (!startTime) { setErr("Ange starttid."); return; }
@@ -1785,49 +1839,140 @@ function SessionModal({ session, defaultDate, schedule, onClose, onSave }: {
     onSave({ id: session?.id ?? crypto.randomUUID(), checkIn, checkOut, manual: true, note: note.trim() || undefined });
   }
 
+  function handleSaveMulti() {
+    if (!fromDate || !toDate) { setErr("Ange period."); return; }
+    if (toDate < fromDate) { setErr("Slutdatum måste vara samma som eller efter startdatum."); return; }
+    const plan = buildMultiDayPlan();
+    if (plan.tooLong) { setErr("Perioden är för lång (max ca 4 månader)."); return; }
+    if (plan.days.length === 0) { setErr("Inga schemalagda dagar att fylla i perioden."); return; }
+    const sessions: Session[] = plan.days.map(({ dateStr, rawMin, cfg }) => {
+      const checkIn = new Date(`${dateStr}T${cfg.startTime}`).getTime();
+      return {
+        id: crypto.randomUUID(),
+        checkIn,
+        checkOut: checkIn + rawMin * 60000,
+        manual: true,
+        note: note.trim() || undefined,
+      };
+    });
+    (onSaveMany ?? ((list: Session[]) => list.forEach(onSave)))(sessions);
+  }
+
   const previewMs = startTime && endTime
     ? new Date(`${date}T${endTime}`).getTime() - new Date(`${date}T${startTime}`).getTime()
     : null;
   const previewMin = previewMs !== null && previewMs > 0 ? previewMs / 60000 : null;
 
+  const plan = multiDay ? buildMultiDayPlan() : null;
+
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center pc-overlay" style={{ background: "rgba(45,23,23,0.55)" }} onClick={onClose}>
-      <div className="pc-sheet bg-white w-full max-w-[480px] rounded-t-[28px] px-6 pt-6" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)" }} onClick={e => e.stopPropagation()}>
+      <div className="pc-sheet bg-white w-full max-w-[480px] rounded-t-[28px] px-6 pt-6 overflow-y-auto" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)", maxHeight: "92dvh" }} onClick={e => e.stopPropagation()}>
         <div className="w-10 h-1 bg-pc-line rounded-full mx-auto mb-5" />
         <div className="font-extrabold text-[22px] tracking-tight mb-1">{isEdit ? "Redigera pass" : "Lägg till tid"}</div>
-        <div className="text-[13px] text-pc-muted mb-6">
-          {dayCfg.active
-            ? `Schema: ${dayCfg.startTime}–${dayCfg.endTime} · ${fmtMin(scheduledMins)} netto`
-            : "Välj datum, start och sluttid."}
+        <div className="text-[13px] text-pc-muted mb-5">
+          {multiDay
+            ? "Fyll flera dagar på en gång med en andel av schemat."
+            : dayCfg.active
+              ? `Schema: ${dayCfg.startTime}–${dayCfg.endTime} · ${fmtMin(scheduledMins)} netto`
+              : "Välj datum, start och sluttid."}
         </div>
 
-        <Label>Datum</Label>
-        <input type="date" value={date} onChange={e => setDate(e.target.value)} className="pc-input" />
-        <Label>Starttid</Label>
-        <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className="pc-input" />
-        <Label>Sluttid <span className="normal-case font-medium tracking-normal">(valfri — lämna tom om pågående)</span></Label>
-        <input
-          type="time"
-          value={endTime}
-          onChange={e => setEndTime(e.target.value)}
-          className="pc-input"
-          style={{ marginBottom: endTime ? "8px" : "16px" }}
-        />
-        {endTime && (
-          <button
-            type="button"
-            onClick={() => setEndTime("")}
-            className="w-full text-center text-[13px] text-pc-muted font-semibold mb-4 py-2 rounded-[12px] bg-pc-bg hover:text-red-500 hover:bg-red-50 transition-colors"
-            aria-label="Rensa sluttid"
-          >
-            Rensa sluttid
-          </button>
+        {/* Single day / multi-day toggle (only when adding) */}
+        {!isEdit && (
+          <div className="flex gap-2 mb-5">
+            <button
+              type="button"
+              onClick={() => { setMultiDay(false); setErr(""); }}
+              className={`flex-1 py-2.5 rounded-[14px] text-[13px] font-bold border transition-colors ${
+                !multiDay
+                  ? "bg-pc-orange text-white border-pc-orange shadow-[0_4px_12px_-4px_rgba(255,95,0,0.45)]"
+                  : "bg-pc-bg border-pc-line text-pc-ink"
+              }`}
+            >
+              En dag
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMultiDay(true); setErr(""); }}
+              className={`flex-1 py-2.5 rounded-[14px] text-[13px] font-bold border transition-colors ${
+                multiDay
+                  ? "bg-pc-orange text-white border-pc-orange shadow-[0_4px_12px_-4px_rgba(255,95,0,0.45)]"
+                  : "bg-pc-bg border-pc-line text-pc-ink"
+              }`}
+            >
+              Flera dagar
+            </button>
+          </div>
+        )}
+
+        {!multiDay ? (
+          <>
+            <Label>Datum</Label>
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} className="pc-input" />
+            <Label>Starttid</Label>
+            <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className="pc-input" />
+            <Label>Sluttid <span className="normal-case font-medium tracking-normal">(valfri — lämna tom om pågående)</span></Label>
+            <input
+              type="time"
+              value={endTime}
+              onChange={e => setEndTime(e.target.value)}
+              className="pc-input"
+              style={{ marginBottom: endTime ? "8px" : "16px" }}
+            />
+            {endTime && (
+              <button
+                type="button"
+                onClick={() => setEndTime("")}
+                className="w-full text-center text-[13px] text-pc-muted font-semibold mb-4 py-2 rounded-[12px] bg-pc-bg hover:text-red-500 hover:bg-red-50 transition-colors"
+                aria-label="Rensa sluttid"
+              >
+                Rensa sluttid
+              </button>
+            )}
+          </>
+        ) : (
+          <>
+            <Label>Från</Label>
+            <input
+              type="date"
+              value={fromDate}
+              onChange={e => { setFromDate(e.target.value); if (e.target.value > toDate) setToDate(e.target.value); }}
+              className="pc-input"
+            />
+            <Label>Till</Label>
+            <input
+              type="date"
+              value={toDate}
+              min={fromDate}
+              onChange={e => setToDate(e.target.value)}
+              className="pc-input"
+            />
+
+            <Label>Hur mycket jobbade du? <span className="normal-case font-medium tracking-normal">(andel av schemat per dag)</span></Label>
+            <div className="grid grid-cols-4 gap-2 mb-4">
+              {presetPcts.map(p => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setPct(p)}
+                  className={`py-2.5 rounded-[12px] text-[13px] font-bold border transition-colors ${
+                    pct === p
+                      ? "bg-pc-orange text-white border-pc-orange shadow-[0_4px_12px_-4px_rgba(255,95,0,0.45)]"
+                      : "bg-pc-bg border-pc-line text-pc-ink"
+                  }`}
+                >
+                  {p}%
+                </button>
+              ))}
+            </div>
+          </>
         )}
 
         <Label>Anteckning <span className="normal-case font-medium tracking-normal">(valfri)</span></Label>
         <textarea
           rows={2}
-          placeholder="t.ex. Startade tidigt, jobbade ikapp på kvällen…"
+          placeholder={multiDay ? "t.ex. VAB 50 %, delad omsorg" : "t.ex. Startade tidigt, jobbade ikapp på kvällen…"}
           value={note}
           onChange={e => setNote(e.target.value)}
           style={{
@@ -1840,7 +1985,7 @@ function SessionModal({ session, defaultDate, schedule, onClose, onSave }: {
           onBlur={e => { e.currentTarget.style.borderColor = "#ece6df"; e.currentTarget.style.background = "#fdf6ee"; }}
         />
 
-        {previewMin !== null && previewMin > 0 && (
+        {!multiDay && previewMin !== null && previewMin > 0 && (
           <div className="bg-pc-peach rounded-2xl px-4 py-3 mb-4">
             <div className="font-extrabold text-pc-orange-deep text-[17px]">{fmtDur(previewMin)}</div>
             {scheduledMins > 0 && (
@@ -1853,12 +1998,34 @@ function SessionModal({ session, defaultDate, schedule, onClose, onSave }: {
           </div>
         )}
 
+        {multiDay && plan && !plan.tooLong && (
+          <div className="bg-pc-peach rounded-2xl px-4 py-3 mb-4">
+            {plan.days.length > 0 ? (
+              <>
+                <div className="font-extrabold text-pc-orange-deep text-[17px]">
+                  {plan.days.length} {plan.days.length === 1 ? "dag" : "dagar"} · {fmtDur(plan.totalNet)} totalt
+                </div>
+                <div className="text-[12px] text-pc-muted mt-0.5">
+                  {pct}% av schemat per dag
+                  {plan.skippedInactive > 0 && ` · ${plan.skippedInactive} lediga hoppas över`}
+                  {plan.skippedExisting > 0 && ` · ${plan.skippedExisting} redan registrerade`}
+                </div>
+              </>
+            ) : (
+              <div className="text-[13px] text-pc-muted">
+                Inga schemalagda dagar i perioden.
+                {plan.skippedExisting > 0 && ` ${plan.skippedExisting} dag(ar) är redan registrerade.`}
+              </div>
+            )}
+          </div>
+        )}
+
         {err && <div className="text-red-600 text-[13px] mb-3">{err}</div>}
 
         <div className="grid grid-cols-2 gap-3 mt-2">
           <button onClick={onClose} className="pc-press py-4 rounded-[16px] bg-pc-bg border border-pc-line font-bold text-[15px] text-pc-ink">Avbryt</button>
-          <button onClick={handleSave} className="pc-press py-4 rounded-[16px] bg-pc-orange text-white font-bold text-[15px] shadow-[0_8px_20px_-8px_rgba(255,95,0,0.6)]">
-            {isEdit ? "Spara ändringar" : "Spara"}
+          <button onClick={multiDay ? handleSaveMulti : handleSave} className="pc-press py-4 rounded-[16px] bg-pc-orange text-white font-bold text-[15px] shadow-[0_8px_20px_-8px_rgba(255,95,0,0.6)]">
+            {isEdit ? "Spara ändringar" : multiDay ? `Spara ${plan?.days.length ?? 0} dagar` : "Spara"}
           </button>
         </div>
       </div>

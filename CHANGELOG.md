@@ -12,6 +12,18 @@ All notable changes to **min-tid** are recorded here. Format loosely follows [Ke
 
 _Nothing yet._
 
+## [1.0.0-beta.5] — 2026-05-29
+
+### Added
+- **Multi-day percentage entry in "Lägg till tid".** The add-time sheet now has an "En dag / Flera dagar" toggle (single-day stays the default). In "Flera dagar" mode a **Från/Till** range picker appears plus **100 % / 75 % / 50 % / 25 %** presets — the same percentage idea already in "Avvikelse". Saving creates one session per scheduled day in the range, each worth that percentage of *that day's* scheduled net.
+  - Covers the two real cases: VAB 50 % shared with a partner while still working 50 % (→ log 50 % of the workday), and "forgot to punch a whole week, nothing changed" (→ 100 % for every day that week).
+  - **Inactive/weekend days are skipped** (no schedule = nothing added), and **days that already have a session are skipped** so re-running can't double-count. A live preview shows how many days will be filled, the total time, and how many were skipped (lediga / redan registrerade).
+  - Each generated session respects the lunch convention: raw length = `pct% of net + lunchMinutes`, so the resulting net matches the chosen percentage. A 100 % day reproduces the exact scheduled shift.
+  - Range capped at ~4 months as a fat-finger guard.
+
+### Internal
+- `SessionModal` gained `existingSessions` and `onSaveMany` props. New module-level `ymdLocal()` helper formats local `YYYY-MM-DD` to avoid the UTC date-shift `toISOString` can cause near midnight (also now used for the edit-session initial date).
+
 ## [1.0.0-beta.4] — 2026-05-27
 
 ### Added
@@ -98,3 +110,4 @@ First public beta. The app is feature-complete for time, absence and expense tra
 [1.0.0-beta.2]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.2
 [1.0.0-beta.3]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.3
 [1.0.0-beta.4]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.4
+[1.0.0-beta.5]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.5
