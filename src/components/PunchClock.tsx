@@ -201,13 +201,21 @@ function filterAbsences(absences: AbsenceEntry[], filter: HistoryFilter): Absenc
 }
 
 // ─── Share text ───────────────────────────────────────────────
-function buildShareText(sessions: Session[], absences: AbsenceEntry[], expenses: ExpenseEntry[], name: string, schedule: WeekSchedule) {
+function buildShareText(
+  sessions: Session[], absences: AbsenceEntry[], expenses: ExpenseEntry[],
+  name: string, schedule: WeekSchedule,
+  periodStart: string, periodEnd: string, periodLabel: string,
+) {
   const wNorm = weeklyNetMin(schedule);
   const completed = sessions.filter(s => s.checkOut !== null);
+  const inRange = (d: string) => d >= periodStart && d <= periodEnd;
 
   const dateSet = new Set<string>();
-  for (const s of completed) dateSet.add(new Date(s.checkIn).toISOString().slice(0, 10));
-  for (const a of absences) expandAbsenceDates(a).forEach(d => dateSet.add(d));
+  for (const s of completed) {
+    const d = new Date(s.checkIn).toISOString().slice(0, 10);
+    if (inRange(d)) dateSet.add(d);
+  }
+  for (const a of absences) expandAbsenceDates(a).forEach(d => { if (inRange(d)) dateSet.add(d); });
 
   const weekMap: Record<string, Set<string>> = {};
   for (const d of dateSet) {
@@ -217,9 +225,13 @@ function buildShareText(sessions: Session[], absences: AbsenceEntry[], expenses:
   }
 
   const byDate = groupByDate(completed);
-  const weeks = Object.keys(weekMap).sort((a, b) => b.localeCompare(a)).slice(0, 8);
-  const lines: string[] = [`⏱ Tidrapport${name ? " – " + name : ""}\n`];
+  const weeks = Object.keys(weekMap).sort((a, b) => b.localeCompare(a));
+  const lines: string[] = [`⏱ Tidrapport${name ? " – " + name : ""}`, `📅 ${periodLabel}\n`];
   let grandNet = 0;
+
+  if (dateSet.size === 0) {
+    lines.push("Inga registreringar i perioden.");
+  }
 
   for (const wMon of weeks) {
     const wDates = [...weekMap[wMon]].sort();
@@ -261,12 +273,11 @@ function buildShareText(sessions: Session[], absences: AbsenceEntry[], expenses:
     lines.push("");
   }
 
-  lines.push(`Total: ${fmtMin(grandNet)}`);
+  if (dateSet.size > 0) lines.push(`Total: ${fmtMin(grandNet)}`);
 
-  // Expenses within the same 8-week window
-  const weekDates = new Set(weeks.flatMap(wk => [...(weekMap[wk] ?? [])]));
+  // Expenses within the selected period
   const periodExpenses = expenses
-    .filter(e => weekDates.has(e.date))
+    .filter(e => inRange(e.date))
     .sort((a, b) => a.date.localeCompare(b.date));
   if (periodExpenses.length > 0) {
     lines.push(`\n── Utlägg ──`);
@@ -437,10 +448,9 @@ function computeWeeklyFlexBreakdown(
 }
 
 // ─── CSV export ───────────────────────────────────────────────
-function buildCsvExport(sessions: Session[], absences: AbsenceEntry[], schedule: WeekSchedule, year: number, month: number): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const monthStart = `${year}-${pad(month + 1)}-01`;
-  const monthEnd = `${year}-${pad(month + 1)}-${pad(new Date(year, month + 1, 0).getDate())}`;
+function buildCsvExport(sessions: Session[], absences: AbsenceEntry[], schedule: WeekSchedule, periodStart: string, periodEnd: string): string {
+  const monthStart = periodStart;
+  const monthEnd = periodEnd;
 
   const header = ["Datum", "Veckodag", "Incheckning", "Utcheckning", "Netto (min)", "Netto (h)", "Typ", "Kategori", "Anteckning"];
   const dataRows: string[][] = [];
@@ -630,6 +640,11 @@ export default function PunchClock() {
   const [exportMonth, setExportMonth] = useState<{ year: number; month: number }>(() => {
     const n = new Date(); return { year: n.getFullYear(), month: n.getMonth() };
   });
+  const [reportType, setReportType] = useState<"month" | "range">("month");
+  const [reportFrom, setReportFrom] = useState(() => {
+    const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-01`;
+  });
+  const [reportTo, setReportTo] = useState(() => todayStr());
   const [syncToken, setSyncToken]   = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "ok" | "error">("idle");
   const [syncedAt, setSyncedAt]     = useState<number | null>(null);
@@ -804,9 +819,50 @@ export default function PunchClock() {
   }
 
   function handleShare() {
-    setShareText(buildShareText(sessions, absences, expenses, name, schedule));
+    // Open the report builder — don't auto-generate; the user picks a period first.
+    setShareText("");
     setView("share");
     setShared(false);
+  }
+
+  // Resolve the currently selected report period into start/end + labels.
+  function reportPeriod(): { start: string; end: string; label: string; fileLabel: string } {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    if (reportType === "month") {
+      const { year, month } = exportMonth;
+      const start = `${year}-${pad(month + 1)}-01`;
+      const end = `${year}-${pad(month + 1)}-${pad(new Date(year, month + 1, 0).getDate())}`;
+      const raw = new Date(year, month).toLocaleDateString("sv-SE", { month: "long", year: "numeric" });
+      const label = raw.charAt(0).toUpperCase() + raw.slice(1);
+      return { start, end, label, fileLabel: `${year}-${pad(month + 1)}` };
+    }
+    const start = reportFrom <= reportTo ? reportFrom : reportTo;
+    const end = reportFrom <= reportTo ? reportTo : reportFrom;
+    return { start, end, label: `${start} – ${end}`, fileLabel: `${start}_${end}` };
+  }
+
+  function generateReport() {
+    const { start, end, label } = reportPeriod();
+    setShareText(buildShareText(sessions, absences, expenses, name, schedule, start, end, label));
+    setShared(false);
+  }
+
+  function downloadReportCsv() {
+    const { start, end, fileLabel } = reportPeriod();
+    downloadCsv(buildCsvExport(sessions, absences, schedule, start, end), `tidrapport-${fileLabel}.csv`);
+  }
+
+  async function shareReportFile() {
+    const { start, end, fileLabel } = reportPeriod();
+    const csv = buildCsvExport(sessions, absences, schedule, start, end);
+    const file = new File([csv], `tidrapport-${fileLabel}.csv`, { type: "text/csv" });
+    const nav = navigator as Navigator & { canShare?: (d?: ShareData) => boolean };
+    if (nav.canShare && nav.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: "Tidrapport", text: shareText || undefined }); }
+      catch { /* user cancelled */ }
+    } else {
+      downloadReportCsv();
+    }
   }
 
   async function doCopy() {
@@ -1339,58 +1395,45 @@ export default function PunchClock() {
               <button onClick={() => setView("clock")} className="text-pc-orange font-semibold text-[15px] mb-3 flex items-center gap-1">
                 ← Tillbaka
               </button>
-              <h1 className="text-[28px] font-extrabold tracking-tight mb-1">Dela rapport</h1>
-              <p className="text-[14px] text-pc-muted mb-5">Kopiera eller dela som text — till dig själv eller din chef.</p>
-              <textarea
-                readOnly value={shareText}
-                className="w-full min-h-[280px] border border-pc-line rounded-[18px] p-4 text-[13px] leading-[1.7] bg-white text-pc-ink resize-none outline-none"
-                style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}
-              />
-              <div className="grid grid-cols-2 gap-3 mt-4">
-                <button onClick={doCopy} className="pc-press py-4 rounded-[18px] bg-white border border-pc-line text-pc-ink font-bold text-[15px]">
-                  {shared ? "✓ Kopierat!" : "Kopiera"}
+              <h1 className="text-[28px] font-extrabold tracking-tight mb-1">Skapa rapport</h1>
+              <p className="text-[14px] text-pc-muted mb-5">Välj period — månad eller datumintervall. Rapporten kan delas som text eller laddas ner som Excel/CSV.</p>
+
+              {/* Period type */}
+              <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-pc-muted mb-2">Period</div>
+              <div className="flex gap-2 mb-4">
+                <button
+                  type="button"
+                  onClick={() => { setReportType("month"); setShareText(""); }}
+                  className={`flex-1 py-2.5 rounded-[14px] text-[13px] font-bold border transition-colors ${
+                    reportType === "month"
+                      ? "bg-pc-orange text-white border-pc-orange shadow-[0_4px_12px_-4px_rgba(255,95,0,0.45)]"
+                      : "bg-white border-pc-line text-pc-ink"
+                  }`}
+                >
+                  Månad
                 </button>
-                <button onClick={doNativeShare} className="pc-press py-4 rounded-[18px] bg-pc-orange text-white font-bold text-[15px] shadow-[0_8px_20px_-8px_rgba(255,95,0,0.6)]">
-                  Dela
+                <button
+                  type="button"
+                  onClick={() => { setReportType("range"); setShareText(""); }}
+                  className={`flex-1 py-2.5 rounded-[14px] text-[13px] font-bold border transition-colors ${
+                    reportType === "range"
+                      ? "bg-pc-orange text-white border-pc-orange shadow-[0_4px_12px_-4px_rgba(255,95,0,0.45)]"
+                      : "bg-white border-pc-line text-pc-ink"
+                  }`}
+                >
+                  Datumintervall
                 </button>
               </div>
 
-              {/* Receipt reminder */}
-              {(() => {
-                const receiptExpenses = expenses.filter(e => e.hasReceipt).sort((a, b) => a.date.localeCompare(b.date));
-                if (receiptExpenses.length === 0) return null;
-                return (
-                  <div className="mt-4 bg-amber-50 border border-amber-200 rounded-[18px] p-4">
-                    <div className="font-bold text-[14px] text-amber-800 mb-2">⚠️ Kvitton att bifoga</div>
-                    <div className="space-y-1">
-                      {receiptExpenses.map(e => {
-                        const parts: string[] = [];
-                        if (e.km != null) parts.push(`${e.km} km`);
-                        if (e.amount != null) parts.push(`${e.amount} kr`);
-                        const detail = parts.length ? ` — ${parts.join(" · ")}` : "";
-                        return (
-                          <div key={e.id} className="text-[13px] text-amber-700 font-medium">
-                            • {EXPENSE_META[e.category as ExpenseCategory].emoji} {EXPENSE_META[e.category as ExpenseCategory].label} — {e.date}{detail}
-                            {e.note && <span className="opacity-70"> ({e.note})</span>}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Excel / CSV export */}
-              <div className="mt-6 pt-5 border-t border-pc-line">
-                <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-pc-muted mb-3">Exportera per månad</div>
-                <div className="flex gap-2 mb-4 overflow-x-auto hide-scroll -mx-1 px-1">
+              {reportType === "month" ? (
+                <div className="flex gap-2 mb-5 overflow-x-auto hide-scroll -mx-1 px-1">
                   {Array.from({ length: 6 }, (_, i) => {
                     const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i);
                     return { year: d.getFullYear(), month: d.getMonth() };
                   }).map(({ year, month }) => (
                     <button
                       key={`${year}-${month}`}
-                      onClick={() => setExportMonth({ year, month })}
+                      onClick={() => { setExportMonth({ year, month }); setShareText(""); }}
                       className={`pc-press shrink-0 px-4 py-2 rounded-full text-[13px] font-bold transition-colors ${
                         exportMonth.year === year && exportMonth.month === month
                           ? "bg-pc-orange text-white shadow-[0_4px_12px_-4px_rgba(255,95,0,0.45)]"
@@ -1401,24 +1444,94 @@ export default function PunchClock() {
                     </button>
                   ))}
                 </div>
-                <button
-                  onClick={() => {
-                    const { year, month } = exportMonth;
-                    const csv = buildCsvExport(sessions, absences, schedule, year, month);
-                    const pad = (n: number) => String(n).padStart(2, "0");
-                    downloadCsv(csv, `tidrapport-${year}-${pad(month + 1)}.csv`);
-                  }}
-                  className="pc-press w-full py-4 rounded-[18px] bg-white border border-pc-line text-pc-ink font-bold text-[15px] flex items-center justify-center gap-2"
-                >
-                  <svg viewBox="0 0 24 24" className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                    <polyline points="14 2 14 8 20 8" />
-                    <line x1="12" y1="11" x2="12" y2="17" />
-                    <polyline points="9 14 12 17 15 14" />
-                  </svg>
-                  Ladda ner Excel (CSV)
-                </button>
-              </div>
+              ) : (
+                <div className="flex flex-col gap-3 mb-5">
+                  <div>
+                    <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-2">Från</div>
+                    <input
+                      type="date"
+                      value={reportFrom}
+                      onChange={e => { setReportFrom(e.target.value); if (e.target.value > reportTo) setReportTo(e.target.value); setShareText(""); }}
+                      className="pc-input" style={{ marginBottom: 0 }}
+                    />
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-2">Till</div>
+                    <input
+                      type="date"
+                      value={reportTo}
+                      min={reportFrom}
+                      onChange={e => { setReportTo(e.target.value); setShareText(""); }}
+                      className="pc-input" style={{ marginBottom: 0 }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <button
+                onClick={generateReport}
+                className="pc-press w-full py-4 rounded-[18px] bg-pc-orange text-white font-bold text-[15px] shadow-[0_8px_20px_-8px_rgba(255,95,0,0.6)]"
+              >
+                Skapa rapport
+              </button>
+
+              {shareText && (() => {
+                const { start: pStart, end: pEnd } = reportPeriod();
+                const receiptExpenses = expenses
+                  .filter(e => e.hasReceipt && e.date >= pStart && e.date <= pEnd)
+                  .sort((a, b) => a.date.localeCompare(b.date));
+                return (
+                  <div className="mt-5 pt-5 border-t border-pc-line">
+                    <textarea
+                      readOnly value={shareText}
+                      className="w-full min-h-[260px] border border-pc-line rounded-[18px] p-4 text-[13px] leading-[1.7] bg-white text-pc-ink resize-none outline-none"
+                      style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}
+                    />
+                    <div className="grid grid-cols-2 gap-3 mt-4">
+                      <button onClick={doCopy} className="pc-press py-4 rounded-[18px] bg-white border border-pc-line text-pc-ink font-bold text-[15px]">
+                        {shared ? "✓ Kopierat!" : "Kopiera text"}
+                      </button>
+                      <button onClick={doNativeShare} className="pc-press py-4 rounded-[18px] bg-pc-orange text-white font-bold text-[15px] shadow-[0_8px_20px_-8px_rgba(255,95,0,0.6)]">
+                        Dela text
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 mt-3">
+                      <button onClick={downloadReportCsv} className="pc-press py-4 rounded-[18px] bg-white border border-pc-line text-pc-ink font-bold text-[15px] flex items-center justify-center gap-2">
+                        <svg viewBox="0 0 24 24" className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                          <polyline points="14 2 14 8 20 8" />
+                          <line x1="12" y1="11" x2="12" y2="17" />
+                          <polyline points="9 14 12 17 15 14" />
+                        </svg>
+                        Ladda ner CSV
+                      </button>
+                      <button onClick={shareReportFile} className="pc-press py-4 rounded-[18px] bg-white border border-pc-line text-pc-ink font-bold text-[15px]">
+                        Dela fil
+                      </button>
+                    </div>
+
+                    {receiptExpenses.length > 0 && (
+                      <div className="mt-4 bg-amber-50 border border-amber-200 rounded-[18px] p-4">
+                        <div className="font-bold text-[14px] text-amber-800 mb-2">⚠️ Kvitton att bifoga</div>
+                        <div className="space-y-1">
+                          {receiptExpenses.map(e => {
+                            const parts: string[] = [];
+                            if (e.km != null) parts.push(`${e.km} km`);
+                            if (e.amount != null) parts.push(`${e.amount} kr`);
+                            const detail = parts.length ? ` — ${parts.join(" · ")}` : "";
+                            return (
+                              <div key={e.id} className="text-[13px] text-amber-700 font-medium">
+                                • {EXPENSE_META[e.category as ExpenseCategory].emoji} {EXPENSE_META[e.category as ExpenseCategory].label} — {e.date}{detail}
+                                {e.note && <span className="opacity-70"> ({e.note})</span>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
           {/* ── EXPENSES ── */}
@@ -2153,7 +2266,7 @@ function CalendarView({ sessions, absences, schedule, selectedDate, onSelectDate
       {/* Calendar grid */}
       <div className="grid grid-cols-7 gap-1">
         {cells.map(day => {
-          const dateStr = day.toISOString().slice(0, 10);
+          const dateStr = ymdLocal(day);
           const inMonth = day.getMonth() === month;
           const isToday = dateStr === todayS;
           const isPast = dateStr < todayS;

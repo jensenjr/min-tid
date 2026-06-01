@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> **Current version: 1.0.0-beta.5.** Exposed to the UI via `__APP_VERSION__` (set by Vite from the root `package.json`) and shown at the bottom of the settings modal. Bump versions in both `package.json` and `server/package.json` together.
+> **Current version: 1.0.0-beta.6.** Exposed to the UI via `__APP_VERSION__` (set by Vite from the root `package.json`) and shown at the bottom of the settings modal. Bump versions in both `package.json` and `server/package.json` together.
 
 ## Commands
 
@@ -50,6 +50,10 @@ localStorage["sync_token"] = "<JWT>"   // set only when sync is configured
 ```
 
 `trackingStartDate` (YYYY-MM-DD, optional) anchors flex accrual. Set automatically to today on a user's first punch-in; for migrating users it's backfilled in `load()` from the earliest session date so historic flex stays sensible. It also round-trips through sync (`SyncState.trackingStartDate`).
+
+### Date-key gotcha (local vs UTC)
+
+Session timestamps are converted to `YYYY-MM-DD` day-keys with `new Date(ms).toISOString().slice(0,10)` throughout the flex/share code. That's fine for work-hour timestamps but **wrong for a local-midnight `Date`** in a positive-UTC-offset timezone (Sweden is UTC+1/+2): `toISOString()` rolls back to the previous day. The calendar grid builds cells from local-midnight `Date` objects, so it must use the local `ymdLocal(d)` helper (not `toISOString`) — otherwise every cell is off by one day. If you add a new surface that maps a midnight `Date` → day-key, use `ymdLocal`.
 
 ### Mobile layout invariant
 
@@ -105,7 +109,7 @@ Total displayed = `flexBaseMinutes + computeFlexMinutes(...) + computeTodayContr
 
 | File | Responsibility |
 |---|---|
-| `PunchClock.tsx` | Main app shell — clock, history, expenses, share views; all inline sub-components. `SessionModal` ("Lägg till tid") supports single-day time entry and a "Flera dagar" mode that fills a date range with a percentage (100/75/50/25) of each scheduled day's net, skipping inactive/weekend days and days that already have a session |
+| `PunchClock.tsx` | Main app shell — clock, history, expenses, share views; all inline sub-components. `SessionModal` ("Lägg till tid") supports single-day time entry and a "Flera dagar" mode that fills a date range with a percentage (100/75/50/25) of each scheduled day's net, skipping inactive/weekend days and days that already have a session. The "Dela" tab is a report builder: choose a month or a custom date range, then `buildShareText`/`buildCsvExport` generate a text + CSV report for that exact `[start, end]` window |
 | `Onboarding.tsx` | First-run flow with welcome → info/login → choice → schedule → sync. Exports `WeekScheduleEditor` used by both onboarding and the "Planera dagar" modal |
 | `SettingsModal.tsx` | Bottom sheet for editing name + department, controlling sync (activate / disconnect), and showing app version |
 | `AbsenceModal.tsx` | Bottom sheet for logging absence entries (VAB, semester, etc.) |

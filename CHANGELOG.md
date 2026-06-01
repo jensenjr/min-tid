@@ -12,6 +12,19 @@ All notable changes to **min-tid** are recorded here. Format loosely follows [Ke
 
 _Nothing yet._
 
+## [1.0.0-beta.6] — 2026-06-01
+
+### Fixed
+- **Calendar showed every day one slot off.** Each grid cell derived its date key with `toISOString()` on a *local-midnight* `Date`, which in a positive-UTC-offset timezone (Sweden is UTC+1/+2) rolls back to the previous day. So tapping "1 Maj" opened "30 April", and the day-dots/hours appeared shifted — which also read as "the week starts on Sunday" even though the header and grid offset were already Monday-first. Cells now use a local `ymdLocal()` formatter, so the displayed number, the selected-day detail, the data dots, and the today/past highlighting all line up.
+
+### Changed
+- **"Dela" is now a report builder.** Instead of auto-generating a fixed last-8-weeks text, the tab opens a **"Skapa rapport"** flow:
+  - Pick a **period**: a month (last-6-months pills) or a custom **datumintervall** (Från/Till).
+  - **Skapa rapport** then produces the text report *for that exact period* and reveals the share/export actions.
+  - **Kopiera text / Dela text** for the plain-text version, plus **Ladda ner CSV** and **Dela fil** (shares the CSV via the native share sheet where supported, falls back to download).
+  - The receipt-to-attach reminder is now scoped to the selected period.
+- `buildShareText` and `buildCsvExport` take an explicit `[start, end]` range instead of "last 8 weeks" / `(year, month)`; the text report carries a `📅 <period>` header line.
+
 ## [1.0.0-beta.5] — 2026-05-29
 
 ### Added
@@ -111,3 +124,4 @@ First public beta. The app is feature-complete for time, absence and expense tra
 [1.0.0-beta.3]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.3
 [1.0.0-beta.4]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.4
 [1.0.0-beta.5]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.5
+[1.0.0-beta.6]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.6
