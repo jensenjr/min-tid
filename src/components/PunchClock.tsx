@@ -6,6 +6,11 @@ import SettingsModal from "./SettingsModal";
 import SyncModal from "./SyncModal";
 import FlexBreakdownModal from "./FlexBreakdownModal";
 import LatePunchoutModal from "./LatePunchoutModal";
+import AutomationModal from "./AutomationModal";
+import {
+  consumeActionFromUrl, isDuplicateAction, rememberAction, SOURCE_META,
+  type ParsedAction, type ActionSource,
+} from "../lib/actions";
 import { syncPush, syncDeleteAccount, SYNC_TOKEN_KEY, type SyncState } from "../lib/sync";
 import {
   type WeekSchedule, type DayConfig,
@@ -27,7 +32,10 @@ function lateThresholdMs(todayCfg: DayConfig): number {
 }
 
 // ─── Types ────────────────────────────────────────────────────
-type Session = { id: string; checkIn: number; checkOut: number | null; manual: boolean; note?: string };
+type Session = {
+  id: string; checkIn: number; checkOut: number | null; manual: boolean; note?: string;
+  source?: ActionSource; // set when the punch came from a QR/NFC/WiFi/shortcut trigger
+};
 type HistoryFilter = "week" | "lastweek" | "month" | "all";
 
 type StorageShape = {
@@ -650,6 +658,30 @@ export default function PunchClock() {
   const [syncedAt, setSyncedAt]     = useState<number | null>(null);
   const [syncModal, setSyncModal]   = useState(false);
   const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [automationModal, setAutomationModal] = useState(false);
+  const [pendingAction, setPendingAction] = useState<ParsedAction | null>(null);
+  const [confirmAction, setConfirmAction] = useState<ParsedAction | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Schedule banners ("you start at 08:00 — check in?") are dismissible per day.
+  const [bannerDismissed, setBannerDismissed] = useState<string>(
+    () => localStorage.getItem("punchclock_banner_dismissed") ?? ""
+  );
+
+  function dismissBanner(kind: "start" | "end") {
+    // Keep today's dismissals only — yesterday's are irrelevant tomorrow.
+    const keys = bannerDismissed.split(",").filter(k => k.startsWith(todayStr()));
+    keys.push(`${todayStr()}:${kind}`);
+    const next = keys.join(",");
+    localStorage.setItem("punchclock_banner_dismissed", next);
+    setBannerDismissed(next);
+  }
+
+  function showToast(msg: string) {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast(msg);
+    toastTimer.current = setTimeout(() => setToast(null), 4000);
+  }
 
   useEffect(() => {
     const t = setInterval(() => {
@@ -682,7 +714,19 @@ export default function PunchClock() {
     setTrackingStartDate(d.trackingStartDate);
     const token = localStorage.getItem(SYNC_TOKEN_KEY);
     if (token) { setSyncToken(token); setSyncStatus("idle"); }
+    // ?action=in|out|toggle from a QR code / NFC tag / WiFi automation.
+    // Parked in state and executed by the effect below once data is loaded
+    // (and, for brand-new users, once onboarding is done).
+    const urlAction = consumeActionFromUrl();
+    if (urlAction) setPendingAction(urlAction);
   }, []);
+
+  useEffect(() => {
+    if (!pendingAction || !onboardingDone) return;
+    const a = pendingAction;
+    setPendingAction(null);
+    executeAction(a);
+  }, [pendingAction, onboardingDone]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     save({ name, schedule, department, onboardingDone, sessions, absences, expenses, flexBaseMinutes, trackingStartDate });
@@ -725,11 +769,44 @@ export default function PunchClock() {
       if (elapsed > lateThresholdMs(todayCfg)) { setLatePunchoutOpen(true); return; }
       doCheckOut();
     } else {
-      const checkInTime = now();
-      if (!trackingStartDate) {
-        setTrackingStartDate(new Date(checkInTime).toISOString().slice(0, 10));
-      }
-      setSessions(prev => [...prev, { id: crypto.randomUUID(), checkIn: checkInTime, checkOut: null, manual: false }]);
+      doCheckIn();
+    }
+  }
+
+  function doCheckIn(source?: ActionSource, atMs?: number) {
+    const checkInTime = atMs ?? now();
+    if (!trackingStartDate) {
+      setTrackingStartDate(new Date(checkInTime).toISOString().slice(0, 10));
+    }
+    setSessions(prev => [...prev, {
+      id: crypto.randomUUID(), checkIn: checkInTime, checkOut: null,
+      manual: atMs !== undefined, ...(source ? { source } : {}),
+    }]);
+  }
+
+  // Execute a URL action (QR / NFC / WiFi / shortcut) schedule-aware:
+  // duplicates within 2 min are swallowed (WiFi flapping, double scans) and an
+  // auto check-in on a day the schedule marks as free asks for confirmation.
+  function executeAction(a: ParsedAction, confirmed = false) {
+    const meta = SOURCE_META[a.source];
+    const resolved: "in" | "out" = a.action === "toggle" ? (isIn ? "out" : "in") : a.action;
+
+    if (resolved === "in") {
+      if (isIn) { showToast("Du är redan incheckad"); return; }
+      if (isDuplicateAction("in")) { showToast("Incheckning ignorerad — nyss utförd"); return; }
+      if (!todayCfg.active && !confirmed) { setConfirmAction(a); return; }
+      rememberAction("in");
+      doCheckIn(a.source);
+      showToast(`${meta.emoji} Incheckad ${fmtTime(now())} via ${meta.label}`);
+    } else {
+      if (!activeSession) { showToast("Du är inte incheckad"); return; }
+      if (isDuplicateAction("out")) { showToast("Utcheckning ignorerad — nyss utförd"); return; }
+      const elapsed = now() - activeSession.checkIn;
+      if (elapsed < SHORT_SESSION_THRESHOLD_MS) { setShortWarn(true); return; }
+      if (elapsed > lateThresholdMs(todayCfg)) { setLatePunchoutOpen(true); return; }
+      rememberAction("out");
+      doCheckOut();
+      showToast(`${meta.emoji} Utcheckad ${fmtTime(now())} via ${meta.label}`);
     }
   }
 
@@ -906,6 +983,16 @@ export default function PunchClock() {
   const leaveAtMs      = now() + leaveRemaining * 60000;
   const leaveReached   = todayWorkedRaw >= targetRawMin;
 
+  // Schedule prompts (Visma/Fortnox-style "stämpla enligt schema"): nudge to
+  // check in once the scheduled start has passed, and to check out after the
+  // scheduled end. Dismissible per day; re-evaluated by the 10 s tick.
+  const nowHM = new Date().toTimeString().slice(0, 5);
+  const showStartBanner = !isIn && todayCfg.active && todaySessions.length === 0
+    && nowHM >= todayCfg.startTime && nowHM < todayCfg.endTime
+    && !bannerDismissed.includes(`${todayDate}:start`);
+  const showEndBanner = isIn && todayCfg.active && nowHM >= todayCfg.endTime
+    && !bannerDismissed.includes(`${todayDate}:end`);
+
   const FILTERS: { key: HistoryFilter; label: string }[] = [
     { key: "week",     label: "Den här veckan" },
     { key: "lastweek", label: "Förra veckan"   },
@@ -992,6 +1079,34 @@ export default function PunchClock() {
           {/* ── CLOCK ── */}
           {view === "clock" && (
             <div className="pc-fade">
+              {confirmAction && (
+                <ScheduleBanner
+                  emoji="🤔"
+                  text={`Idag är du ledig enligt schemat. Vill du checka in ändå (via ${SOURCE_META[confirmAction.source].label})?`}
+                  primary={{ label: "Checka in", onClick: () => { const a = confirmAction; setConfirmAction(null); executeAction(a, true); } }}
+                  onDismiss={() => setConfirmAction(null)}
+                />
+              )}
+              {!confirmAction && showStartBanner && (
+                <ScheduleBanner
+                  emoji="⏰"
+                  text={`Enligt schemat började du ${todayCfg.startTime}. Checka in?`}
+                  primary={{ label: "Checka in nu", onClick: () => doCheckIn() }}
+                  secondary={{
+                    label: `Från ${todayCfg.startTime}`,
+                    onClick: () => doCheckIn(undefined, new Date(`${todayDate}T${todayCfg.startTime}`).getTime()),
+                  }}
+                  onDismiss={() => dismissBanner("start")}
+                />
+              )}
+              {!confirmAction && showEndBanner && (
+                <ScheduleBanner
+                  emoji="🏁"
+                  text={`Din arbetsdag slutade ${todayCfg.endTime}. Dags att checka ut?`}
+                  primary={{ label: "Checka ut", onClick: handlePunch }}
+                  onDismiss={() => dismissBanner("end")}
+                />
+              )}
               <div className="text-center mt-6 mb-10">
                 <div className="text-[12px] font-semibold uppercase tracking-[0.16em] text-pc-muted mb-6">
                   {isIn ? "Du är incheckad" : "Inte incheckad"}
@@ -1053,6 +1168,11 @@ export default function PunchClock() {
                   <Stat label="Netto arbetstid" value={fmtDur(liveNet)} accent />
                   <Stat label="Antal pass" value={`${todaySessions.length} st`} />
                 </div>
+                <div className="mt-3 text-[12px] font-semibold text-pc-muted">
+                  {todayCfg.active
+                    ? `📋 Schema ${todayCfg.startTime}–${todayCfg.endTime} · ${todayCfg.lunchMinutes} min lunch`
+                    : "📋 Ledig dag enligt schema"}
+                </div>
                 {todaySessions.length > 0 && (
                   <div className="mt-4 pt-4 border-t border-pc-line space-y-1">
                     {todaySessions.map((s, i) => (
@@ -1102,13 +1222,19 @@ export default function PunchClock() {
               </div>
               <button
                 onClick={() => setScheduleModal(true)}
-                className="pc-press w-full rounded-[20px] py-4 font-bold text-[15px] text-white flex items-center justify-center gap-2"
+                className="pc-press w-full rounded-[20px] py-4 font-bold text-[15px] text-white flex items-center justify-center gap-2 mb-3"
                 style={{
                   background: "linear-gradient(135deg, #ff5f00 0%, #e04d00 100%)",
                   boxShadow: "0 6px 20px -6px rgba(255,95,0,0.5)",
                 }}
               >
                 <IconCalendar /> Planera dagar
+              </button>
+              <button
+                onClick={() => setAutomationModal(true)}
+                className="pc-press w-full bg-white border border-pc-line rounded-[20px] py-4 font-bold text-[14px] text-pc-ink flex items-center justify-center gap-2"
+              >
+                <span className="text-pc-orange">⚡</span> Automatisera in/ut-checkning
               </button>
 
             </div>
@@ -1766,6 +1892,56 @@ export default function PunchClock() {
           onSave={handleLatePunchoutSave}
         />
       )}
+
+      <AutomationModal open={automationModal} onClose={() => setAutomationModal(false)} />
+
+      {toast && (
+        <div className="fixed left-1/2 -translate-x-1/2 z-[60] pointer-events-none pc-pop"
+          style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 84px)" }}>
+          <div className="bg-pc-ink text-white text-[13px] font-bold px-4 py-3 rounded-2xl shadow-[0_8px_28px_rgba(45,23,23,0.4)] whitespace-nowrap">
+            {toast}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Schedule banner ───────────────────────────────────────────
+// Inline nudge card on the clock view, driven by today's schedule.
+function ScheduleBanner({ emoji, text, primary, secondary, onDismiss }: {
+  emoji: string;
+  text: string;
+  primary: { label: string; onClick: () => void };
+  secondary?: { label: string; onClick: () => void };
+  onDismiss: () => void;
+}) {
+  return (
+    <div className="mt-4 bg-white border border-pc-orange/30 rounded-[20px] p-4 pc-pop shadow-[0_4px_16px_rgba(255,95,0,0.12)]">
+      <div className="flex items-start gap-3">
+        <span className="text-[20px] leading-none mt-0.5">{emoji}</span>
+        <div className="flex-1 text-[13px] font-semibold text-pc-ink leading-snug">{text}</div>
+        <button onClick={onDismiss} className="shrink-0 w-6 h-6 flex items-center justify-center rounded-lg text-pc-muted hover:bg-pc-peach" aria-label="Stäng">
+          <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+        </button>
+      </div>
+      <div className={`grid gap-2 mt-3 ${secondary ? "grid-cols-2" : "grid-cols-1"}`}>
+        <button
+          onClick={primary.onClick}
+          className="pc-press py-2.5 rounded-[14px] text-white font-bold text-[13px]"
+          style={{ background: "linear-gradient(135deg, #ff5f00 0%, #e04d00 100%)" }}
+        >
+          {primary.label}
+        </button>
+        {secondary && (
+          <button
+            onClick={secondary.onClick}
+            className="pc-press py-2.5 rounded-[14px] bg-pc-bg border border-pc-line font-bold text-[13px] text-pc-ink"
+          >
+            {secondary.label}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -1785,6 +1961,11 @@ function SessionRow({ session, index, onEdit, onDelete }: {
         <div className="flex items-center gap-1.5">
           <span className="text-[14px] font-bold text-pc-ink">Pass {index + 1}</span>
           {session.manual && <span className="text-[11px] text-pc-muted">✏️</span>}
+          {session.source && (
+            <span className="text-[11px] text-pc-muted" title={SOURCE_META[session.source].label}>
+              {SOURCE_META[session.source].emoji}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2 mt-0.5">
           <span className="text-[13px] text-pc-muted tabular-nums font-medium">{timeRange}</span>

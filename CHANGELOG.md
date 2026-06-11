@@ -12,6 +12,24 @@ All notable changes to **min-tid** are recorded here. Format loosely follows [Ke
 
 _Nothing yet._
 
+## [1.0.0-beta.7] — 2026-06-11
+
+### Added
+- **Stämpling utan att öppna appen (URL-actions).** The app now accepts `/?action=in|out|toggle&source=qr|nfc|wifi|shortcut|link`. Any trigger that can open a URL punches the clock: printed QR codes, NFC tags, iOS Shortcuts WiFi automations ("when I connect to the office WiFi → check in"), and home-screen shortcuts. The action is consumed and stripped from the address bar on load (a reload never re-punches), and execution is schedule-aware:
+  - Duplicate triggers within 2 minutes are swallowed (WiFi flapping, double-scanned QR codes).
+  - An automatic check-in on a day the schedule marks as free asks for confirmation instead of silently punching in.
+  - Auto check-out goes through the same short-session and late-punchout guards as the button.
+  - Sessions remember their trigger (`source`) and show a small badge (📷 / 🏷️ / 📶 / ⚡) in the day's session list.
+- **"Automatisera in/ut-checkning"** — new bottom sheet on the clock view with: QR codes for in/ut/växla (printable office signs via "Skriv ut skyltar"), step-by-step iOS Shortcuts recipes for WiFi- and NFC-triggered punching with copy-ready links, and install-to-home-screen instructions.
+- **PWA support.** Web app manifest (standalone display, app shortcuts for "Checka in"/"Checka ut"), SVG + apple-touch icons, and a network-first service worker so the app loads offline. Installed on an iPhone home screen it behaves like a native app.
+- **Schedule nudges (Visma/Fortnox-style).** On the clock view: once the scheduled start has passed without a punch — "Enligt schemat började du 08:00. Checka in?" with a one-tap backdated "Från 08:00" option; once the scheduled end has passed while still checked in — "Dags att checka ut?". Dismissible per day.
+- **Schedule line in the "Idag" card** — shows today's scheduled window and lunch (`Schema 08:00–17:00 · 60 min lunch`) or "Ledig dag enligt schema".
+- Toast feedback for all automated punches ("📶 Incheckad 08:02 via WiFi").
+- `docs/ios-automation.md` — how the URL-action architecture works, the office setup guide, and the roadmap for a native iOS wrapper (Capacitor) for push notifications, Live Activities and Siri.
+
+### Internal
+- New `src/lib/actions.ts` (action parsing/URLs/dedupe), `src/components/AutomationModal.tsx`, `public/` (manifest, icons, service worker), `scripts/gen-icons.mjs` (dependency-free PNG icon generator). New dependency: `uqr` (pure-JS QR rendering).
+
 ## [1.0.0-beta.6] — 2026-06-01
 
 ### Fixed
@@ -125,3 +143,4 @@ First public beta. The app is feature-complete for time, absence and expense tra
 [1.0.0-beta.4]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.4
 [1.0.0-beta.5]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.5
 [1.0.0-beta.6]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.6
+[1.0.0-beta.7]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.7

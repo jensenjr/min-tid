@@ -1,0 +1,19 @@
+{
+  "name": "min tid – Tidrapport",
+  "short_name": "min tid",
+  "description": "Enkel tidsregistrering. Stämpla in, stämpla ut, dela rapport.",
+  "lang": "sv",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#faf6f1",
+  "theme_color": "#ff5f00",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" }
+  ],
+  "shortcuts": [
+    { "name": "Checka in", "url": "/?action=in&source=shortcut", "icons": [{ "src": "/apple-touch-icon.png", "sizes": "180x180" }] },
+    { "name": "Checka ut", "url": "/?action=out&source=shortcut", "icons": [{ "src": "/apple-touch-icon.png", "sizes": "180x180" }] }
+  ]
+}
