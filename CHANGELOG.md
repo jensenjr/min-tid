@@ -20,12 +20,15 @@ _Nothing yet._
   - An automatic check-in on a day the schedule marks as free asks for confirmation instead of silently punching in.
   - Auto check-out goes through the same short-session and late-punchout guards as the button.
   - Sessions remember their trigger (`source`) and show a small badge (📷 / 🏷️ / 📶 / ⚡) in the day's session list.
-- **"Automatisera in/ut-checkning"** — new bottom sheet on the clock view with: QR codes for in/ut/växla (printable office signs via "Skriv ut skyltar"), step-by-step iOS Shortcuts recipes for WiFi- and NFC-triggered punching with copy-ready links, and install-to-home-screen instructions.
+- **"Automatisera in/ut-checkning"** — new bottom sheet, opened from Inställningar (kugghjulet), with: QR codes for in/ut/växla (printable office signs via "Skriv ut skyltar"), step-by-step iOS Shortcuts recipes for WiFi- and NFC-triggered punching with copy-ready links, and install-to-home-screen instructions.
 - **PWA support.** Web app manifest (standalone display, app shortcuts for "Checka in"/"Checka ut"), SVG + apple-touch icons, and a network-first service worker so the app loads offline. Installed on an iPhone home screen it behaves like a native app.
 - **Schedule nudges (Visma/Fortnox-style).** On the clock view: once the scheduled start has passed without a punch — "Enligt schemat började du 08:00. Checka in?" with a one-tap backdated "Från 08:00" option; once the scheduled end has passed while still checked in — "Dags att checka ut?". Dismissible per day.
 - **Schedule line in the "Idag" card** — shows today's scheduled window and lunch (`Schema 08:00–17:00 · 60 min lunch`) or "Ledig dag enligt schema".
 - Toast feedback for all automated punches ("📶 Incheckad 08:02 via WiFi").
 - `docs/ios-automation.md` — how the URL-action architecture works, the office setup guide, and the roadmap for a native iOS wrapper (Capacitor) for push notifications, Live Activities and Siri.
+
+### Changed
+- **Horizontal swipe pickers replaced** — the sideways-scrolling month pills in "Skapa rapport" and "Utlägg" worked poorly on desktop. New `MonthPicker`: two pills for the current and previous month (labelled with the month names) plus **"Annan…"**, which reveals a native dropdown with the last 24 months (native on both phone and desktop, and reaches further back than the old 6-pill row). The history filter pills ("Den här veckan" etc.) became a 2×2 grid instead of a scroll row.
 
 ### Internal
 - New `src/lib/actions.ts` (action parsing/URLs/dedupe), `src/components/AutomationModal.tsx`, `public/` (manifest, icons, service worker), `scripts/gen-icons.mjs` (dependency-free PNG icon generator). New dependency: `uqr` (pure-JS QR rendering).

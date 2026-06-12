@@ -16,6 +16,7 @@ export default function SettingsModal({
   onSave,
   onSetupSync,
   onDisconnectSync,
+  onOpenAutomation,
 }: {
   open: boolean;
   initialName: string;
@@ -27,6 +28,7 @@ export default function SettingsModal({
   onSave: (r: SettingsResult) => void;
   onSetupSync: () => void;
   onDisconnectSync: () => void;
+  onOpenAutomation: () => void;
 }) {
   const [name, setName] = useState(initialName);
   const [department, setDepartment] = useState(initialDepartment ?? "");
@@ -93,8 +95,21 @@ export default function SettingsModal({
           placeholder="t.ex. Lager, Kontor…"
         />
 
+        {/* Automation section */}
+        <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-2 mt-2">Automatisering</div>
+        <button
+          onClick={onOpenAutomation}
+          style={{ width: "100%", padding: "13px 16px", borderRadius: "14px", border: "1.5px solid #ece6df", fontSize: "14px", outline: "none", background: "#fdf6ee", fontWeight: 600, color: "#2d1717", marginBottom: "16px", boxSizing: "border-box", textAlign: "left", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px" }}
+        >
+          <span>⚡</span>
+          <div>
+            <div className="font-bold text-[13px]">Automatisera in/ut-checkning</div>
+            <div className="text-[11px] text-[#9c7c5c] font-medium">QR-koder, NFC-taggar och WiFi via Genvägar</div>
+          </div>
+        </button>
+
         {/* Sync section */}
-        <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-2 mt-2">Synkronisering</div>
+        <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-2">Synkronisering</div>
         {syncToken ? (
           <div className="bg-[#fdf6ee] border border-[#ece6df] rounded-[16px] px-4 py-3 mb-4 flex items-center gap-3">
             <span className="text-[20px] leading-none shrink-0">

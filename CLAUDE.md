@@ -111,13 +111,13 @@ Total displayed = `flexBaseMinutes + computeFlexMinutes(...) + computeTodayContr
 |---|---|
 | `PunchClock.tsx` | Main app shell — clock, history, expenses, share views; all inline sub-components. `SessionModal` ("Lägg till tid") supports single-day time entry and a "Flera dagar" mode that fills a date range with a percentage (100/75/50/25) of each scheduled day's net, skipping inactive/weekend days and days that already have a session. The "Dela" tab is a report builder: choose a month or a custom date range, then `buildShareText`/`buildCsvExport` generate a text + CSV report for that exact `[start, end]` window |
 | `Onboarding.tsx` | First-run flow with welcome → info/login → choice → schedule → sync. Exports `WeekScheduleEditor` used by both onboarding and the "Planera dagar" modal |
-| `SettingsModal.tsx` | Bottom sheet for editing name + department, controlling sync (activate / disconnect), and showing app version |
+| `SettingsModal.tsx` | Bottom sheet for editing name + department, controlling sync (activate / disconnect), opening the automation sheet, and showing app version |
 | `AbsenceModal.tsx` | Bottom sheet for logging absence entries (VAB, semester, etc.) |
 | `ExpenseModal.tsx` | Bottom sheet for logging expense entries (milersättning with km, kost, etc.) |
 | `SyncModal.tsx` | Bottom sheet for setting up sync on an existing device (create code or restore) — collects username + secret |
 | `FlexBreakdownModal.tsx` | Bottom sheet showing total flex + the last 12 weeks of flex broken down individually |
 | `LatePunchoutModal.tsx` | Bottom sheet that intercepts punch-outs after a 4+ hour active session — offers "use now", a custom end-time picker, or cancel |
-| `AutomationModal.tsx` | Bottom sheet ("Automatisera in/ut-checkning") — QR codes (via `uqr`), printable office signs, iOS Shortcuts recipes for WiFi/NFC punching, install-to-home-screen instructions |
+| `AutomationModal.tsx` | Bottom sheet ("Automatisera in/ut-checkning", opened from settings) — QR codes (via `uqr`), printable office signs, iOS Shortcuts recipes for WiFi/NFC punching, install-to-home-screen instructions |
 | `src/lib/schedule.ts` | Pure schedule types, constants, calculations, and localStorage migration |
 | `src/lib/sync.ts` | Thin fetch wrapper for all sync API calls; passes `username` + `secret` |
 | `src/lib/actions.ts` | URL actions (`?action=in\|out\|toggle&source=…`): parse-and-strip from the address bar, build trigger URLs, 2-min dedupe window |

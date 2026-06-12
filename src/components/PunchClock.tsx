@@ -1222,19 +1222,13 @@ export default function PunchClock() {
               </div>
               <button
                 onClick={() => setScheduleModal(true)}
-                className="pc-press w-full rounded-[20px] py-4 font-bold text-[15px] text-white flex items-center justify-center gap-2 mb-3"
+                className="pc-press w-full rounded-[20px] py-4 font-bold text-[15px] text-white flex items-center justify-center gap-2"
                 style={{
                   background: "linear-gradient(135deg, #ff5f00 0%, #e04d00 100%)",
                   boxShadow: "0 6px 20px -6px rgba(255,95,0,0.5)",
                 }}
               >
                 <IconCalendar /> Planera dagar
-              </button>
-              <button
-                onClick={() => setAutomationModal(true)}
-                className="pc-press w-full bg-white border border-pc-line rounded-[20px] py-4 font-bold text-[14px] text-pc-ink flex items-center justify-center gap-2"
-              >
-                <span className="text-pc-orange">⚡</span> Automatisera in/ut-checkning
               </button>
 
             </div>
@@ -1363,12 +1357,12 @@ export default function PunchClock() {
               )}
 
               {historyMode === "list" && (<>
-              <div className="flex gap-2 mb-5 overflow-x-auto hide-scroll -mx-1 px-1">
+              <div className="grid grid-cols-2 gap-2 mb-5">
                 {FILTERS.map(({ key, label }) => (
                   <button
                     key={key}
                     onClick={() => setHistoryFilter(key)}
-                    className={`pc-press shrink-0 px-4 py-2 rounded-full text-[13px] font-bold transition-colors ${
+                    className={`pc-press px-4 py-2 rounded-full text-[13px] font-bold transition-colors ${
                       historyFilter === key
                         ? "bg-pc-orange text-white shadow-[0_4px_12px_-4px_rgba(255,95,0,0.45)]"
                         : "bg-white border border-pc-line text-pc-muted"
@@ -1552,23 +1546,8 @@ export default function PunchClock() {
               </div>
 
               {reportType === "month" ? (
-                <div className="flex gap-2 mb-5 overflow-x-auto hide-scroll -mx-1 px-1">
-                  {Array.from({ length: 6 }, (_, i) => {
-                    const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i);
-                    return { year: d.getFullYear(), month: d.getMonth() };
-                  }).map(({ year, month }) => (
-                    <button
-                      key={`${year}-${month}`}
-                      onClick={() => { setExportMonth({ year, month }); setShareText(""); }}
-                      className={`pc-press shrink-0 px-4 py-2 rounded-full text-[13px] font-bold transition-colors ${
-                        exportMonth.year === year && exportMonth.month === month
-                          ? "bg-pc-orange text-white shadow-[0_4px_12px_-4px_rgba(255,95,0,0.45)]"
-                          : "bg-white border border-pc-line text-pc-muted"
-                      }`}
-                    >
-                      {new Date(year, month).toLocaleDateString("sv-SE", { month: "short", year: "2-digit" })}
-                    </button>
-                  ))}
+                <div className="mb-5">
+                  <MonthPicker value={exportMonth} onChange={m => { setExportMonth(m); setShareText(""); }} />
                 </div>
               ) : (
                 <div className="flex flex-col gap-3 mb-5">
@@ -1662,10 +1641,6 @@ export default function PunchClock() {
           )}
           {/* ── EXPENSES ── */}
           {view === "expenses" && (() => {
-            const months = Array.from({ length: 6 }, (_, i) => {
-              const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i);
-              return { year: d.getFullYear(), month: d.getMonth() };
-            });
             const pad = (n: number) => String(n).padStart(2, "0");
             const monthStart = `${expenseMonth.year}-${pad(expenseMonth.month + 1)}-01`;
             const monthEnd = `${expenseMonth.year}-${pad(expenseMonth.month + 1)}-${pad(new Date(expenseMonth.year, expenseMonth.month + 1, 0).getDate())}`;
@@ -1687,20 +1662,8 @@ export default function PunchClock() {
                 <h1 className="text-[28px] font-extrabold tracking-tight mb-4">Utlägg</h1>
 
                 {/* Month filter */}
-                <div className="flex gap-2 mb-4 overflow-x-auto hide-scroll -mx-1 px-1">
-                  {months.map(({ year, month }) => (
-                    <button
-                      key={`${year}-${month}`}
-                      onClick={() => setExpenseMonth({ year, month })}
-                      className={`pc-press shrink-0 px-4 py-2 rounded-full text-[13px] font-bold transition-colors ${
-                        expenseMonth.year === year && expenseMonth.month === month
-                          ? "bg-pc-orange text-white shadow-[0_4px_12px_-4px_rgba(255,95,0,0.45)]"
-                          : "bg-white border border-pc-line text-pc-muted"
-                      }`}
-                    >
-                      {new Date(year, month).toLocaleDateString("sv-SE", { month: "short", year: "2-digit" })}
-                    </button>
-                  ))}
+                <div className="mb-4">
+                  <MonthPicker value={expenseMonth} onChange={setExpenseMonth} />
                 </div>
 
                 {/* Summary card */}
@@ -1867,6 +1830,7 @@ export default function PunchClock() {
         onSave={handleSettingsSave}
         onSetupSync={() => { setSettingsModal(false); setSyncModal(true); }}
         onDisconnectSync={handleDisconnectSync}
+        onOpenAutomation={() => { setSettingsModal(false); setAutomationModal(true); }}
       />
 
       <SyncModal
@@ -1942,6 +1906,73 @@ function ScheduleBanner({ emoji, text, primary, secondary, onDismiss }: {
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Month picker ──────────────────────────────────────────────
+// Two quick choices (this/last month, labelled with the month names) plus
+// "Annan…" which reveals a native <select> with the last 24 months. Replaces
+// the horizontally-scrolling pill row, which worked poorly on desktop.
+function MonthPicker({ value, onChange }: {
+  value: { year: number; month: number };
+  onChange: (m: { year: number; month: number }) => void;
+}) {
+  const nowD = new Date();
+  const cur = { year: nowD.getFullYear(), month: nowD.getMonth() };
+  const prevD = new Date(cur.year, cur.month - 1, 1);
+  const prev = { year: prevD.getFullYear(), month: prevD.getMonth() };
+  const isCur = value.year === cur.year && value.month === cur.month;
+  const isPrev = value.year === prev.year && value.month === prev.month;
+  const [showOther, setShowOther] = useState(!isCur && !isPrev);
+
+  const monthName = (y: number, m: number, opts: Intl.DateTimeFormatOptions) => {
+    const raw = new Date(y, m).toLocaleDateString("sv-SE", opts);
+    return raw.charAt(0).toUpperCase() + raw.slice(1);
+  };
+
+  const pill = (active: boolean) =>
+    `pc-press px-2 py-2.5 rounded-[14px] text-[13px] font-bold border transition-colors ${
+      active
+        ? "bg-pc-orange text-white border-pc-orange shadow-[0_4px_12px_-4px_rgba(255,95,0,0.45)]"
+        : "bg-white border-pc-line text-pc-ink"
+    }`;
+
+  return (
+    <div>
+      <div className="grid grid-cols-3 gap-2">
+        <button type="button" className={pill(!showOther && isCur)} onClick={() => { setShowOther(false); onChange(cur); }}>
+          {monthName(cur.year, cur.month, { month: "long" })}
+        </button>
+        <button type="button" className={pill(!showOther && isPrev)} onClick={() => { setShowOther(false); onChange(prev); }}>
+          {monthName(prev.year, prev.month, { month: "long" })}
+        </button>
+        <button type="button" className={pill(showOther)} onClick={() => setShowOther(true)}>
+          {showOther && !isCur && !isPrev
+            ? monthName(value.year, value.month, { month: "short", year: "2-digit" })
+            : "Annan…"}
+        </button>
+      </div>
+      {showOther && (
+        <select
+          value={`${value.year}-${value.month}`}
+          onChange={e => {
+            const [y, m] = e.target.value.split("-").map(Number);
+            onChange({ year: y, month: m });
+          }}
+          className="pc-input"
+          style={{ marginBottom: 0, marginTop: 12 }}
+        >
+          {Array.from({ length: 24 }, (_, i) => {
+            const d = new Date(cur.year, cur.month - i, 1);
+            return (
+              <option key={i} value={`${d.getFullYear()}-${d.getMonth()}`}>
+                {monthName(d.getFullYear(), d.getMonth(), { month: "long", year: "numeric" })}
+              </option>
+            );
+          })}
+        </select>
+      )}
     </div>
   );
 }
