@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> **Current version: 1.0.0-beta.6.** Exposed to the UI via `__APP_VERSION__` (set by Vite from the root `package.json`) and shown at the bottom of the settings modal. Bump versions in both `package.json` and `server/package.json` together.
+> **Current version: 1.0.0-beta.7.** Exposed to the UI via `__APP_VERSION__` (set by Vite from the root `package.json`) and shown at the bottom of the settings modal. Bump versions in both `package.json` and `server/package.json` together.
 
 ## Commands
 
@@ -111,14 +111,29 @@ Total displayed = `flexBaseMinutes + computeFlexMinutes(...) + computeTodayContr
 |---|---|
 | `PunchClock.tsx` | Main app shell — clock, history, expenses, share views; all inline sub-components. `SessionModal` ("Lägg till tid") supports single-day time entry and a "Flera dagar" mode that fills a date range with a percentage (100/75/50/25) of each scheduled day's net, skipping inactive/weekend days and days that already have a session. The "Dela" tab is a report builder: choose a month or a custom date range, then `buildShareText`/`buildCsvExport` generate a text + CSV report for that exact `[start, end]` window |
 | `Onboarding.tsx` | First-run flow with welcome → info/login → choice → schedule → sync. Exports `WeekScheduleEditor` used by both onboarding and the "Planera dagar" modal |
-| `SettingsModal.tsx` | Bottom sheet for editing name + department, controlling sync (activate / disconnect), and showing app version |
+| `SettingsModal.tsx` | Bottom sheet for editing name + department, controlling sync (activate / disconnect), opening the automation sheet, and showing app version |
 | `AbsenceModal.tsx` | Bottom sheet for logging absence entries (VAB, semester, etc.) |
 | `ExpenseModal.tsx` | Bottom sheet for logging expense entries (milersättning with km, kost, etc.) |
 | `SyncModal.tsx` | Bottom sheet for setting up sync on an existing device (create code or restore) — collects username + secret |
 | `FlexBreakdownModal.tsx` | Bottom sheet showing total flex + the last 12 weeks of flex broken down individually |
 | `LatePunchoutModal.tsx` | Bottom sheet that intercepts punch-outs after a 4+ hour active session — offers "use now", a custom end-time picker, or cancel |
+| `AutomationModal.tsx` | Bottom sheet ("Automatisera in/ut-checkning", opened from settings) — QR codes (via `uqr`), printable office signs, iOS Shortcuts recipes for WiFi/NFC punching, install-to-home-screen instructions |
 | `src/lib/schedule.ts` | Pure schedule types, constants, calculations, and localStorage migration |
 | `src/lib/sync.ts` | Thin fetch wrapper for all sync API calls; passes `username` + `secret` |
+| `src/lib/actions.ts` | URL actions (`?action=in\|out\|toggle&source=…`): parse-and-strip from the address bar, build trigger URLs, 2-min dedupe window |
+
+### URL actions & automation
+
+Any trigger that can open a URL punches the clock — printed QR codes, NFC tags and WiFi join/leave via iOS Shortcuts automations, and PWA home-screen shortcuts. See `docs/ios-automation.md`. Invariants:
+
+- `consumeActionFromUrl()` strips the params via `history.replaceState` so a reload never re-punches. Call it only once, on mount.
+- Execution is schedule-aware: auto check-in on an inactive day requires confirmation; duplicates within 2 minutes are swallowed; auto check-out goes through the same short-session/late-punchout guards as the button.
+- Sessions record their trigger in `Session.source` (optional — absent for plain button punches); it round-trips through localStorage and sync untouched.
+- Schedule nudge banners ("Enligt schemat började du 08:00 — checka in?") are derived state re-evaluated by the 10 s tick; per-day dismissals live in `localStorage["punchclock_banner_dismissed"]` (device-local, never synced).
+
+### PWA
+
+`public/` holds `manifest.webmanifest` (standalone display + app shortcuts that use URL actions), `icon.svg`, `apple-touch-icon.png` (regenerate with `node scripts/gen-icons.mjs`) and `sw.js` — a network-first service worker (fresh deploys always win; offline falls back to cache; `/api` is never intercepted). The SW is registered from `src/main.tsx` in production builds only.
 
 ### Onboarding flow
 
