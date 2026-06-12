@@ -12,7 +12,7 @@ All notable changes to **min-tid** are recorded here. Format loosely follows [Ke
 
 _Nothing yet._
 
-## [1.0.0-beta.7] — 2026-06-11
+## [1.0.0-beta.7] — 2026-06-12
 
 ### Added
 - **Stämpling utan att öppna appen (URL-actions).** The app now accepts `/?action=in|out|toggle&source=qr|nfc|wifi|shortcut|link`. Any trigger that can open a URL punches the clock: printed QR codes, NFC tags, iOS Shortcuts WiFi automations ("when I connect to the office WiFi → check in"), and home-screen shortcuts. The action is consumed and stripped from the address bar on load (a reload never re-punches), and execution is schedule-aware:
