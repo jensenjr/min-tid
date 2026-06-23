@@ -10,7 +10,8 @@ export type AbsenceCategory =
   | "tjansteledighet"
   | "obetald"
   | "overtid_betald"
-  | "flex";
+  | "flex"
+  | "helgdag";
 
 export type AbsenceEntry = {
   id: string;
@@ -32,6 +33,7 @@ export const ABSENCE_META: Record<AbsenceCategory, { emoji: string; label: strin
   obetald:          { emoji: "💸", label: "Obetald ledighet" },
   overtid_betald:   { emoji: "💰", label: "Övertid (betald)" },
   flex:             { emoji: "⏰", label: "Flex" },
+  helgdag:          { emoji: "🏖️", label: "Helgdag (röd dag)" },
 };
 
 const CATEGORIES = Object.entries(ABSENCE_META) as [AbsenceCategory, { emoji: string; label: string }][];

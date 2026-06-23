@@ -10,6 +10,7 @@ export interface SyncState {
   expenses: unknown[];
   flexBaseMinutes: number;
   trackingStartDate?: string;
+  scheduleExceptions?: unknown;
 }
 
 // Base URL — empty string in dev (Vite proxies /api → localhost:3001)

@@ -38,6 +38,17 @@ type Session = {
 };
 type HistoryFilter = "week" | "lastweek" | "month" | "all";
 
+// An override for a single calendar date — used when the effective work schedule
+// differs from the recurring WeekSchedule (company-wide shortened days, etc.).
+// Keyed by YYYY-MM-DD. For public holidays (user didn't work), use the "helgdag"
+// absence category instead — that excuses the day via the norm calculation.
+type ScheduleException = {
+  type: "override";
+  endTime: string;        // shortened/changed end time, e.g. "13:00"
+  lunchMinutes?: number;  // optional: 0 if no lunch on a short day
+  note?: string;
+};
+
 type StorageShape = {
   name: string;
   schedule: WeekSchedule;
@@ -48,6 +59,7 @@ type StorageShape = {
   expenses: ExpenseEntry[];
   flexBaseMinutes: number;
   trackingStartDate?: string; // YYYY-MM-DD — flex accrues from this day forward
+  scheduleExceptions: Record<string, ScheduleException>; // YYYY-MM-DD → override
 };
 
 // ─── Time helpers ─────────────────────────────────────────────
@@ -74,8 +86,30 @@ function ymdLocal(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-function computeDayMinutes(sessions: Session[], dateStr: string, schedule: WeekSchedule) {
-  const cfg = schedule[dayKeyOf(new Date(dateStr + "T12:00:00"))];
+// Returns the effective DayConfig for a specific date, applying any schedule
+// exception (e.g. company-wide shortened day). Falls back to the weekly schedule.
+function getEffectiveDayConfig(
+  dateStr: string,
+  schedule: WeekSchedule,
+  exceptions: Record<string, ScheduleException> = {},
+): DayConfig {
+  const base = schedule[dayKeyOf(new Date(dateStr + "T12:00:00"))];
+  const exc = exceptions[dateStr];
+  if (!exc) return base;
+  return {
+    ...base,
+    endTime: exc.endTime,
+    lunchMinutes: exc.lunchMinutes ?? base.lunchMinutes,
+  };
+}
+
+function computeDayMinutes(
+  sessions: Session[],
+  dateStr: string,
+  schedule: WeekSchedule,
+  exceptions: Record<string, ScheduleException> = {},
+) {
+  const cfg = getEffectiveDayConfig(dateStr, schedule, exceptions);
   let raw = 0;
   for (const s of sessions) {
     const end = s.checkOut ?? now();
@@ -125,11 +159,15 @@ function groupByDate(sessions: Session[]) {
   return map;
 }
 
-function computeWeekNet(sessions: Session[], schedule: WeekSchedule): number {
+function computeWeekNet(
+  sessions: Session[],
+  schedule: WeekSchedule,
+  exceptions: Record<string, ScheduleException> = {},
+): number {
   const byDate = groupByDate(sessions);
   let total = 0;
   for (const [date, ds] of Object.entries(byDate)) {
-    total += computeDayMinutes(ds, date, schedule).net;
+    total += computeDayMinutes(ds, date, schedule, exceptions).net;
   }
   return total;
 }
@@ -213,6 +251,7 @@ function buildShareText(
   sessions: Session[], absences: AbsenceEntry[], expenses: ExpenseEntry[],
   name: string, schedule: WeekSchedule,
   periodStart: string, periodEnd: string, periodLabel: string,
+  exceptions: Record<string, ScheduleException> = {},
 ) {
   const wNorm = weeklyNetMin(schedule);
   const completed = sessions.filter(s => s.checkOut !== null);
@@ -244,7 +283,7 @@ function buildShareText(
   for (const wMon of weeks) {
     const wDates = [...weekMap[wMon]].sort();
     const wSessions = wDates.flatMap(d => byDate[d] ?? []);
-    const wNet = computeWeekNet(wSessions, schedule);
+    const wNet = computeWeekNet(wSessions, schedule, exceptions);
     grandNet += wNet;
     const diff = wNet - wNorm;
     const diffStr = diff >= 0
@@ -259,7 +298,7 @@ function buildShareText(
       if (ds.length === 0 && da.length === 0) continue;
 
       if (ds.length > 0) {
-        const { net } = computeDayMinutes(ds, d, schedule);
+        const { net } = computeDayMinutes(ds, d, schedule, exceptions);
         lines.push(`  ${fmtDateLabel(d)}: ${fmtMin(net)}`);
         for (const s of ds) {
           lines.push(`    ${fmtTime(s.checkIn)} → ${fmtTime(s.checkOut)}${s.manual ? " ✏️" : ""}`);
@@ -320,6 +359,7 @@ function computeFlexMinutes(
   trackingStartDate: string | undefined,
   rangeStart?: string,
   rangeEnd?: string,
+  exceptions: Record<string, ScheduleException> = {},
 ): number {
   if (!trackingStartDate) return 0;
   const today = todayStr();
@@ -345,7 +385,7 @@ function computeFlexMinutes(
     // Skip today and any future date — only past, completed days contribute.
     if (dateStr >= today) break;
 
-    const dayCfg = schedule[dayKeyOf(cur)];
+    const dayCfg = getEffectiveDayConfig(dateStr, schedule, exceptions);
     const dayAbsences = getAbsencesForDate(absences, dateStr);
     const daySessions = byDate[dateStr] ?? [];
 
@@ -359,7 +399,7 @@ function computeFlexMinutes(
 
     const scheduledNorm = dayCfg.active ? netDayMin(dayCfg) : 0;
     const norm = Math.max(0, scheduledNorm - nonFlexAbsMin);
-    const actual = daySessions.length > 0 ? computeDayMinutes(daySessions, dateStr, schedule).net : 0;
+    const actual = daySessions.length > 0 ? computeDayMinutes(daySessions, dateStr, schedule, exceptions).net : 0;
 
     flex += actual - norm;
     flex -= flexAbsMin;
@@ -380,6 +420,7 @@ function computeTodayContribution(
   schedule: WeekSchedule,
   today: string,
   trackingStartDate: string | undefined,
+  exceptions: Record<string, ScheduleException> = {},
 ): number {
   if (!trackingStartDate || today < trackingStartDate) return 0;
 
@@ -388,7 +429,7 @@ function computeTodayContribution(
   if (hasActive) return 0;
   const completedToday = todaySessions.filter(s => s.checkOut !== null);
 
-  const dayCfg = schedule[dayKeyOf(new Date(today + "T12:00:00"))];
+  const dayCfg = getEffectiveDayConfig(today, schedule, exceptions);
   const dayAbsences = getAbsencesForDate(absences, today);
 
   let flexAbsMin = 0;
@@ -405,7 +446,7 @@ function computeTodayContribution(
 
   const scheduledNorm = dayCfg.active ? netDayMin(dayCfg) : 0;
   const norm = Math.max(0, scheduledNorm - nonFlexAbsMin);
-  const actual = completedToday.length > 0 ? computeDayMinutes(completedToday, today, schedule).net : 0;
+  const actual = completedToday.length > 0 ? computeDayMinutes(completedToday, today, schedule, exceptions).net : 0;
 
   return (actual - norm) - flexAbsMin;
 }
@@ -436,6 +477,7 @@ function computeWeeklyFlexBreakdown(
   trackingStartDate: string | undefined,
   weeks: number,
   todayContribution: number,
+  exceptions: Record<string, ScheduleException> = {},
 ): { mondayStr: string; minutes: number }[] {
   if (!trackingStartDate) return [];
   const out: { mondayStr: string; minutes: number }[] = [];
@@ -448,7 +490,7 @@ function computeWeeklyFlexBreakdown(
     const monStr = mon.toISOString().slice(0, 10);
     const sunStr = sun.toISOString().slice(0, 10);
     if (sunStr < trackingStartDate) break;
-    let minutes = computeFlexMinutes(sessions, absences, schedule, trackingStartDate, monStr, sunStr);
+    let minutes = computeFlexMinutes(sessions, absences, schedule, trackingStartDate, monStr, sunStr, exceptions);
     if (i === 0) minutes += todayContribution; // current week picks up today's committed flex
     out.push({ mondayStr: monStr, minutes });
   }
@@ -456,7 +498,7 @@ function computeWeeklyFlexBreakdown(
 }
 
 // ─── CSV export ───────────────────────────────────────────────
-function buildCsvExport(sessions: Session[], absences: AbsenceEntry[], schedule: WeekSchedule, periodStart: string, periodEnd: string): string {
+function buildCsvExport(sessions: Session[], absences: AbsenceEntry[], schedule: WeekSchedule, periodStart: string, periodEnd: string, exceptions: Record<string, ScheduleException> = {}): string {
   const monthStart = periodStart;
   const monthEnd = periodEnd;
 
@@ -467,7 +509,7 @@ function buildCsvExport(sessions: Session[], absences: AbsenceEntry[], schedule:
     if (!s.checkOut) continue;
     const d = new Date(s.checkIn).toISOString().slice(0, 10);
     if (d < monthStart || d > monthEnd) continue;
-    const { net } = computeDayMinutes([s], d, schedule);
+    const { net } = computeDayMinutes([s], d, schedule, exceptions);
     dataRows.push([
       d,
       new Date(d + "T12:00:00").toLocaleDateString("sv-SE", { weekday: "long" }),
@@ -483,7 +525,7 @@ function buildCsvExport(sessions: Session[], absences: AbsenceEntry[], schedule:
     if (a.startDate > monthEnd || a.endDate < monthStart) continue;
     const meta = ABSENCE_META[a.category];
     for (const d of expandAbsenceDates(a).filter(x => x >= monthStart && x <= monthEnd)) {
-      const dayCfg = schedule[dayKeyOf(new Date(d + "T12:00:00"))];
+      const dayCfg = getEffectiveDayConfig(d, schedule, exceptions);
       const absMin = a.hours !== undefined ? Math.round(a.hours * 60) : netDayMin(dayCfg);
       dataRows.push([
         d,
@@ -548,9 +590,12 @@ function load(): StorageShape {
       expenses: p.expenses ?? [],
       flexBaseMinutes: typeof p.flexBaseMinutes === "number" ? p.flexBaseMinutes : 0,
       trackingStartDate,
+      scheduleExceptions: (p.scheduleExceptions && typeof p.scheduleExceptions === "object" && !Array.isArray(p.scheduleExceptions))
+        ? p.scheduleExceptions as Record<string, ScheduleException>
+        : {},
     };
   } catch {
-    return { name: "", schedule: DEFAULT_SCHEDULE, onboardingDone: false, sessions: [], absences: [], expenses: [], flexBaseMinutes: 0 };
+    return { name: "", schedule: DEFAULT_SCHEDULE, onboardingDone: false, sessions: [], absences: [], expenses: [], flexBaseMinutes: 0, scheduleExceptions: {} };
   }
 }
 
@@ -641,6 +686,8 @@ export default function PunchClock() {
   });
   const [flexBaseMinutes, setFlexBaseMinutes] = useState(0);
   const [trackingStartDate, setTrackingStartDate] = useState<string | undefined>();
+  const [scheduleExceptions, setScheduleExceptions] = useState<Record<string, ScheduleException>>({});
+  const [exceptionModal, setExceptionModal] = useState<string | null>(null); // YYYY-MM-DD being edited
   const [flexBreakdownOpen, setFlexBreakdownOpen] = useState(false);
   const [latePunchoutOpen, setLatePunchoutOpen] = useState(false);
   const [historyMode, setHistoryMode] = useState<"list" | "calendar">("list");
@@ -712,6 +759,7 @@ export default function PunchClock() {
     setExpenses(d.expenses ?? []);
     setFlexBaseMinutes(d.flexBaseMinutes ?? 0);
     setTrackingStartDate(d.trackingStartDate);
+    setScheduleExceptions(d.scheduleExceptions ?? {});
     const token = localStorage.getItem(SYNC_TOKEN_KEY);
     if (token) { setSyncToken(token); setSyncStatus("idle"); }
     // ?action=in|out|toggle from a QR code / NFC tag / WiFi automation.
@@ -729,11 +777,11 @@ export default function PunchClock() {
   }, [pendingAction, onboardingDone]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    save({ name, schedule, department, onboardingDone, sessions, absences, expenses, flexBaseMinutes, trackingStartDate });
+    save({ name, schedule, department, onboardingDone, sessions, absences, expenses, flexBaseMinutes, trackingStartDate, scheduleExceptions });
     if (syncToken) {
       if (syncTimer.current) clearTimeout(syncTimer.current);
       const token = syncToken;
-      const payload: SyncState = { name, schedule, department, sessions, absences, expenses, flexBaseMinutes, trackingStartDate };
+      const payload: SyncState = { name, schedule, department, sessions, absences, expenses, flexBaseMinutes, trackingStartDate, scheduleExceptions };
       syncTimer.current = setTimeout(() => {
         setSyncStatus("syncing");
         syncPush(token, payload)
@@ -741,7 +789,7 @@ export default function PunchClock() {
           .catch(() => setSyncStatus("error"));
       }, 3000);
     }
-  }, [name, schedule, department, onboardingDone, sessions, absences, expenses, flexBaseMinutes, trackingStartDate, syncToken]);
+  }, [name, schedule, department, onboardingDone, sessions, absences, expenses, flexBaseMinutes, trackingStartDate, scheduleExceptions, syncToken]);
 
   const weeklyNorm = weeklyNetMin(schedule);
   const activeSession = sessions.find(s => !s.checkOut);
@@ -835,6 +883,16 @@ export default function PunchClock() {
     setEditSession(null);
   }
   function handleDeleteAbsence(id: string) { setAbsences(prev => prev.filter(a => a.id !== id)); }
+
+  function handleSaveException(dateStr: string, exc: ScheduleException | null) {
+    setScheduleExceptions(prev => {
+      const next = { ...prev };
+      if (exc === null) delete next[dateStr];
+      else next[dateStr] = exc;
+      return next;
+    });
+    setExceptionModal(null);
+  }
   function handleSaveExpense(entry: ExpenseEntry) { setExpenses(prev => [...prev, entry]); setExpenseModal(false); }
   function handleDeleteExpense(id: string) { setExpenses(prev => prev.filter(e => e.id !== id)); }
   function handleOnboardingComplete(result: OnboardingResult) {
@@ -852,6 +910,9 @@ export default function PunchClock() {
       setExpenses((s.expenses ?? []) as ExpenseEntry[]);
       setFlexBaseMinutes(typeof s.flexBaseMinutes === "number" ? s.flexBaseMinutes : 0);
       setTrackingStartDate(s.trackingStartDate);
+      setScheduleExceptions((s.scheduleExceptions && typeof s.scheduleExceptions === "object" && !Array.isArray(s.scheduleExceptions))
+        ? s.scheduleExceptions as Record<string, ScheduleException>
+        : {});
     } else {
       setName(result.name);
       setSchedule(result.schedule);
@@ -883,6 +944,9 @@ export default function PunchClock() {
     setExpenses((state.expenses ?? []) as ExpenseEntry[]);
     setFlexBaseMinutes(typeof state.flexBaseMinutes === "number" ? state.flexBaseMinutes : 0);
     setTrackingStartDate(state.trackingStartDate);
+    setScheduleExceptions((state.scheduleExceptions && typeof state.scheduleExceptions === "object" && !Array.isArray(state.scheduleExceptions))
+      ? state.scheduleExceptions as Record<string, ScheduleException>
+      : {});
     setSyncModal(false);
   }
 
@@ -920,18 +984,18 @@ export default function PunchClock() {
 
   function generateReport() {
     const { start, end, label } = reportPeriod();
-    setShareText(buildShareText(sessions, absences, expenses, name, schedule, start, end, label));
+    setShareText(buildShareText(sessions, absences, expenses, name, schedule, start, end, label, scheduleExceptions));
     setShared(false);
   }
 
   function downloadReportCsv() {
     const { start, end, fileLabel } = reportPeriod();
-    downloadCsv(buildCsvExport(sessions, absences, schedule, start, end), `tidrapport-${fileLabel}.csv`);
+    downloadCsv(buildCsvExport(sessions, absences, schedule, start, end, scheduleExceptions), `tidrapport-${fileLabel}.csv`);
   }
 
   async function shareReportFile() {
     const { start, end, fileLabel } = reportPeriod();
-    const csv = buildCsvExport(sessions, absences, schedule, start, end);
+    const csv = buildCsvExport(sessions, absences, schedule, start, end, scheduleExceptions);
     const file = new File([csv], `tidrapport-${fileLabel}.csv`, { type: "text/csv" });
     const nav = navigator as Navigator & { canShare?: (d?: ShareData) => boolean };
     if (nav.canShare && nav.canShare({ files: [file] })) {
@@ -954,16 +1018,16 @@ export default function PunchClock() {
 
   const monthStartStr   = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-01`;
   const weekStartStr    = getWeekMonday(new Date()).toISOString().slice(0, 10);
-  const flexPastTotal   = computeFlexMinutes(sessions, absences, schedule, trackingStartDate);
-  const flexPastMonth   = computeFlexMinutes(sessions, absences, schedule, trackingStartDate, monthStartStr, todayDate);
-  const flexPastWeek    = computeFlexMinutes(sessions, absences, schedule, trackingStartDate, weekStartStr,  todayDate);
-  const todayCommitted  = computeTodayContribution(sessions, absences, schedule, todayDate, trackingStartDate);
+  const flexPastTotal   = computeFlexMinutes(sessions, absences, schedule, trackingStartDate, undefined, undefined, scheduleExceptions);
+  const flexPastMonth   = computeFlexMinutes(sessions, absences, schedule, trackingStartDate, monthStartStr, todayDate, scheduleExceptions);
+  const flexPastWeek    = computeFlexMinutes(sessions, absences, schedule, trackingStartDate, weekStartStr,  todayDate, scheduleExceptions);
+  const todayCommitted  = computeTodayContribution(sessions, absences, schedule, todayDate, trackingStartDate, scheduleExceptions);
   const flexTotal       = flexBaseMinutes + flexPastTotal + todayCommitted;
   const flexMonth       = flexPastMonth + todayCommitted;
   const flexWeek        = flexPastWeek  + todayCommitted;
 
   const liveMs = activeSession ? (now() - activeSession.checkIn) : 0;
-  const todayCfg = schedule[dayKeyOf(new Date(todayDate + "T12:00:00"))];
+  const todayCfg = getEffectiveDayConfig(todayDate, schedule, scheduleExceptions);
   const liveNetRaw = todaySessions.reduce((a, s) => a + ((s.checkOut ?? now()) - s.checkIn), 0) / 60000;
   const liveNet = Math.max(0, liveNetRaw - (todayCfg.active ? todayCfg.lunchMinutes : 0));
 
@@ -1261,14 +1325,15 @@ export default function PunchClock() {
                     sessions={sessions}
                     absences={absences}
                     schedule={schedule}
+                    scheduleExceptions={scheduleExceptions}
                     selectedDate={calendarSelectedDate}
                     onSelectDate={d => setCalendarSelectedDate(prev => prev === d ? null : d)}
                   />
                   {calendarSelectedDate && (() => {
                     const daySessions = sessions.filter(s => new Date(s.checkIn).toISOString().slice(0, 10) === calendarSelectedDate);
                     const dayAbsences = getAbsencesForDate(absences, calendarSelectedDate);
-                    const dayCfg = schedule[dayKeyOf(new Date(calendarSelectedDate + "T12:00:00"))];
-                    const { net: dayNet } = computeDayMinutes(daySessions, calendarSelectedDate, schedule);
+                    const dayCfg = getEffectiveDayConfig(calendarSelectedDate, schedule, scheduleExceptions);
+                    const { net: dayNet } = computeDayMinutes(daySessions, calendarSelectedDate, schedule, scheduleExceptions);
                     const scheduledMin = netDayMin(dayCfg);
                     const diff = dayNet - scheduledMin;
                     return (
@@ -1349,6 +1414,23 @@ export default function PunchClock() {
                               <span className="text-[15px] leading-none">+</span> Avvikelse
                             </button>
                           </div>
+                          {(() => {
+                            const calExc = scheduleExceptions[calendarSelectedDate];
+                            return (
+                              <button
+                                onClick={() => setExceptionModal(calendarSelectedDate)}
+                                className={`pc-press w-full flex items-center justify-center gap-2 py-2 rounded-[12px] text-[12px] font-semibold transition-colors ${
+                                  calExc ? "bg-blue-50 text-blue-600 border border-blue-200" : "border border-dashed border-pc-line text-pc-muted hover:border-pc-orange hover:text-pc-orange"
+                                }`}
+                              >
+                                <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                  <circle cx="12" cy="12" r="3" />
+                                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                                </svg>
+                                {calExc ? `Förkortad dag · ${calExc.endTime}` : "Ändra schema för dag"}
+                              </button>
+                            );
+                          })()}
                         </div>
                       </div>
                     );
@@ -1398,7 +1480,7 @@ export default function PunchClock() {
                       .sort((a, b) => b[0].localeCompare(a[0]))
                       .map(([wMon, wDates]) => {
                         const wSessions = wDates.flatMap(d => byDate[d] ?? []);
-                        const wNet = computeWeekNet(wSessions, schedule);
+                        const wNet = computeWeekNet(wSessions, schedule, scheduleExceptions);
                         const isCurrentWeek = wMon === currentWeekKey;
                         const meetsNorm = wNet >= weeklyNorm;
                         const diff = wNet - weeklyNorm;
@@ -1436,15 +1518,36 @@ export default function PunchClock() {
                             {sortedDates.map(date => {
                               const daySessions = byDate[date] ?? [];
                               const dayAbsences = getAbsencesForDate(filteredAbsences, date);
-                              const { net: dayNet } = computeDayMinutes(daySessions, date, schedule);
+                              const { net: dayNet } = computeDayMinutes(daySessions, date, schedule, scheduleExceptions);
+                              const dayException = scheduleExceptions[date];
 
                               return (
                                 <div key={date} className="px-4 py-3 border-t border-pc-line">
-                                  <div className="flex justify-between items-baseline mb-2">
-                                    <div className="font-bold text-[14px] capitalize">{fmtDateLabel(date)}</div>
-                                    {daySessions.length > 0 && (
-                                      <div className="font-bold text-pc-orange text-[14px] tabular-nums">{fmtDur(dayNet)}</div>
-                                    )}
+                                  <div className="flex justify-between items-start mb-2 gap-2">
+                                    <div className="min-w-0">
+                                      <div className="font-bold text-[14px] capitalize">{fmtDateLabel(date)}</div>
+                                      {dayException && (
+                                        <div className="text-[11px] text-blue-600 font-semibold mt-0.5">
+                                          ⏰ Förkortad dag · slutar {dayException.endTime}{dayException.note ? ` · ${dayException.note}` : ""}
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      {daySessions.length > 0 && (
+                                        <div className="font-bold text-pc-orange text-[14px] tabular-nums">{fmtDur(dayNet)}</div>
+                                      )}
+                                      <button
+                                        onClick={() => setExceptionModal(date)}
+                                        className={`w-7 h-7 flex items-center justify-center rounded-lg transition-colors ${dayException ? "text-blue-600 bg-blue-50 hover:bg-blue-100" : "text-pc-muted hover:text-pc-orange hover:bg-pc-peach"}`}
+                                        title="Anpassa schema för denna dag"
+                                        aria-label="Ändra schema för dag"
+                                      >
+                                        <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                          <circle cx="12" cy="12" r="3" />
+                                          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                                        </svg>
+                                      </button>
+                                    </div>
                                   </div>
 
                                   {dayAbsences.map(a => (
@@ -1844,7 +1947,7 @@ export default function PunchClock() {
         open={flexBreakdownOpen}
         onClose={() => setFlexBreakdownOpen(false)}
         trackingStartDate={trackingStartDate}
-        weeks={computeWeeklyFlexBreakdown(sessions, absences, schedule, trackingStartDate, 12, todayCommitted)}
+        weeks={computeWeeklyFlexBreakdown(sessions, absences, schedule, trackingStartDate, 12, todayCommitted, scheduleExceptions)}
         total={flexTotal}
       />
 
@@ -1858,6 +1961,16 @@ export default function PunchClock() {
       )}
 
       <AutomationModal open={automationModal} onClose={() => setAutomationModal(false)} />
+
+      {exceptionModal && (
+        <DayExceptionModal
+          dateStr={exceptionModal}
+          schedule={schedule}
+          current={scheduleExceptions[exceptionModal] ?? null}
+          onClose={() => setExceptionModal(null)}
+          onSave={exc => handleSaveException(exceptionModal, exc)}
+        />
+      )}
 
       {toast && (
         <div className="fixed left-1/2 -translate-x-1/2 z-[60] pointer-events-none pc-pop"
@@ -2420,10 +2533,11 @@ function ScheduleEditorModal({ open, schedule, onClose, onSave }: {
 }
 
 // ─── Calendar View ────────────────────────────────────────────
-function CalendarView({ sessions, absences, schedule, selectedDate, onSelectDate }: {
+function CalendarView({ sessions, absences, schedule, scheduleExceptions, selectedDate, onSelectDate }: {
   sessions: Session[];
   absences: AbsenceEntry[];
   schedule: WeekSchedule;
+  scheduleExceptions: Record<string, ScheduleException>;
   selectedDate?: string | null;
   onSelectDate?: (date: string) => void;
 }) {
@@ -2484,9 +2598,9 @@ function CalendarView({ sessions, absences, schedule, selectedDate, onSelectDate
           const isPast = dateStr < todayS;
           const daySessions = byDate[dateStr] ?? [];
           const dayAbsences = getAbsencesForDate(absences, dateStr);
-          const dayCfg = schedule[dayKeyOf(new Date(dateStr + "T12:00:00"))];
+          const dayCfg = getEffectiveDayConfig(dateStr, schedule, scheduleExceptions);
           const scheduledMin = netDayMin(dayCfg);
-          const { net } = daySessions.length > 0 ? computeDayMinutes(daySessions, dateStr, schedule) : { net: 0 };
+          const { net } = daySessions.length > 0 ? computeDayMinutes(daySessions, dateStr, schedule, scheduleExceptions) : { net: 0 };
           const hasData = daySessions.length > 0 || dayAbsences.length > 0;
 
           let dotColor = "";
@@ -2546,6 +2660,137 @@ function CalendarView({ sessions, absences, schedule, selectedDate, onSelectDate
             <span className="text-pc-muted font-semibold" style={{ fontSize: "10px" }}>{label}</span>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Day Exception Modal ───────────────────────────────────────
+// Bottom sheet for overriding the effective schedule of a single calendar date.
+// Used for company-wide shortened workdays (e.g. "everyone leaves at 13:00").
+// Public holidays (röda dagar) where no work was done are handled separately via
+// the "Helgdag" absence category.
+function DayExceptionModal({ dateStr, schedule, current, onClose, onSave }: {
+  dateStr: string;
+  schedule: WeekSchedule;
+  current: ScheduleException | null;
+  onClose: () => void;
+  onSave: (exc: ScheduleException | null) => void;
+}) {
+  const baseCfg = schedule[dayKeyOf(new Date(dateStr + "T12:00:00"))];
+  const [endTime, setEndTime] = useState(current?.endTime ?? baseCfg.endTime);
+  const [lunchMinutes, setLunchMinutes] = useState(
+    current?.lunchMinutes !== undefined ? String(current.lunchMinutes) : String(baseCfg.lunchMinutes)
+  );
+  const [note, setNote] = useState(current?.note ?? "");
+  const [err, setErr] = useState("");
+
+  const baseStart = baseCfg.startTime;
+  const dateLabel = new Date(dateStr + "T12:00:00").toLocaleDateString("sv-SE", {
+    weekday: "long", day: "numeric", month: "long",
+  });
+
+  function handleSave() {
+    if (!endTime) { setErr("Ange sluttid."); return; }
+    const [sh, sm] = baseStart.split(":").map(Number);
+    const [eh, em] = endTime.split(":").map(Number);
+    if (eh * 60 + em <= sh * 60 + sm) { setErr("Sluttid måste vara efter starttid."); return; }
+    const lunch = parseInt(lunchMinutes, 10);
+    if (isNaN(lunch) || lunch < 0) { setErr("Ange giltigt antal minuter för lunch."); return; }
+    onSave({ type: "override", endTime, lunchMinutes: lunch, note: note.trim() || undefined });
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center"
+      style={{ background: "rgba(45,23,23,0.55)", animation: "pcOverlay 0.25s ease" }}
+      onClick={onClose}
+    >
+      <div
+        className="bg-white w-full max-w-[480px] rounded-t-[28px] px-6 pt-6 overflow-y-auto"
+        style={{
+          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)",
+          animation: "pcSheet 0.32s cubic-bezier(0.32,0.72,0,1)",
+          maxHeight: "90dvh",
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="w-10 h-1 bg-[#ece6df] rounded-full mx-auto mb-5" />
+
+        <div className="font-extrabold text-[22px] tracking-tight mb-1 capitalize">{dateLabel}</div>
+        <div className="text-[13px] text-pc-muted mb-1">
+          Normalt schema: {baseStart}–{baseCfg.endTime}
+          {baseCfg.lunchMinutes > 0 ? ` · ${baseCfg.lunchMinutes} min lunch` : ""}
+        </div>
+        <div className="text-[13px] text-pc-muted mb-6">
+          Ange en kortare sluttid för att justera flexsaldot för denna dag.
+        </div>
+
+        <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-2">Ny sluttid</div>
+        <input
+          type="time"
+          value={endTime}
+          onChange={e => { setEndTime(e.target.value); setErr(""); }}
+          className="pc-input"
+        />
+
+        <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-2">
+          Lunch <span className="normal-case font-medium tracking-normal text-pc-muted">(minuter)</span>
+        </div>
+        <input
+          type="number"
+          min={0}
+          max={120}
+          step={15}
+          value={lunchMinutes}
+          onChange={e => { setLunchMinutes(e.target.value); setErr(""); }}
+          className="pc-input"
+        />
+
+        <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-2">
+          Anteckning <span className="normal-case font-medium tracking-normal text-pc-muted">(valfri)</span>
+        </div>
+        <textarea
+          rows={2}
+          placeholder="t.ex. Kontoret stängde tidigt"
+          value={note}
+          onChange={e => setNote(e.target.value)}
+          style={{
+            width: "100%", padding: "12px 14px", borderRadius: "14px",
+            border: "1.5px solid #ece6df", fontSize: "15px", outline: "none",
+            background: "#fdf6ee", fontWeight: 500, color: "#2d1717",
+            resize: "none", marginBottom: "16px", fontFamily: "inherit",
+            boxSizing: "border-box",
+          }}
+          onFocus={e => { e.currentTarget.style.borderColor = "#ff5f00"; e.currentTarget.style.background = "#fff"; }}
+          onBlur={e => { e.currentTarget.style.borderColor = "#ece6df"; e.currentTarget.style.background = "#fdf6ee"; }}
+        />
+
+        {err && <div className="text-red-600 text-[13px] mb-3 font-semibold">{err}</div>}
+
+        {current && (
+          <button
+            onClick={() => onSave(null)}
+            className="w-full py-3 mb-3 rounded-[14px] text-[13px] font-bold text-red-600 bg-red-50 border border-red-200"
+          >
+            Återställ normalt schema
+          </button>
+        )}
+
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            onClick={onClose}
+            style={{ padding: "16px", borderRadius: "16px", background: "#fdf6ee", border: "1.5px solid #ece6df", fontWeight: 700, fontSize: "15px", color: "#2d1717" }}
+          >
+            Avbryt
+          </button>
+          <button
+            onClick={handleSave}
+            style={{ padding: "16px", borderRadius: "16px", background: "#ff5f00", color: "white", fontWeight: 700, fontSize: "15px", boxShadow: "0 8px 20px -8px rgba(255,95,0,0.6)" }}
+          >
+            Spara
+          </button>
+        </div>
       </div>
     </div>
   );
