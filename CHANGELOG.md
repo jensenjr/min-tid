@@ -12,6 +12,23 @@ All notable changes to **min-tid** are recorded here. Format loosely follows [Ke
 
 _Nothing yet._
 
+## [1.0.0-beta.8] — 2026-06-23
+
+### Added
+- **Helgdag (röd dag) absence category.** A new "Helgdag" entry in the absence modal (🏖️) covers Swedish public holidays when no work is done. Like other non-flex absences it excuses the day — the daily norm drops to 0 and flex is unaffected. Entry flow: Historik → Kalender → tap the holiday date → `+ Avvikelse` → Helgdag.
+- **Förkortad arbetsdag — schedule exception per date.** When the company has everyone leave early (e.g. Thursday ends at 13:00 instead of 17:00), a small gear ⚙️ button on each history day row opens "Ändra schema för dag". Set a new end time and optional lunch minutes; the effective norm for that date is recalculated accordingly so the user gets 0 flex rather than hours of unearned minus. The same button appears in the calendar detail card. Exceptions are stored as `scheduleExceptions: Record<YYYY-MM-DD, ScheduleException>` in localStorage, included in sync, and auto-removed via "Återställ normalt schema".
+- Exception badge shown inline under the date label in each history row when an override is active.
+
+### Changed
+- All flex computation functions (`computeFlexMinutes`, `computeTodayContribution`, `computeTodayDelta`, `computeWeekNet`, `buildShareText`, `buildCsvExport`) now resolve the **effective** `DayConfig` via the new `getEffectiveDayConfig(dateStr, schedule, exceptions)` helper before calculating norms and actuals. Today's leave-time predictor, schedule nudge banners, and late punch-out threshold also use the effective config, so a shortened day shows the correct leave time.
+
+### Internal
+- New `ScheduleException = { type: "override"; endTime; lunchMinutes?; note? }` type in `PunchClock.tsx`.
+- `getEffectiveDayConfig()` module-level helper merges a date's exception (if any) into the base weekly `DayConfig`.
+- `computeDayMinutes` and `computeWeekNet` accept an optional `exceptions` parameter; all call sites inside the flex and report flows pass it through.
+- `CalendarView` now receives `scheduleExceptions` and uses it for dot-color accuracy.
+- `SyncState` gains an optional `scheduleExceptions` field so overrides sync between devices.
+
 ## [1.0.0-beta.7] — 2026-06-12
 
 ### Added
@@ -140,6 +157,7 @@ First public beta. The app is feature-complete for time, absence and expense tra
 - **`nixpacks.toml`** overrides the default Caddy start command if Coolify falls back to Nixpacks instead of Dockerfile.
 - **Zero native deps** on the server — `better-sqlite3` was replaced with a plain JSON file store.
 
+[1.0.0-beta.8]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.8
 [1.0.0-beta.1]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.1
 [1.0.0-beta.2]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.2
 [1.0.0-beta.3]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.3
