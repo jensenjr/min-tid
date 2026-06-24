@@ -1046,6 +1046,24 @@ export default function PunchClock() {
   const leaveRemaining = Math.max(0, targetRawMin - todayWorkedRaw);
   const leaveAtMs      = now() + leaveRemaining * 60000;
   const leaveReached   = todayWorkedRaw >= targetRawMin;
+  // Net minutes worked beyond today's target — drives the "+X över schemat" line.
+  const overScheduleMin = leaveReached ? Math.round(todayWorkedRaw - targetRawMin) : 0;
+
+  // A session that has run past the late-punchout threshold (forgotten check-out
+  // territory). Surfaces a reassuring "choose the end time" helper on the clock so
+  // a scary-looking 29 h timer doesn't stop the user from punching out.
+  const isLongSession = isIn && !!activeSession && liveMs > lateThresholdMs(todayCfg);
+  // The scheduled end-of-day for the day the active session started — offered as a
+  // one-tap "check out at scheduled time" option in the late-punchout sheet.
+  let lateScheduledEndMs: number | undefined;
+  if (activeSession) {
+    const ciDate = ymdLocal(new Date(activeSession.checkIn));
+    const ciCfg = getEffectiveDayConfig(ciDate, schedule, scheduleExceptions);
+    if (ciCfg.active) {
+      const ms = new Date(`${ciDate}T${ciCfg.endTime}`).getTime();
+      if (ms > activeSession.checkIn && ms <= now()) lateScheduledEndMs = ms;
+    }
+  }
 
   // Schedule prompts (Visma/Fortnox-style "stämpla enligt schema"): nudge to
   // check in once the scheduled start has passed, and to check out after the
@@ -1204,7 +1222,12 @@ export default function PunchClock() {
                     {showLeaveTime && (
                       <>
                         {leaveReached ? (
-                          <div className="text-[13px] mt-2 font-bold text-green-600">Mål uppnått — du kan gå hem</div>
+                          <div className="text-[13px] mt-2 font-bold text-green-600">
+                            Mål uppnått — du kan gå hem
+                            {overScheduleMin > 2 && (
+                              <span className="text-pc-orange-deep"> · +{fmtDur(overScheduleMin)} över schemat</span>
+                            )}
+                          </div>
                         ) : (
                           <div className="text-[13px] mt-2 text-pc-muted font-semibold">
                             Du kan gå hem kl. <span className="text-pc-ink font-extrabold tabular-nums">{fmtTime(leaveAtMs)}</span>
@@ -1220,6 +1243,28 @@ export default function PunchClock() {
                   </div>
                 )}
               </div>
+
+              {isLongSession && (
+                <div className="mb-3 bg-amber-50 border border-amber-200 rounded-[20px] p-4 pc-pop">
+                  <div className="flex items-start gap-3">
+                    <span className="text-[20px] leading-none mt-0.5">⏰</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[13px] font-bold text-amber-800 leading-snug">
+                        Långt pass ({fmtDur(liveMs / 60000)}). Glömde du checka ut?
+                      </div>
+                      <div className="text-[12px] text-amber-700 mt-0.5 font-medium leading-snug">
+                        Var inte rädd att checka ut — ingen tid sparas förrän du bekräftar sluttiden.
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setLatePunchoutOpen(true)}
+                    className="pc-press w-full mt-3 py-3 rounded-[14px] bg-amber-500 text-white font-bold text-[14px]"
+                  >
+                    Välj sluttid
+                  </button>
+                </div>
+              )}
 
               <section className="bg-white rounded-[24px] p-5 mb-3 shadow-[0_2px_12px_rgba(81,43,43,0.04)] border border-pc-line">
                 <div className="flex items-baseline justify-between mb-4">
@@ -1955,6 +2000,7 @@ export default function PunchClock() {
         <LatePunchoutModal
           activeSession={activeSession}
           todaysTargetMin={todayCfg.active ? netDayMin(todayCfg) + todayCfg.lunchMinutes : 0}
+          scheduledEndMs={lateScheduledEndMs}
           onCancel={() => setLatePunchoutOpen(false)}
           onSave={handleLatePunchoutSave}
         />

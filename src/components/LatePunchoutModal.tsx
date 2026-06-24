@@ -31,19 +31,24 @@ function fromLocalInput(value: string): number {
 export default function LatePunchoutModal({
   activeSession,
   todaysTargetMin,
+  scheduledEndMs,
   onCancel,
   onSave,
 }: {
   activeSession: Session;
   todaysTargetMin: number;
+  scheduledEndMs?: number; // scheduled end-of-day for the session's start day, if active
   onCancel: () => void;
   onSave: (endTime: number) => void;
 }) {
-  // Default to start + today's net target (the common "normal end time" guess).
-  // Falls back to "now" if target is 0 (non-workday or schedule inactive).
-  const defaultEnd = todaysTargetMin > 0
-    ? activeSession.checkIn + todaysTargetMin * 60_000
-    : Date.now();
+  // Default the custom picker to the scheduled end-of-day when we have one (the
+  // most likely intended time after a forgotten check-out), else start + today's
+  // net target, else "now" (non-workday or schedule inactive).
+  const defaultEnd = (scheduledEndMs !== undefined && scheduledEndMs > activeSession.checkIn && scheduledEndMs <= Date.now())
+    ? scheduledEndMs
+    : todaysTargetMin > 0
+      ? activeSession.checkIn + todaysTargetMin * 60_000
+      : Date.now();
 
   const [customEnd, setCustomEnd] = useState(toLocalInput(defaultEnd));
   const [showPicker, setShowPicker] = useState(false);
@@ -97,10 +102,30 @@ export default function LatePunchoutModal({
 
         {!showPicker ? (
           <>
+            {scheduledEndMs !== undefined && scheduledEndMs > activeSession.checkIn && scheduledEndMs <= nowMs && (
+              <button
+                onClick={() => onSave(scheduledEndMs)}
+                className="pc-press w-full mb-3 py-4 rounded-[16px] bg-pc-orange text-white font-bold text-[15px]"
+                style={{ boxShadow: "0 8px 20px -8px rgba(255,95,0,0.6)" }}
+              >
+                <div>Stämpla ut enligt schema (kl. {fmtTime(scheduledEndMs)})</div>
+                <div className="text-[12px] font-semibold opacity-90 mt-0.5">
+                  Passlängd {fmtDur((scheduledEndMs - activeSession.checkIn) / 60_000)} · rekommenderas
+                </div>
+              </button>
+            )}
             <button
               onClick={() => onSave(nowMs)}
-              className="pc-press w-full mb-3 py-4 rounded-[16px] bg-pc-orange text-white font-bold text-[15px]"
-              style={{ boxShadow: "0 8px 20px -8px rgba(255,95,0,0.6)" }}
+              className={`pc-press w-full mb-3 py-4 rounded-[16px] font-bold text-[15px] ${
+                scheduledEndMs !== undefined && scheduledEndMs > activeSession.checkIn && scheduledEndMs <= nowMs
+                  ? "bg-white border border-pc-line text-pc-ink"
+                  : "bg-pc-orange text-white"
+              }`}
+              style={
+                scheduledEndMs !== undefined && scheduledEndMs > activeSession.checkIn && scheduledEndMs <= nowMs
+                  ? undefined
+                  : { boxShadow: "0 8px 20px -8px rgba(255,95,0,0.6)" }
+              }
             >
               Stämpla ut nu (kl. {fmtTime(nowMs)})
             </button>

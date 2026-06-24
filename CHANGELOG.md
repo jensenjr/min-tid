@@ -12,6 +12,17 @@ All notable changes to **min-tid** are recorded here. Format loosely follows [Ke
 
 _Nothing yet._
 
+## [1.0.0-beta.9] — 2026-06-24
+
+### Added
+- **Long-session reassurance on the clock.** When an active session passes the late-punchout threshold (forgotten check-out territory — a timer reading "29h 0min"), an amber card now appears under the punch button: _"Långt pass (29h 0min). Glömde du checka ut? Var inte rädd att checka ut — ingen tid sparas förrän du bekräftar sluttiden."_ with a **Välj sluttid** button that opens the end-time chooser directly. Removes the fear that tapping "Checka ut" silently records the full inflated duration.
+- **"Stämpla ut enligt schema" one-tap option.** The late-punchout sheet now offers a recommended button that checks out at the *scheduled* end time of the day the session started (e.g. kl. 17:00), showing the resulting pass length. This is the practical "automatic checkout" for forgotten punch-outs — one tap credits a normal scheduled day instead of an all-night session. The custom time picker also defaults to that scheduled end.
+- **"+X över schemat" statement.** Once today's net target is reached during an active session, the leave-time line appends how far over the schedule you are (e.g. _"Mål uppnått — du kan gå hem · +1h 30min över schemat"_).
+
+### Internal
+- `LatePunchoutModal` gained an optional `scheduledEndMs` prop; `PunchClock` derives it from the active session's start-day effective schedule and passes it through.
+- New derived state in `PunchClock`: `isLongSession`, `overScheduleMin`, `lateScheduledEndMs`.
+
 ## [1.0.0-beta.8] — 2026-06-23
 
 ### Added
@@ -157,6 +168,7 @@ First public beta. The app is feature-complete for time, absence and expense tra
 - **`nixpacks.toml`** overrides the default Caddy start command if Coolify falls back to Nixpacks instead of Dockerfile.
 - **Zero native deps** on the server — `better-sqlite3` was replaced with a plain JSON file store.
 
+[1.0.0-beta.9]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.9
 [1.0.0-beta.8]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.8
 [1.0.0-beta.1]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.1
 [1.0.0-beta.2]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.2
