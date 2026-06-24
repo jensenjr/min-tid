@@ -1,4 +1,10 @@
 import { useState, useEffect } from "react";
+import {
+  syncChangeSecret,
+  syncSendPhoneCode,
+  syncVerifyPhone,
+  SYNC_PHONE_KEY,
+} from "../lib/sync";
 
 export type SettingsResult = {
   name: string;
@@ -30,16 +36,39 @@ export default function SettingsModal({
   onDisconnectSync: () => void;
   onOpenAutomation: () => void;
 }) {
-  const [name, setName] = useState(initialName);
+  const [name, setName]             = useState(initialName);
   const [department, setDepartment] = useState(initialDepartment ?? "");
-  const [nameErr, setNameErr] = useState("");
+  const [nameErr, setNameErr]       = useState("");
 
-  // Sync from props every time the modal opens
+  // Sync account management
+  const [syncUsername, setSyncUsername] = useState<string | null>(null);
+  const [syncPhone, setSyncPhone]       = useState<string | null>(null);
+
+  // PIN change panel
+  const [showPin, setShowPin]     = useState(false);
+  const [newSecret, setNewSecret] = useState("");
+  const [confirmSec, setConfirmSec] = useState("");
+  const [pinLoading, setPinLoading] = useState(false);
+  const [pinErr, setPinErr]         = useState("");
+  const [pinDone, setPinDone]       = useState(false);
+
+  // Phone panel  "idle" | "enter" | "code" | "done"
+  const [phoneStep, setPhoneStep] = useState<"idle" | "enter" | "code" | "done">("idle");
+  const [phoneInput, setPhoneInput] = useState("");
+  const [phoneCode, setPhoneCode]   = useState("");
+  const [phoneLoading, setPhoneLoading] = useState(false);
+  const [phoneErr, setPhoneErr]         = useState("");
+
   useEffect(() => {
     if (open) {
       setName(initialName);
       setDepartment(initialDepartment ?? "");
       setNameErr("");
+      setSyncUsername(localStorage.getItem("sync_username"));
+      setSyncPhone(localStorage.getItem(SYNC_PHONE_KEY));
+      setShowPin(false);
+      setNewSecret(""); setConfirmSec(""); setPinLoading(false); setPinErr(""); setPinDone(false);
+      setPhoneStep("idle"); setPhoneInput(""); setPhoneCode(""); setPhoneLoading(false); setPhoneErr("");
     }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -47,10 +76,63 @@ export default function SettingsModal({
 
   function handleSave() {
     if (!name.trim()) { setNameErr("Namn krävs."); return; }
-    onSave({
-      name: name.trim(),
-      department: department.trim() || undefined,
-    });
+    onSave({ name: name.trim(), department: department.trim() || undefined });
+  }
+
+  async function handlePinSave() {
+    if (newSecret.length < 6) { setPinErr("Minst 6 tecken."); return; }
+    if (newSecret !== confirmSec) { setPinErr("Koderna matchar inte."); return; }
+    if (!syncToken) return;
+    setPinLoading(true); setPinErr("");
+    try {
+      await syncChangeSecret(syncToken, newSecret);
+      setPinDone(true);
+      setShowPin(false);
+      setNewSecret(""); setConfirmSec("");
+    } catch (e) {
+      setPinErr((e as Error).message);
+    } finally {
+      setPinLoading(false);
+    }
+  }
+
+  async function handlePhoneSend() {
+    const phone = phoneInput.trim();
+    if (!phone) { setPhoneErr("Ange ditt mobilnummer."); return; }
+    if (!syncToken) return;
+    setPhoneLoading(true); setPhoneErr("");
+    try {
+      await syncSendPhoneCode(syncToken, phone);
+      setPhoneStep("code");
+    } catch (e) {
+      setPhoneErr((e as Error).message);
+    } finally {
+      setPhoneLoading(false);
+    }
+  }
+
+  async function handlePhoneVerify() {
+    const code = phoneCode.trim();
+    if (code.length !== 6) { setPhoneErr("Koden är 6 siffror."); return; }
+    if (!syncToken) return;
+    setPhoneLoading(true); setPhoneErr("");
+    try {
+      await syncVerifyPhone(syncToken, phoneInput.trim(), code);
+      // Normalize + save locally
+      const normalized = phoneInput.trim().replace(/\D/g, "");
+      const e164 = normalized.startsWith("46")
+        ? "+" + normalized
+        : normalized.startsWith("0")
+          ? "+46" + normalized.slice(1)
+          : "+" + normalized;
+      localStorage.setItem(SYNC_PHONE_KEY, e164);
+      setSyncPhone(e164);
+      setPhoneStep("done");
+    } catch (e) {
+      setPhoneErr((e as Error).message);
+    } finally {
+      setPhoneLoading(false);
+    }
   }
 
   return (
@@ -68,13 +150,11 @@ export default function SettingsModal({
         }}
         onClick={e => e.stopPropagation()}
       >
-        {/* Handle */}
         <div className="w-10 h-1 bg-pc-line rounded-full mx-auto mb-5" />
 
         <div className="font-extrabold text-[22px] tracking-tight mb-1">Inställningar</div>
         <div className="text-[13px] text-pc-muted mb-6">Ändra namn och avdelning.</div>
 
-        {/* Name */}
         <SLabel>Namn <span className="text-pc-orange">*</span></SLabel>
         <input
           type="text"
@@ -85,7 +165,6 @@ export default function SettingsModal({
         />
         {nameErr && <p className="text-red-500 text-[13px] mb-3 font-semibold">{nameErr}</p>}
 
-        {/* Department */}
         <SLabel>Avdelning <span className="text-pc-muted font-medium normal-case tracking-normal">(valfri)</span></SLabel>
         <input
           type="text"
@@ -95,7 +174,7 @@ export default function SettingsModal({
           placeholder="t.ex. Lager, Kontor…"
         />
 
-        {/* Automation section */}
+        {/* Automation */}
         <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-2 mt-2">Automatisering</div>
         <button
           onClick={onOpenAutomation}
@@ -108,29 +187,182 @@ export default function SettingsModal({
           </div>
         </button>
 
-        {/* Sync section */}
+        {/* Sync */}
         <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-2">Synkronisering</div>
         {syncToken ? (
-          <div className="bg-[#fdf6ee] border border-[#ece6df] rounded-[16px] px-4 py-3 mb-4 flex items-center gap-3">
-            <span className="text-[20px] leading-none shrink-0">
-              {syncStatus === "syncing" ? "⏳" : syncStatus === "error" ? "⚠️" : "☁️"}
-            </span>
-            <div className="flex-1 min-w-0">
-              <div className="text-[13px] font-bold text-[#2d1717] leading-tight">
-                {syncStatus === "syncing" ? "Synkroniserar…"
-                  : syncStatus === "error" ? "Synkfel – försöker snart igen"
-                  : syncedAt ? `Synkat ${new Date(syncedAt).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })}`
-                  : "Synkronisering aktiv"}
+          <>
+            {/* Status card */}
+            <div className="bg-[#fdf6ee] border border-[#ece6df] rounded-[16px] px-4 py-3 mb-3 flex items-center gap-3">
+              <span className="text-[20px] leading-none shrink-0">
+                {syncStatus === "syncing" ? "⏳" : syncStatus === "error" ? "⚠️" : "☁️"}
+              </span>
+              <div className="flex-1 min-w-0">
+                <div className="text-[13px] font-bold text-[#2d1717] leading-tight">
+                  {syncStatus === "syncing" ? "Synkroniserar…"
+                    : syncStatus === "error" ? "Synkfel – försöker snart igen"
+                    : syncedAt ? `Synkat ${new Date(syncedAt).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })}`
+                    : "Synkronisering aktiv"}
+                </div>
+                {syncUsername && (
+                  <div className="text-[11px] text-[#9c7c5c] mt-0.5 font-semibold">
+                    Inloggad som: <span className="text-[#ff5f00]">@{syncUsername}</span>
+                  </div>
+                )}
               </div>
-              <div className="text-[11px] text-[#9c7c5c] mt-0.5">Data sparas på alla dina enheter</div>
+              <button
+                onClick={onDisconnectSync}
+                className="shrink-0 text-[11px] font-semibold text-[#9c7c5c] underline"
+              >
+                Koppla från
+              </button>
             </div>
+
+            {/* PIN done banner */}
+            {pinDone && (
+              <div className="bg-green-50 border border-green-200 rounded-[14px] px-4 py-2.5 mb-3 flex items-center gap-2">
+                <span className="text-[16px]">✅</span>
+                <span className="text-[12px] font-semibold text-green-800">Synk-koden uppdaterad.</span>
+              </div>
+            )}
+
+            {/* PIN change */}
             <button
-              onClick={onDisconnectSync}
-              className="shrink-0 text-[11px] font-semibold text-[#9c7c5c] underline"
+              onClick={() => { setShowPin(v => !v); setPinErr(""); setPinDone(false); setNewSecret(""); setConfirmSec(""); }}
+              style={{ width: "100%", padding: "13px 16px", borderRadius: "14px", border: "1.5px solid #ece6df", fontSize: "14px", outline: "none", background: showPin ? "#fff" : "#fdf6ee", fontWeight: 600, color: "#2d1717", marginBottom: showPin ? "0" : "10px", boxSizing: "border-box", textAlign: "left", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px" }}
             >
-              Koppla från
+              <span>🔑</span>
+              <div className="flex-1">
+                <div className="font-bold text-[13px]">Byt synk-kod</div>
+                <div className="text-[11px] text-[#9c7c5c] font-medium">Välj en ny hemlig kod</div>
+              </div>
+              <span className="text-[11px] text-[#9c7c5c]">{showPin ? "↑" : "↓"}</span>
             </button>
-          </div>
+
+            {showPin && (
+              <div className="border border-[#ece6df] border-t-0 rounded-b-[14px] px-4 py-4 mb-3 bg-white">
+                <input
+                  type="password"
+                  value={newSecret}
+                  onChange={e => { setNewSecret(e.target.value); setPinErr(""); }}
+                  style={{ ...INPUT, marginBottom: "8px" }}
+                  placeholder="Ny synk-kod (minst 6 tecken)"
+                />
+                <input
+                  type="password"
+                  value={confirmSec}
+                  onChange={e => { setConfirmSec(e.target.value); setPinErr(""); }}
+                  style={{ ...INPUT, marginBottom: pinErr ? "4px" : "12px" }}
+                  placeholder="Bekräfta ny synk-kod"
+                />
+                {pinErr && <p className="text-red-500 text-[12px] mb-3 font-semibold">{pinErr}</p>}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setShowPin(false); setNewSecret(""); setConfirmSec(""); setPinErr(""); }}
+                    style={{ flex: 1, padding: "11px", borderRadius: "12px", background: "#fdf6ee", border: "1.5px solid #ece6df", fontWeight: 700, fontSize: "13px", color: "#2d1717" }}
+                  >
+                    Avbryt
+                  </button>
+                  <button
+                    onClick={handlePinSave}
+                    disabled={pinLoading}
+                    style={{ flex: 1, padding: "11px", borderRadius: "12px", background: pinLoading ? "#f0e8df" : "#ff5f00", color: pinLoading ? "#c4a882" : "white", fontWeight: 700, fontSize: "13px" }}
+                  >
+                    {pinLoading ? "Sparar…" : "Spara"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Phone recovery */}
+            <div className="border border-[#ece6df] rounded-[14px] px-4 py-3 mb-4">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-[16px]">📱</span>
+                <div className="font-bold text-[13px] text-[#2d1717]">Återhämtningsnummer</div>
+              </div>
+              {phoneStep === "idle" && (
+                <>
+                  <div className="text-[12px] text-[#9c7c5c] mb-2">
+                    {syncPhone
+                      ? <>Nummer: <span className="font-semibold text-[#2d1717]">{syncPhone}</span></>
+                      : "Inget nummer kopplat. Lägg till för att kunna återhämta ditt konto via SMS."}
+                  </div>
+                  <button
+                    onClick={() => { setPhoneStep("enter"); setPhoneErr(""); setPhoneInput(""); }}
+                    className="text-[12px] font-bold text-[#ff5f00] underline"
+                  >
+                    {syncPhone ? "Ändra nummer" : "Lägg till nummer"}
+                  </button>
+                </>
+              )}
+              {phoneStep === "enter" && (
+                <>
+                  <p className="text-[12px] text-[#9c7c5c] mb-2">Ange ditt mobilnummer för att få en verifieringskod via SMS.</p>
+                  <input
+                    type="tel"
+                    value={phoneInput}
+                    onChange={e => { setPhoneInput(e.target.value); setPhoneErr(""); }}
+                    style={{ ...INPUT, marginBottom: phoneErr ? "4px" : "10px" }}
+                    placeholder="t.ex. 0701234567"
+                  />
+                  {phoneErr && <p className="text-red-500 text-[12px] mb-2 font-semibold">{phoneErr}</p>}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => { setPhoneStep("idle"); setPhoneErr(""); }}
+                      style={{ flex: 1, padding: "10px", borderRadius: "12px", background: "#fdf6ee", border: "1.5px solid #ece6df", fontWeight: 700, fontSize: "13px", color: "#2d1717" }}
+                    >
+                      Avbryt
+                    </button>
+                    <button
+                      onClick={handlePhoneSend}
+                      disabled={phoneLoading}
+                      style={{ flex: 1, padding: "10px", borderRadius: "12px", background: phoneLoading ? "#f0e8df" : "#ff5f00", color: phoneLoading ? "#c4a882" : "white", fontWeight: 700, fontSize: "13px" }}
+                    >
+                      {phoneLoading ? "Skickar…" : "Skicka kod"}
+                    </button>
+                  </div>
+                </>
+              )}
+              {phoneStep === "code" && (
+                <>
+                  <p className="text-[12px] text-[#9c7c5c] mb-2">
+                    En 6-siffrig kod skickades till <span className="font-semibold">{phoneInput}</span>.
+                  </p>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={6}
+                    value={phoneCode}
+                    onChange={e => { setPhoneCode(e.target.value.replace(/\D/g, "")); setPhoneErr(""); }}
+                    style={{ ...INPUT, letterSpacing: "0.25em", marginBottom: phoneErr ? "4px" : "10px" }}
+                    placeholder="123456"
+                  />
+                  {phoneErr && <p className="text-red-500 text-[12px] mb-2 font-semibold">{phoneErr}</p>}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => { setPhoneStep("enter"); setPhoneCode(""); setPhoneErr(""); }}
+                      style={{ flex: 1, padding: "10px", borderRadius: "12px", background: "#fdf6ee", border: "1.5px solid #ece6df", fontWeight: 700, fontSize: "13px", color: "#2d1717" }}
+                    >
+                      ← Tillbaka
+                    </button>
+                    <button
+                      onClick={handlePhoneVerify}
+                      disabled={phoneLoading}
+                      style={{ flex: 1, padding: "10px", borderRadius: "12px", background: phoneLoading ? "#f0e8df" : "#ff5f00", color: phoneLoading ? "#c4a882" : "white", fontWeight: 700, fontSize: "13px" }}
+                    >
+                      {phoneLoading ? "Verifierar…" : "Bekräfta"}
+                    </button>
+                  </div>
+                </>
+              )}
+              {phoneStep === "done" && (
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-[16px]">✅</span>
+                  <span className="text-[12px] font-semibold text-green-800">Nummer sparat ({syncPhone}).</span>
+                </div>
+              )}
+            </div>
+          </>
         ) : (
           <button
             onClick={onSetupSync}

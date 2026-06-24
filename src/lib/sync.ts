@@ -56,4 +56,44 @@ export async function syncDeleteAccount(token: string): Promise<void> {
   });
 }
 
-export const SYNC_TOKEN_KEY = "sync_token";
+export async function syncChangeSecret(token: string, newSecret: string): Promise<void> {
+  await call("/api/auth/secret", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ newSecret }),
+  });
+}
+
+export async function syncSendPhoneCode(token: string, phone: string): Promise<void> {
+  await call("/api/auth/phone", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ phone }),
+  });
+}
+
+export async function syncVerifyPhone(token: string, phone: string, code: string): Promise<void> {
+  await call("/api/auth/phone/verify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ phone, code }),
+  });
+}
+
+export async function syncRecoverRequest(phone: string): Promise<void> {
+  await call("/api/auth/recover/request", {
+    method: "POST",
+    body: JSON.stringify({ phone }),
+  });
+}
+
+export async function syncRecoverConfirm(phone: string, code: string): Promise<{ username: string; token: string; state: SyncState | null }> {
+  return call("/api/auth/recover/confirm", {
+    method: "POST",
+    body: JSON.stringify({ phone, code }),
+  });
+}
+
+export const SYNC_TOKEN_KEY    = "sync_token";
+export const SYNC_USERNAME_KEY = "sync_username";
+export const SYNC_PHONE_KEY    = "sync_phone";
