@@ -5,13 +5,14 @@ import {
   DEFAULT_SCHEDULE,
   shiftMinutes, netDayMin, weeklyNetMin, fmtMin,
 } from "../lib/schedule";
-import { syncRegister, syncLogin, type SyncState } from "../lib/sync";
+import { syncRegister, syncLogin, syncSendPhoneCode, syncVerifyPhone, type SyncState, SYNC_PHONE_KEY } from "../lib/sync";
 
 export type OnboardingResult = {
   name: string;
   department?: string;
   schedule: WeekSchedule;
   syncToken?: string;
+  syncUsername?: string;
   restoredState?: SyncState;
 };
 
@@ -252,25 +253,26 @@ export default function Onboarding({ onComplete }: { onComplete: (r: OnboardingR
   const [department, setDepartment] = useState("");
   const [schedule, setSchedule] = useState<WeekSchedule>(DEFAULT_SCHEDULE);
 
-  function finish(sched: WeekSchedule, syncToken?: string, restoredState?: SyncState) {
+  function finish(sched: WeekSchedule, syncToken?: string, syncUsername?: string, restoredState?: SyncState) {
     onComplete({
       name: name.trim(),
       department: department.trim() || undefined,
       schedule: sched,
       syncToken,
+      syncUsername,
       restoredState,
     });
   }
 
-  function finishFromLogin(token: string, state: SyncState) {
-    // Returning user: use the synced name/department/schedule so the local
-    // `name`/`department` fields (which were never filled in) don't blank things out.
+  function finishFromLogin(token: string, state: SyncState | null, username: string) {
+    // Returning user: use the synced name/department/schedule.
     onComplete({
-      name: (state.name ?? "").trim(),
-      department: state.department?.trim() || undefined,
-      schedule: (state.schedule as WeekSchedule) ?? DEFAULT_SCHEDULE,
+      name: (state?.name ?? username).trim(),
+      department: state?.department?.trim() || undefined,
+      schedule: state?.schedule ? (state.schedule as WeekSchedule) : DEFAULT_SCHEDULE,
       syncToken: token,
-      restoredState: state,
+      syncUsername: username,
+      restoredState: state ?? undefined,
     });
   }
 
@@ -315,7 +317,7 @@ export default function Onboarding({ onComplete }: { onComplete: (r: OnboardingR
   if (step === "login") return (
     <LoginStep
       onBack={() => setStep("welcome")}
-      onLogin={finishFromLogin}
+      onLogin={(token, state, username) => finishFromLogin(token, state, username)}
     />
   );
 
@@ -441,6 +443,7 @@ export default function Onboarding({ onComplete }: { onComplete: (r: OnboardingR
   );
 
   return null;
+
 }
 
 // ─── Sub-components ───────────────────────────────────────────
@@ -524,7 +527,7 @@ function LoginStep({
   onLogin,
 }: {
   onBack: () => void;
-  onLogin: (token: string, state: SyncState) => void;
+  onLogin: (token: string, state: SyncState | null, username: string) => void;
 }) {
   const [username, setUsername] = useState("");
   const [secret, setSecret]     = useState("");
@@ -549,7 +552,7 @@ function LoginStep({
         setLoading(false);
         return;
       }
-      onLogin(token, state);
+      onLogin(token, state, username);
     } catch (e) {
       setErr((e as Error).message);
       setLoading(false);
@@ -605,7 +608,7 @@ function LoginStep({
   );
 }
 
-type SyncSubStep = "choose" | "create" | "restore";
+type SyncSubStep = "choose" | "create" | "restore" | "phone" | "phone_code";
 
 function SyncStep({
   schedule,
@@ -615,16 +618,21 @@ function SyncStep({
 }: {
   schedule: WeekSchedule;
   onBack: () => void;
-  onFinish: (sched: WeekSchedule, token?: string, state?: SyncState) => void;
+  onFinish: (sched: WeekSchedule, token?: string, username?: string, state?: SyncState) => void;
   name: string;
 }) {
-  void name; // reserved for future "push initial state" feature
-  const [sub, setSub]           = useState<SyncSubStep>("choose");
-  const [username, setUsername] = useState("");
-  const [secret, setSecret]     = useState("");
-  const [confirm, setConfirm]   = useState("");
-  const [loading, setLoading]   = useState(false);
-  const [err, setErr]           = useState("");
+  void name;
+  const [sub, setSub]             = useState<SyncSubStep>("choose");
+  const [username, setUsername]   = useState("");
+  const [secret, setSecret]       = useState("");
+  const [confirm, setConfirm]     = useState("");
+  const [loading, setLoading]     = useState(false);
+  const [err, setErr]             = useState("");
+  // Held after successful create, before phone step resolves
+  const [createdToken, setCreatedToken] = useState("");
+  // Phone sub-step state
+  const [phoneInput, setPhoneInput] = useState("");
+  const [phoneCode, setPhoneCode]   = useState("");
 
   const inputStyle: React.CSSProperties = {
     width: "100%", boxSizing: "border-box", padding: "14px 16px", borderRadius: "16px",
@@ -686,7 +694,8 @@ function SyncStep({
       setLoading(true); setErr("");
       try {
         const { token } = await syncRegister(username, secret);
-        onFinish(schedule, token);
+        setCreatedToken(token);
+        setSub("phone");
       } catch (e) {
         setErr((e as Error).message);
       } finally {
@@ -759,7 +768,7 @@ function SyncStep({
       setLoading(true); setErr("");
       try {
         const { token, state } = await syncLogin(username, secret);
-        onFinish(state?.schedule as WeekSchedule ?? schedule, token, state ?? undefined);
+        onFinish(state?.schedule as WeekSchedule ?? schedule, token, username, state ?? undefined);
       } catch (e) {
         setErr((e as Error).message);
       } finally {
@@ -810,6 +819,125 @@ function SyncStep({
           </button>
           <button onClick={() => { setSub("choose"); setErr(""); setUsername(""); setSecret(""); }} className="ob-btn-ghost w-full mt-1">
             ← Tillbaka
+          </button>
+        </div>
+      </Screen>
+    );
+  }
+
+  if (sub === "phone") {
+    async function handlePhoneSend() {
+      const phone = phoneInput.trim();
+      if (!phone) { setErr("Ange ditt mobilnummer."); return; }
+      setLoading(true); setErr("");
+      try {
+        await syncSendPhoneCode(createdToken, phone);
+        setSub("phone_code");
+      } catch (e) {
+        setErr((e as Error).message);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    return (
+      <Screen>
+        <StepDots current={3} total={3} />
+        <h2 className="text-[22px] font-extrabold tracking-tight text-pc-ink mb-1 text-center">
+          Återhämtningsnummer
+        </h2>
+        <p className="text-[13px] text-pc-muted mb-6 text-center leading-relaxed">
+          Valfritt men rekommenderat: lägg till ditt mobilnummer för att kunna återhämta ditt konto via SMS om du glömmer din synk-kod.
+        </p>
+
+        <div className="w-full">
+          <Label>Mobilnummer <span className="text-pc-muted font-medium normal-case tracking-normal">(valfritt)</span></Label>
+          <input
+            type="tel"
+            placeholder="t.ex. 0701234567"
+            value={phoneInput}
+            onChange={e => { setPhoneInput(e.target.value); setErr(""); }}
+            className="ob-input"
+            style={{ width: "100%", boxSizing: "border-box", padding: "14px 16px", borderRadius: "16px", border: "1.5px solid #ece6df", fontSize: "16px", outline: "none", background: "#fdf6ee", fontWeight: 600, color: "#2d1717", marginBottom: "14px" }}
+          />
+          {err && <p className="text-red-500 text-[13px] mb-3 font-semibold">{err}</p>}
+
+          <button
+            onClick={handlePhoneSend}
+            disabled={loading}
+            className="ob-btn-primary w-full"
+            style={loading ? { background: "#f0e8df", color: "#c4a882", boxShadow: "none" } : undefined}
+          >
+            {loading ? "Skickar…" : "Skicka verifieringskod →"}
+          </button>
+          <button
+            onClick={() => onFinish(schedule, createdToken, username)}
+            className="ob-btn-ghost w-full mt-1"
+          >
+            Hoppa över
+          </button>
+        </div>
+      </Screen>
+    );
+  }
+
+  if (sub === "phone_code") {
+    async function handlePhoneVerify() {
+      const code = phoneCode.trim();
+      if (code.length !== 6) { setErr("Koden är 6 siffror."); return; }
+      setLoading(true); setErr("");
+      try {
+        await syncVerifyPhone(createdToken, phoneInput.trim(), code);
+        // Save phone locally
+        const digits = phoneInput.trim().replace(/\D/g, "");
+        const e164 = digits.startsWith("46") ? "+" + digits : digits.startsWith("0") ? "+46" + digits.slice(1) : "+" + digits;
+        localStorage.setItem(SYNC_PHONE_KEY, e164);
+        onFinish(schedule, createdToken, username);
+      } catch (e) {
+        setErr((e as Error).message);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    return (
+      <Screen>
+        <StepDots current={3} total={3} />
+        <h2 className="text-[22px] font-extrabold tracking-tight text-pc-ink mb-1 text-center">
+          Bekräfta nummer
+        </h2>
+        <p className="text-[13px] text-pc-muted mb-6 text-center leading-relaxed">
+          En 6-siffrig kod skickades till <span className="font-semibold">{phoneInput}</span>.
+        </p>
+
+        <div className="w-full">
+          <Label>Verifieringskod</Label>
+          <input
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            maxLength={6}
+            placeholder="123456"
+            value={phoneCode}
+            onChange={e => { setPhoneCode(e.target.value.replace(/\D/g, "")); setErr(""); }}
+            className="ob-input"
+            style={{ width: "100%", boxSizing: "border-box", padding: "14px 16px", borderRadius: "16px", border: "1.5px solid #ece6df", fontSize: "16px", outline: "none", background: "#fdf6ee", fontWeight: 600, color: "#2d1717", marginBottom: "14px", letterSpacing: "0.25em" }}
+          />
+          {err && <p className="text-red-500 text-[13px] mb-3 font-semibold">{err}</p>}
+
+          <button
+            onClick={handlePhoneVerify}
+            disabled={loading}
+            className="ob-btn-primary w-full"
+            style={loading ? { background: "#f0e8df", color: "#c4a882", boxShadow: "none" } : undefined}
+          >
+            {loading ? "Verifierar…" : "Bekräfta →"}
+          </button>
+          <button onClick={() => { setSub("phone"); setPhoneCode(""); setErr(""); }} className="ob-btn-ghost w-full mt-1">
+            ← Tillbaka
+          </button>
+          <button onClick={() => onFinish(schedule, createdToken, username)} className="ob-btn-ghost w-full">
+            Hoppa över
           </button>
         </div>
       </Screen>

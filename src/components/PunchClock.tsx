@@ -11,7 +11,7 @@ import {
   consumeActionFromUrl, isDuplicateAction, rememberAction, SOURCE_META,
   type ParsedAction, type ActionSource,
 } from "../lib/actions";
-import { syncPush, syncDeleteAccount, SYNC_TOKEN_KEY, type SyncState } from "../lib/sync";
+import { syncPush, syncDeleteAccount, SYNC_TOKEN_KEY, SYNC_USERNAME_KEY, SYNC_PHONE_KEY, type SyncState } from "../lib/sync";
 import {
   type WeekSchedule, type DayConfig,
   DEFAULT_SCHEDULE, dayKeyOf, netDayMin, shiftMinutes, weeklyNetMin, fmtMin,
@@ -900,6 +900,9 @@ export default function PunchClock() {
       localStorage.setItem(SYNC_TOKEN_KEY, result.syncToken);
       setSyncToken(result.syncToken);
     }
+    if (result.syncUsername) {
+      localStorage.setItem(SYNC_USERNAME_KEY, result.syncUsername);
+    }
     if (result.restoredState) {
       const s = result.restoredState;
       setName(s.name ?? result.name);
@@ -927,14 +930,16 @@ export default function PunchClock() {
     setSettingsModal(false);
   }
 
-  function handleSyncToken(token: string) {
+  function handleSyncToken(token: string, username: string) {
     localStorage.setItem(SYNC_TOKEN_KEY, token);
+    localStorage.setItem(SYNC_USERNAME_KEY, username);
     setSyncToken(token);
     setSyncModal(false);
   }
 
-  function handleSyncRestore(token: string, state: SyncState) {
+  function handleSyncRestore(token: string, state: SyncState, username: string) {
     localStorage.setItem(SYNC_TOKEN_KEY, token);
+    localStorage.setItem(SYNC_USERNAME_KEY, username);
     setSyncToken(token);
     setName(state.name ?? name);
     setSchedule(state.schedule ? migrateSchedule(state.schedule as Record<string, unknown>) : schedule);
@@ -954,6 +959,8 @@ export default function PunchClock() {
     if (!syncToken) return;
     try { await syncDeleteAccount(syncToken); } catch { /* ignore */ }
     localStorage.removeItem(SYNC_TOKEN_KEY);
+    localStorage.removeItem(SYNC_USERNAME_KEY);
+    localStorage.removeItem(SYNC_PHONE_KEY);
     setSyncToken(null);
     setSyncStatus("idle");
     setSyncedAt(null);

@@ -12,6 +12,22 @@ All notable changes to **min-tid** are recorded here. Format loosely follows [Ke
 
 _Nothing yet._
 
+## [1.0.0-beta.10] — 2026-06-24
+
+### Added
+- **Username shown clearly in settings.** When sync is active the settings modal now shows "Inloggad som: @username" under the sync status — no more wondering which account you're on.
+- **Change PIN without disconnecting.** A new "Byt synk-kod" section in settings (visible when synced) lets you set a new secret in-place. The server re-hashes and saves it; the existing JWT stays valid and sync continues uninterrupted.
+- **SMS recovery via 46elks.** Attach a mobile number to your account at any time:
+  - In **settings** (when synced): "Återhämtningsnummer" card — enter number → receive 6-digit SMS code → verify → phone saved.
+  - In **onboarding** (new user flow, after account creation): optional "Lägg till återhämtningsnummer" step with the same OTP flow; can be skipped.
+- **Phone-based account recovery.** In the sync modal ("Återställ" tab), a new "Återhämta med mobilnummer" link opens a recovery flow: enter registered phone → receive SMS code → confirm → logged in and data restored. Works both during onboarding and when adding sync to an existing device.
+
+### Internal
+- Server: new in-memory OTP store with SHA-256 hashing, 10-min TTL, per-phone rate limiting (configurable via `SMS_RESEND_COOLDOWN_SEC`, `SMS_MAX_PER_HOUR`, `SMS_MAX_PER_DAY`). 46elks credentials: `ELKS_API_USERNAME`, `ELKS_API_PASSWORD`, `ELKS_FROM`.
+- Server: 5 new routes — `PUT /api/auth/secret`, `POST /api/auth/phone`, `POST /api/auth/phone/verify`, `POST /api/auth/recover/request`, `POST /api/auth/recover/confirm`.
+- `sync.ts`: `SYNC_USERNAME_KEY`, `SYNC_PHONE_KEY` constants; `syncChangeSecret`, `syncSendPhoneCode`, `syncVerifyPhone`, `syncRecoverRequest`, `syncRecoverConfirm` functions.
+- `OnboardingResult` type gains `syncUsername`; callback chains updated to thread username through all sync paths (register, restore, login).
+
 ## [1.0.0-beta.9] — 2026-06-24
 
 ### Added
@@ -168,6 +184,7 @@ First public beta. The app is feature-complete for time, absence and expense tra
 - **`nixpacks.toml`** overrides the default Caddy start command if Coolify falls back to Nixpacks instead of Dockerfile.
 - **Zero native deps** on the server — `better-sqlite3` was replaced with a plain JSON file store.
 
+[1.0.0-beta.10]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.10
 [1.0.0-beta.9]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.9
 [1.0.0-beta.8]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.8
 [1.0.0-beta.1]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.1

@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { syncRegister, syncLogin, type SyncState } from "../lib/sync";
+import { syncRegister, syncLogin, syncRecoverRequest, syncRecoverConfirm, type SyncState } from "../lib/sync";
 
 type Tab = "create" | "restore";
+type RecoverStep = "phone" | "code" | "done";
 
 export default function SyncModal({
   open,
@@ -11,8 +12,8 @@ export default function SyncModal({
 }: {
   open: boolean;
   onClose: () => void;
-  onToken: (token: string) => void;
-  onRestore: (token: string, state: SyncState) => void;
+  onToken: (token: string, username: string) => void;
+  onRestore: (token: string, state: SyncState, username: string) => void;
 }) {
   const [tab, setTab]           = useState<Tab>("create");
   const [username, setUsername] = useState("");
@@ -22,14 +23,19 @@ export default function SyncModal({
   const [err, setErr]           = useState("");
   const [done, setDone]         = useState(false);
 
+  // Phone recovery
+  const [recovering, setRecovering]     = useState(false);
+  const [recoverStep, setRecoverStep]   = useState<RecoverStep>("phone");
+  const [recoverPhone, setRecoverPhone] = useState("");
+  const [recoverCode, setRecoverCode]   = useState("");
+  const [recoverUser, setRecoverUser]   = useState("");
+
   function reset() {
     setTab("create");
-    setUsername("");
-    setSecret("");
-    setConfirm("");
-    setLoading(false);
-    setErr("");
-    setDone(false);
+    setUsername(""); setSecret(""); setConfirm("");
+    setLoading(false); setErr(""); setDone(false);
+    setRecovering(false); setRecoverStep("phone");
+    setRecoverPhone(""); setRecoverCode(""); setRecoverUser("");
   }
 
   if (!open) return null;
@@ -46,7 +52,7 @@ export default function SyncModal({
     setLoading(true); setErr("");
     try {
       const { token } = await syncRegister(username, secret);
-      onToken(token);
+      onToken(token, username);
       setDone(true);
     } catch (e) {
       setErr((e as Error).message);
@@ -62,11 +68,45 @@ export default function SyncModal({
     try {
       const { token, state } = await syncLogin(username, secret);
       if (state) {
-        onRestore(token, state);
+        onRestore(token, state, username);
       } else {
-        onToken(token);
+        onToken(token, username);
       }
       setDone(true);
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleRecoverSend() {
+    const phone = recoverPhone.trim();
+    if (!phone) { setErr("Ange ditt mobilnummer."); return; }
+    setLoading(true); setErr("");
+    try {
+      await syncRecoverRequest(phone);
+      setRecoverStep("code");
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleRecoverConfirm() {
+    const code = recoverCode.trim();
+    if (code.length !== 6) { setErr("Koden är 6 siffror."); return; }
+    setLoading(true); setErr("");
+    try {
+      const { username: u, token, state } = await syncRecoverConfirm(recoverPhone.trim(), code);
+      setRecoverUser(u);
+      setRecoverStep("done");
+      if (state) {
+        onRestore(token, state, u);
+      } else {
+        onToken(token, u);
+      }
     } catch (e) {
       setErr((e as Error).message);
     } finally {
@@ -120,15 +160,100 @@ export default function SyncModal({
             </div>
             <button
               onClick={handleClose}
-              style={{
-                padding: "14px 32px", borderRadius: "16px", background: "#ff5f00",
-                color: "white", fontWeight: 700, fontSize: "15px",
-                boxShadow: "0 8px 20px -8px rgba(255,95,0,0.6)",
-              }}
+              style={{ padding: "14px 32px", borderRadius: "16px", background: "#ff5f00", color: "white", fontWeight: 700, fontSize: "15px", boxShadow: "0 8px 20px -8px rgba(255,95,0,0.6)" }}
             >
               Stäng
             </button>
           </div>
+
+        ) : recovering ? (
+          /* ── Phone recovery flow ── */
+          <>
+            <button
+              onClick={() => { setRecovering(false); setRecoverStep("phone"); setRecoverPhone(""); setRecoverCode(""); setErr(""); }}
+              className="text-[13px] font-semibold text-[#9c7c5c] mb-4 flex items-center gap-1"
+            >
+              ← Tillbaka
+            </button>
+
+            {recoverStep === "phone" && (
+              <>
+                <div className="font-extrabold text-[18px] mb-1">📱 Kontohämtning</div>
+                <p className="text-[13px] text-[#9c7c5c] mb-4 leading-relaxed">
+                  Ange mobilnumret du kopplat till ditt konto för att få en verifieringskod via SMS.
+                </p>
+                <input
+                  type="tel"
+                  placeholder="t.ex. 0701234567"
+                  value={recoverPhone}
+                  onChange={e => { setRecoverPhone(e.target.value); setErr(""); }}
+                  style={inputStyle}
+                  {...focusStyle}
+                />
+                {err && <div className="text-red-600 text-[13px] mb-3 font-semibold">{err}</div>}
+                <button
+                  onClick={handleRecoverSend}
+                  disabled={loading}
+                  style={{ width: "100%", padding: "14px", borderRadius: "14px", background: loading ? "#f0e8df" : "#ff5f00", color: loading ? "#c4a882" : "white", fontWeight: 700, fontSize: "14px", boxShadow: loading ? "none" : "0 8px 20px -8px rgba(255,95,0,0.6)" }}
+                >
+                  {loading ? "Skickar…" : "Skicka kod →"}
+                </button>
+              </>
+            )}
+
+            {recoverStep === "code" && (
+              <>
+                <div className="font-extrabold text-[18px] mb-1">Ange verifieringskod</div>
+                <p className="text-[13px] text-[#9c7c5c] mb-4 leading-relaxed">
+                  En 6-siffrig kod skickades till <span className="font-semibold">{recoverPhone}</span>.
+                </p>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={6}
+                  placeholder="123456"
+                  value={recoverCode}
+                  onChange={e => { setRecoverCode(e.target.value.replace(/\D/g, "")); setErr(""); }}
+                  style={{ ...inputStyle, letterSpacing: "0.3em" }}
+                  {...focusStyle}
+                />
+                {err && <div className="text-red-600 text-[13px] mb-3 font-semibold">{err}</div>}
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => { setRecoverStep("phone"); setRecoverCode(""); setErr(""); }}
+                    style={{ padding: "14px", borderRadius: "14px", background: "#fdf6ee", border: "1.5px solid #ece6df", fontWeight: 700, fontSize: "14px", color: "#2d1717" }}
+                  >
+                    ← Tillbaka
+                  </button>
+                  <button
+                    onClick={handleRecoverConfirm}
+                    disabled={loading}
+                    style={{ padding: "14px", borderRadius: "14px", background: loading ? "#f0e8df" : "#ff5f00", color: loading ? "#c4a882" : "white", fontWeight: 700, fontSize: "14px" }}
+                  >
+                    {loading ? "Verifierar…" : "Bekräfta"}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {recoverStep === "done" && (
+              <div className="text-center py-4">
+                <div className="text-[40px] mb-3">✅</div>
+                <div className="font-extrabold text-[18px] mb-1">Konto hämtat!</div>
+                <div className="text-[13px] text-[#9c7c5c] mb-6">
+                  Inloggad som <span className="font-bold text-[#ff5f00]">@{recoverUser}</span>. Din data synkroniseras nu.
+                </div>
+                <button
+                  onClick={handleClose}
+                  style={{ padding: "14px 32px", borderRadius: "16px", background: "#ff5f00", color: "white", fontWeight: 700, fontSize: "15px", boxShadow: "0 8px 20px -8px rgba(255,95,0,0.6)" }}
+                >
+                  Stäng
+                </button>
+              </div>
+            )}
+          </>
+
         ) : (
           <>
             {/* Tab toggle */}
@@ -146,10 +271,8 @@ export default function SyncModal({
               ))}
             </div>
 
-            {/* Username field (shared across both tabs) */}
-            <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-2">
-              Användarnamn
-            </div>
+            {/* Username (shared) */}
+            <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-2">Användarnamn</div>
             <input
               type="text"
               placeholder="t.ex. carl eller carl2"
@@ -163,11 +286,9 @@ export default function SyncModal({
 
             {tab === "create" && (
               <>
-                <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-2">
-                  Välj en synk-kod
-                </div>
+                <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-2">Välj en synk-kod</div>
                 <div className="text-[12px] text-[#9c7c5c] mb-3 leading-relaxed">
-                  Välj en lång, unik fras eller kombination. Du behöver den för att logga in på nya enheter. Den lagras aldrig i klartext.
+                  Välj en lång, unik fras eller kombination. Du behöver den för att logga in på nya enheter.
                 </div>
                 <input
                   type="password"
@@ -177,9 +298,7 @@ export default function SyncModal({
                   style={inputStyle}
                   {...focusStyle}
                 />
-                <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-2">
-                  Bekräfta synk-koden
-                </div>
+                <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-2">Bekräfta synk-koden</div>
                 <input
                   type="password"
                   placeholder="Upprepa koden"
@@ -193,11 +312,9 @@ export default function SyncModal({
 
             {tab === "restore" && (
               <>
-                <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-2">
-                  Din synk-kod
-                </div>
+                <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-2">Din synk-kod</div>
                 <div className="text-[12px] text-[#9c7c5c] mb-3 leading-relaxed">
-                  Ange det användarnamn och den synk-kod du skapade på din andra enhet. Din data hämtas och ersätter data på den här enheten.
+                  Ange det användarnamn och den synk-kod du skapade på din andra enhet.
                 </div>
                 <input
                   type="password"
@@ -210,34 +327,36 @@ export default function SyncModal({
               </>
             )}
 
-            {err && (
-              <div className="text-red-600 text-[13px] mb-3 font-semibold">{err}</div>
-            )}
+            {err && <div className="text-red-600 text-[13px] mb-3 font-semibold">{err}</div>}
 
             <div className="grid grid-cols-2 gap-3 mt-1">
               <button
                 onClick={handleClose}
-                style={{
-                  padding: "14px", borderRadius: "14px", background: "#fdf6ee",
-                  border: "1.5px solid #ece6df", fontWeight: 700, fontSize: "14px", color: "#2d1717",
-                }}
+                style={{ padding: "14px", borderRadius: "14px", background: "#fdf6ee", border: "1.5px solid #ece6df", fontWeight: 700, fontSize: "14px", color: "#2d1717" }}
               >
                 Avbryt
               </button>
               <button
                 onClick={tab === "create" ? handleCreate : handleRestore}
                 disabled={loading}
-                style={{
-                  padding: "14px", borderRadius: "14px",
-                  background: loading ? "#f0e8df" : "#ff5f00",
-                  color: loading ? "#c4a882" : "white",
-                  fontWeight: 700, fontSize: "14px",
-                  boxShadow: loading ? "none" : "0 8px 20px -8px rgba(255,95,0,0.6)",
-                }}
+                style={{ padding: "14px", borderRadius: "14px", background: loading ? "#f0e8df" : "#ff5f00", color: loading ? "#c4a882" : "white", fontWeight: 700, fontSize: "14px", boxShadow: loading ? "none" : "0 8px 20px -8px rgba(255,95,0,0.6)" }}
               >
                 {loading ? "Vänta…" : tab === "create" ? "Skapa konto" : "Återställ"}
               </button>
             </div>
+
+            {/* Phone recovery link (restore tab only) */}
+            {tab === "restore" && (
+              <div className="mt-5 pt-4 border-t border-[#ece6df] text-center">
+                <div className="text-[12px] text-[#9c7c5c] mb-2">Glömt ditt användarnamn eller synk-kod?</div>
+                <button
+                  onClick={() => { setRecovering(true); setErr(""); }}
+                  className="text-[13px] font-bold text-[#ff5f00] underline"
+                >
+                  📱 Återhämta med mobilnummer
+                </button>
+              </div>
+            )}
           </>
         )}
       </div>
