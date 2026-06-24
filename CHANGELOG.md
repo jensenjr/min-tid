@@ -15,7 +15,7 @@ _Nothing yet._
 ## [1.0.0-beta.9] — 2026-06-24
 
 ### Added
-- **Long-session reassurance on the clock.** When an active session passes the late-punchout threshold (forgotten check-out territory — a timer reading "29h 0min"), an amber card now appears under the punch button: _"Långt pass (29h 0min). Glömde du checka ut? Var inte rädd att checka ut — ingen tid sparas förrän du bekräftar sluttiden."_ with a **Välj sluttid** button that opens the end-time chooser directly. Removes the fear that tapping "Checka ut" silently records the full inflated duration.
+- **Long-session reassurance on the clock.** When an active session passes the late-punchout threshold (forgotten check-out territory — a timer reading "29h 0min"), an amber card now appears under the punch button: _"Långt pass (29h 0min). Glömde du checka ut? Bekräftelse sker innan utcheckning."_ with a **Välj sluttid** button that opens the end-time chooser directly. Removes the fear that tapping "Checka ut" silently records the full inflated duration.
 - **"Stämpla ut enligt schema" one-tap option.** The late-punchout sheet now offers a recommended button that checks out at the *scheduled* end time of the day the session started (e.g. kl. 17:00), showing the resulting pass length. This is the practical "automatic checkout" for forgotten punch-outs — one tap credits a normal scheduled day instead of an all-night session. The custom time picker also defaults to that scheduled end.
 - **"+X över schemat" statement.** Once today's net target is reached during an active session, the leave-time line appends how far over the schedule you are (e.g. _"Mål uppnått — du kan gå hem · +1h 30min över schemat"_).
 

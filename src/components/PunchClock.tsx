@@ -1253,7 +1253,7 @@ export default function PunchClock() {
                         Långt pass ({fmtDur(liveMs / 60000)}). Glömde du checka ut?
                       </div>
                       <div className="text-[12px] text-amber-700 mt-0.5 font-medium leading-snug">
-                        Var inte rädd att checka ut — ingen tid sparas förrän du bekräftar sluttiden.
+                        Bekräftelse sker innan utcheckning.
                       </div>
                     </div>
                   </div>
