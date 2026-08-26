@@ -16,13 +16,43 @@ export interface SyncState {
 // Base URL — empty string in dev (Vite proxies /api → localhost:3001)
 const BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? "";
 
+/**
+ * A failed sync call, with enough context for the diagnostics panel and the
+ * felanmälan. `status === 0` means the request never got a response at all —
+ * offline, DNS, TLS, or a network that swallows it (captive portal, filter).
+ */
+export class SyncApiError extends Error {
+  status: number;
+  path: string;
+  method: string;
+  constructor(message: string, status: number, path: string, method: string) {
+    super(message);
+    this.name = "SyncApiError";
+    this.status = status;
+    this.path = path;
+    this.method = method;
+  }
+}
+
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
-    ...init,
-  });
+  const method = init?.method ?? "GET";
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+      ...init,
+    });
+  } catch {
+    // fetch only rejects when the request never completed.
+    throw new SyncApiError(
+      navigator.onLine ? "Ingen kontakt med servern (blockerad eller otillgänglig)." : "Enheten är offline.",
+      0, path, method,
+    );
+  }
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
+  if (!res.ok) {
+    throw new SyncApiError((body as { error?: string }).error ?? `HTTP ${res.status}`, res.status, path, method);
+  }
   return body as T;
 }
 

@@ -12,6 +12,23 @@ All notable changes to **min-tid** are recorded here. Format loosely follows [Ke
 
 _Nothing yet._
 
+## [1.0.0-beta.12] — 2026-08-26
+
+### Added
+- **Röd banner när synken inte fungerar.** Ett jobbnätverk kan släppa fram appen men blockera synken (403 från en proxy) — appen fortsatte då tyst att spara lokalt utan att någon märkte att timmarna aldrig lämnade telefonen. Nu visas en röd varning direkt under rubriken, på alla flikar, så länge synken felar. Den går att dölja, men kommer tillbaka vid nästa fel, och försvinner av sig själv så fort synken fungerar igen.
+- **”Läs mer och åtgärda”** öppnar inställningarna med en felsökningsruta som förklarar vad som hände (”Nätverket blockerar synken”, felkod, tidpunkt), varför det oftast händer, och en numrerad åtgärdslista — byt till mobildata, stäng av VPN, försök igen. Rutan säger också rakt ut att inget är förlorat: allt ligger kvar på enheten och laddas upp när nätet fungerar.
+- **”Skicka fellogg”** mejlar en färdig felanmälan till christian@krut.it med ämnet `mintid sync error kl HH:MM` och en logg med app-version, tidpunkt, användarnamn, felkod, nätverksstatus, senaste lyckade synk och enhet — plus de senaste felen. Synk-koden och inloggnings-token följer aldrig med.
+- **”Försök igen”** direkt i felsökningsrutan.
+
+### Internal
+- `SyncApiError` i `sync.ts` bär `status` / `path` / `method`; `status === 0` betyder att förfrågan aldrig fick svar (offline, blockerad, captive portal).
+- Nytt `src/lib/syncDiagnostics.ts`: `explainSyncError()` (felkod → rubrik, orsak och åtgärder på svenska), rullande logg med de 10 senaste felen i `localStorage["sync_error_log"]` (aldrig synkad), och `buildSyncReportMailto()`.
+- `PunchClock`: `noteSyncFailure()` / `clearSyncFailure()` som enda väg in och ut ur feltillståndet, ny `SyncErrorBanner`-komponent mellan header och main (båda `shrink-0`, så bannern följer med på alla flikar).
+- `SettingsModal` tar `syncFailure`, `syncErrorLog`, `openSyncHelp` och `dirty` i stället för den tidigare `syncError`-strängen.
+
+### Docs
+- `CLAUDE.md`: nytt avsnitt om hur synkfel ytas, samt ett planeringsavsnitt om den framtida admin- och schemaläggningsappen (separat privat repo — inget av det byggs här).
+
 ## [1.0.0-beta.11] — 2026-08-26
 
 ### Fixed
@@ -203,6 +220,7 @@ First public beta. The app is feature-complete for time, absence and expense tra
 - **`nixpacks.toml`** overrides the default Caddy start command if Coolify falls back to Nixpacks instead of Dockerfile.
 - **Zero native deps** on the server — `better-sqlite3` was replaced with a plain JSON file store.
 
+[1.0.0-beta.12]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.12
 [1.0.0-beta.11]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.11
 [1.0.0-beta.10]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.10
 [1.0.0-beta.9]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.9

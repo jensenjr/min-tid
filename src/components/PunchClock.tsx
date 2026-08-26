@@ -12,10 +12,14 @@ import {
   type ParsedAction, type ActionSource,
 } from "../lib/actions";
 import {
-  syncPush, syncPull, syncDeleteAccount,
+  syncPush, syncPull, syncDeleteAccount, SyncApiError,
   SYNC_TOKEN_KEY, SYNC_REV_KEY, SYNC_DIRTY_KEY, SYNC_USERNAME_KEY, SYNC_PHONE_KEY,
   type SyncState,
 } from "../lib/sync";
+import {
+  logSyncFailure, readSyncErrorLog, explainSyncError,
+  type SyncFailure,
+} from "../lib/syncDiagnostics";
 import {
   type WeekSchedule, type DayConfig,
   DEFAULT_SCHEDULE, dayKeyOf, netDayMin, shiftMinutes, weeklyNetMin, fmtMin,
@@ -756,7 +760,12 @@ export default function PunchClock() {
   const [syncToken, setSyncToken]   = useState<string | null>(() => localStorage.getItem(SYNC_TOKEN_KEY));
   const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "pulling" | "ok" | "error">("idle");
   const [syncedAt, setSyncedAt]     = useState<number | null>(null);
-  const [syncError, setSyncError]   = useState<string | null>(null);
+  const [syncFailure, setSyncFailure] = useState<SyncFailure | null>(() => readSyncErrorLog()[0] ?? null);
+  const [syncErrorLog, setSyncErrorLog] = useState<SyncFailure[]>(() => readSyncErrorLog());
+  // A dismissed banner stays hidden until the *next* failure — a red bar you can
+  // never get rid of is worse than one that comes back when it matters.
+  const [bannerHiddenFor, setBannerHiddenFor] = useState<number | null>(null);
+  const [syncHelpOpen, setSyncHelpOpen] = useState(false);
   const [syncModal, setSyncModal]   = useState(false);
   const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -837,6 +846,27 @@ export default function PunchClock() {
     try { localStorage.setItem(SYNC_REV_KEY, String(rev)); } catch { /* ignore */ }
   }
 
+  /** Record a failed sync call so the banner, the help panel and the felanmälan agree. */
+  function noteSyncFailure(e: unknown) {
+    const api = e instanceof SyncApiError ? e : null;
+    const failure: SyncFailure = {
+      at: Date.now(),
+      status: api?.status ?? 0,
+      path: api?.path ?? "/api/sync",
+      method: api?.method ?? "GET",
+      message: (e as Error)?.message ?? "Okänt fel",
+      online: typeof navigator === "undefined" ? true : navigator.onLine,
+    };
+    setSyncFailure(failure);
+    setSyncErrorLog(logSyncFailure(failure));
+    setSyncStatus("error");
+  }
+
+  function clearSyncFailure() {
+    setSyncFailure(null);
+    setBannerHiddenFor(null);
+  }
+
   function markDirty(dirty: boolean) {
     dirtyRef.current = dirty;
     try {
@@ -871,11 +901,10 @@ export default function PunchClock() {
       rememberRev(rev);
       markDirty(false);
       setSyncedAt(Date.now());
-      setSyncError(null);
+      clearSyncFailure();
       setSyncStatus("ok");
     } catch (e) {
-      setSyncError((e as Error).message);
-      setSyncStatus("error");
+      noteSyncFailure(e);
     }
   }
 
@@ -901,7 +930,7 @@ export default function PunchClock() {
         // Account exists but has never been written to — this device seeds it.
         hydratedRef.current = true;
         rememberRev(updatedAt);
-        setSyncError(null);
+        clearSyncFailure();
         setSyncStatus("ok");
         if (opts.manual) showToast("Molnet är tomt ännu — dina data laddas upp.");
         pushSoon(0);
@@ -926,14 +955,17 @@ export default function PunchClock() {
         }
       }
       setSyncedAt(Date.now());
-      setSyncError(null);
+      clearSyncFailure();
       setSyncStatus("ok");
       // Edits made while offline / before hydration: get them up now.
       if (!merged && dirtyRef.current) pushSoon(0);
     } catch (e) {
-      setSyncError((e as Error).message);
-      setSyncStatus("error");
-      if (opts.manual) showToast("Kunde inte hämta: " + (e as Error).message);
+      noteSyncFailure(e);
+      if (opts.manual) showToast("Kunde inte hämta: " + explainSyncError({
+        at: Date.now(), status: e instanceof SyncApiError ? e.status : 0,
+        path: "", method: "", message: (e as Error).message,
+        online: typeof navigator === "undefined" ? true : navigator.onLine,
+      }).headline.toLowerCase());
     } finally {
       pullingRef.current = false;
     }
@@ -1115,7 +1147,7 @@ export default function PunchClock() {
       schedule: s.schedule ?? fallback?.fallbackSchedule ?? DEFAULT_SCHEDULE,
     });
     setSyncedAt(Date.now());
-    setSyncError(null);
+    clearSyncFailure();
     setSyncStatus("ok");
   }
 
@@ -1158,7 +1190,7 @@ export default function PunchClock() {
     dirtyRef.current    = false;
     setSyncToken(null);
     setSyncStatus("idle");
-    setSyncError(null);
+    clearSyncFailure();
     setSyncedAt(null);
     showToast("Synk avstängd här. Kontot finns kvar — logga in igen när du vill.");
   }
@@ -1285,6 +1317,12 @@ export default function PunchClock() {
   const showStartBanner = !isIn && todayCfg.active && todaySessions.length === 0
     && nowHM >= todayCfg.startTime && nowHM < todayCfg.endTime
     && !bannerDismissed.includes(`${todayDate}:start`);
+  // Sync failure banner: only when sync is actually set up, and only until the
+  // user dismisses *this* failure (a newer one shows it again).
+  const showSyncErrorBanner = !!syncToken && syncStatus === "error" && !!syncFailure
+    && bannerHiddenFor !== syncFailure.at;
+  const syncErrorInfo = explainSyncError(syncFailure);
+
   const showEndBanner = isIn && todayCfg.active && nowHM >= todayCfg.endTime
     && !bannerDismissed.includes(`${todayDate}:end`);
 
@@ -1368,6 +1406,19 @@ export default function PunchClock() {
             </button>
           </div>
         </header>
+
+        {showSyncErrorBanner && (
+          <div className="shrink-0 px-5 pb-3">
+            <SyncErrorBanner
+              headline={syncErrorInfo.headline}
+              detail={syncErrorInfo.networkBlocked
+                ? "Din tid sparas på enheten, men den når inte molnet."
+                : "Din tid sparas på enheten, men synken till molnet misslyckas."}
+              onReadMore={() => { setSyncHelpOpen(true); setSettingsModal(true); }}
+              onDismiss={() => setBannerHiddenFor(syncFailure?.at ?? Date.now())}
+            />
+          </div>
+        )}
 
         <main className="flex-1 min-h-0 overflow-y-auto px-5">
 
@@ -2187,8 +2238,11 @@ export default function PunchClock() {
         syncToken={syncToken}
         syncStatus={syncStatus}
         syncedAt={syncedAt}
-        syncError={syncError}
-        onClose={() => setSettingsModal(false)}
+        syncFailure={syncFailure}
+        syncErrorLog={syncErrorLog}
+        openSyncHelp={syncHelpOpen}
+        dirty={dirtyRef.current}
+        onClose={() => { setSettingsModal(false); setSyncHelpOpen(false); }}
         onSave={handleSettingsSave}
         onSetupSync={() => { setSettingsModal(false); setSyncModal(true); }}
         onPullNow={() => { void pullNow({ manual: true }); }}
@@ -2248,6 +2302,48 @@ export default function PunchClock() {
 
 // ─── Schedule banner ───────────────────────────────────────────
 // Inline nudge card on the clock view, driven by today's schedule.
+// Red, unmissable, and on every tab: a sync that silently stopped working is the
+// one failure the user cannot discover on their own.
+function SyncErrorBanner({ headline, detail, onReadMore, onDismiss }: {
+  headline: string;
+  detail: string;
+  onReadMore: () => void;
+  onDismiss: () => void;
+}) {
+  return (
+    <div
+      role="alert"
+      className="rounded-[18px] px-4 py-3 pc-pop"
+      style={{ background: "#fef2f2", border: "1.5px solid #fca5a5", boxShadow: "0 4px 16px rgba(220,38,38,0.10)" }}
+    >
+      <div className="flex items-start gap-3">
+        <span className="text-[18px] leading-none mt-0.5 shrink-0">⚠️</span>
+        <div className="flex-1 min-w-0">
+          <div className="text-[13px] font-extrabold leading-tight" style={{ color: "#b91c1c" }}>
+            {headline}
+          </div>
+          <div className="text-[12px] leading-snug mt-0.5" style={{ color: "#9f1239" }}>{detail}</div>
+          <button
+            onClick={onReadMore}
+            className="mt-2 text-[12px] font-extrabold underline"
+            style={{ color: "#b91c1c" }}
+          >
+            Läs mer och åtgärda →
+          </button>
+        </div>
+        <button
+          onClick={onDismiss}
+          className="shrink-0 w-6 h-6 flex items-center justify-center rounded-lg"
+          style={{ color: "#b91c1c" }}
+          aria-label="Dölj"
+        >
+          <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ScheduleBanner({ emoji, text, primary, secondary, onDismiss }: {
   emoji: string;
   text: string;
