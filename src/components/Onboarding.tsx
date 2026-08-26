@@ -14,6 +14,7 @@ export type OnboardingResult = {
   syncToken?: string;
   syncUsername?: string;
   restoredState?: SyncState;
+  syncRev?: number;
 };
 
 type Step = "welcome" | "login" | "info" | "choice" | "schedule" | "sync";
@@ -253,7 +254,7 @@ export default function Onboarding({ onComplete }: { onComplete: (r: OnboardingR
   const [department, setDepartment] = useState("");
   const [schedule, setSchedule] = useState<WeekSchedule>(DEFAULT_SCHEDULE);
 
-  function finish(sched: WeekSchedule, syncToken?: string, syncUsername?: string, restoredState?: SyncState) {
+  function finish(sched: WeekSchedule, syncToken?: string, syncUsername?: string, restoredState?: SyncState, syncRev?: number) {
     onComplete({
       name: name.trim(),
       department: department.trim() || undefined,
@@ -261,10 +262,11 @@ export default function Onboarding({ onComplete }: { onComplete: (r: OnboardingR
       syncToken,
       syncUsername,
       restoredState,
+      syncRev,
     });
   }
 
-  function finishFromLogin(token: string, state: SyncState | null, username: string) {
+  function finishFromLogin(token: string, state: SyncState | null, username: string, syncRev: number) {
     // Returning user: use the synced name/department/schedule.
     onComplete({
       name: (state?.name ?? username).trim(),
@@ -273,6 +275,7 @@ export default function Onboarding({ onComplete }: { onComplete: (r: OnboardingR
       syncToken: token,
       syncUsername: username,
       restoredState: state ?? undefined,
+      syncRev,
     });
   }
 
@@ -317,7 +320,7 @@ export default function Onboarding({ onComplete }: { onComplete: (r: OnboardingR
   if (step === "login") return (
     <LoginStep
       onBack={() => setStep("welcome")}
-      onLogin={(token, state, username) => finishFromLogin(token, state, username)}
+      onLogin={(token, state, username, rev) => finishFromLogin(token, state, username, rev)}
     />
   );
 
@@ -527,7 +530,7 @@ function LoginStep({
   onLogin,
 }: {
   onBack: () => void;
-  onLogin: (token: string, state: SyncState | null, username: string) => void;
+  onLogin: (token: string, state: SyncState | null, username: string, rev: number) => void;
 }) {
   const [username, setUsername] = useState("");
   const [secret, setSecret]     = useState("");
@@ -546,13 +549,13 @@ function LoginStep({
     if (!secret) { setErr("Ange din synk-kod."); return; }
     setLoading(true); setErr("");
     try {
-      const { token, state } = await syncLogin(username, secret);
+      const { token, state, updatedAt } = await syncLogin(username, secret);
       if (!state) {
         setErr("Inga sparade data hittades. Skapa ett nytt konto istället.");
         setLoading(false);
         return;
       }
-      onLogin(token, state, username);
+      onLogin(token, state, username, updatedAt);
     } catch (e) {
       setErr((e as Error).message);
       setLoading(false);
@@ -618,7 +621,7 @@ function SyncStep({
 }: {
   schedule: WeekSchedule;
   onBack: () => void;
-  onFinish: (sched: WeekSchedule, token?: string, username?: string, state?: SyncState) => void;
+  onFinish: (sched: WeekSchedule, token?: string, username?: string, state?: SyncState, rev?: number) => void;
   name: string;
 }) {
   void name;
@@ -767,8 +770,12 @@ function SyncStep({
       if (!secret) { setErr("Ange din synk-kod."); return; }
       setLoading(true); setErr("");
       try {
-        const { token, state } = await syncLogin(username, secret);
-        onFinish(state?.schedule as WeekSchedule ?? schedule, token, username, state ?? undefined);
+        const { token, state, updatedAt } = await syncLogin(username, secret);
+        if (!state) {
+          setErr("Inloggningen fungerade, men det finns inga data i molnet ännu. Öppna appen på din andra enhet och försök igen.");
+          return;
+        }
+        onFinish(state.schedule as WeekSchedule ?? schedule, token, username, state, updatedAt);
       } catch (e) {
         setErr((e as Error).message);
       } finally {

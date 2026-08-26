@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> **Current version: 1.0.0-beta.10.** Exposed to the UI via `__APP_VERSION__` (set by Vite from the root `package.json`) and shown at the bottom of the settings modal. Bump versions in both `package.json` and `server/package.json` together.
+> **Current version: 1.0.0-beta.11.** Exposed to the UI via `__APP_VERSION__` (set by Vite from the root `package.json`) and shown at the bottom of the settings modal. Bump versions in both `package.json` and `server/package.json` together.
 
 ## Commands
 
@@ -46,7 +46,10 @@ localStorage["punchclock_v2"] = {
   sessions, absences, expenses,
   flexBaseMinutes, trackingStartDate
 }
-localStorage["sync_token"] = "<JWT>"   // set only when sync is configured
+localStorage["sync_token"]    = "<JWT>"   // set only when sync is configured
+localStorage["sync_username"] = "<username>"
+localStorage["sync_rev"]      = "<ms>"    // last server revision this device has seen
+localStorage["sync_dirty"]    = "1"       // local edits the server hasn't acknowledged
 ```
 
 `trackingStartDate` (YYYY-MM-DD, optional) anchors flex accrual. Set automatically to today on a user's first punch-in; for migrating users it's backfilled in `load()` from the earliest session date so historic flex stays sensible. It also round-trips through sync (`SyncState.trackingStartDate`).
@@ -193,6 +196,7 @@ data.json = {
       username:     "<original-case username>",
       secretHash:   "<bcrypt>",
       state:        <StorageShape without onboardingDone> | null,
+      stateUpdatedAt: <ms>,        // revision marker — bumped on every PUT /api/sync
       createdAt:    <ms>,
       lastActivity: <ms>
     }
@@ -217,9 +221,9 @@ data.json = {
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | POST | `/api/auth/register` | none | Body: `{ username, secret }`. Hash secret, create user, return JWT. 409 if username taken. |
-| POST | `/api/auth/login` | none | Body: `{ username, secret }`. Verify, update `lastActivity`, return JWT + stored state. |
-| GET | `/api/sync` | Bearer JWT | Return current stored state |
-| PUT | `/api/sync` | Bearer JWT | Replace stored state, update `lastActivity` |
+| POST | `/api/auth/login` | none | Body: `{ username, secret }`. Verify, update `lastActivity`, return JWT + stored state + `updatedAt`. |
+| GET | `/api/sync` | Bearer JWT | Return `{ state, updatedAt }` — `updatedAt` is the revision the client compares against |
+| PUT | `/api/sync` | Bearer JWT | Replace stored state, bump `stateUpdatedAt`, update `lastActivity`; returns `{ ok, updatedAt }` |
 | DELETE | `/api/account` | Bearer JWT | Delete user record |
 
 Login errors are deliberately ambiguous ("Fel användarnamn eller synk-kod") so the existence of a username can't be probed.
@@ -235,13 +239,42 @@ Login errors are deliberately ambiguous ("Fel användarnamn eller synk-kod") so 
 
 ### How sync works in `PunchClock.tsx`
 
-1. On mount: reads `sync_token` from `localStorage`, sets `syncToken` state.
-2. Save effect (`useEffect` on all state deps): after writing to `localStorage`, if `syncToken` is set, schedules a `syncPush` call via a 3-second debounce timer.
-3. `syncPush` calls `PUT /api/sync` with the full state payload (excluding `onboardingDone`).
-4. `syncStatus` state (`"idle" | "syncing" | "ok" | "error"`) drives the sync status card inside `SettingsModal`.
-5. On restore (login): replaces all state variables from the server response, stores token.
+Sync is **two-way**: pull on open/foreground, debounced push on change. (Up to beta.10 it
+only ever pushed, so whichever device you opened last silently overwrote the other one's day.)
 
-**Key invariant:** `onboardingDone` is never synced — it is always set to `true` on the local device after any onboarding path completes.
+State lives in refs so timers and event listeners never act on a stale closure:
+
+| Ref | Meaning |
+|---|---|
+| `syncRevRef` | Last server revision seen (`updatedAt`, mirrored in `localStorage["sync_rev"]`) |
+| `dirtyRef` | Local edits the server hasn't acknowledged (mirrored in `localStorage["sync_dirty"]`, so it survives a reload/offline session) |
+| `hydratedRef` | We have read the server at least once this session |
+| `suppressPushRef` | The next save-effect run comes from applying server data, not from the user |
+| `stateRef` | Latest `SyncState` payload |
+
+**Pull** (`pullNow`) runs on mount with a token, on `visibilitychange`/`focus`/`online`, and from
+the "Hämta nu" button in settings:
+
+1. `GET /api/sync` → `{ state, updatedAt }`.
+2. `state === null` → the account has never been written; this device seeds it (`pushSoon(0)`).
+3. `updatedAt === syncRevRef` → nothing new; only a queued dirty push is sent.
+4. Otherwise, if the device is **clean** → adopt the server state wholesale (so deletions made on
+   the other device propagate). If it is **dirty** → `mergeSyncState()`: union `sessions` /
+   `absences` / `expenses` by `id` (local wins on a collision), local scalars win, earliest
+   `trackingStartDate` wins — then the save effect pushes the union back.
+
+**Push** (`pushSoon` → `pushNow`, 3 s debounce) is gated on `hydratedRef`: a device never
+overwrites the server before it has read it. Edits made while offline stay `dirty` and go up on the
+next successful pull. A `pagehide` listener flushes a pending push.
+
+`syncStatus` (`"idle" | "syncing" | "pulling" | "ok" | "error"`) plus `syncError` drive the status
+card in `SettingsModal`.
+
+**Key invariants:**
+- `onboardingDone` is never synced — it is always set to `true` on the local device after any onboarding path completes.
+- Persisted state is read **synchronously** into `useState` initializers via `load()` (a `bootRef`), not in an effect. Loading in an effect let the save effect fire once with empty defaults first.
+- Restore paths (`SyncModal`, onboarding login/restore) call `adoptRestoredState()`, which sets the revision, clears `dirty`, and replaces local state. If the server has **no** state, the UI now says so instead of silently keeping the local data.
+- "Koppla från här" only drops the local token. Deleting the account is a separate, explicitly confirmed action ("Radera synk-konto").
 
 ### Debugging 405 errors
 
