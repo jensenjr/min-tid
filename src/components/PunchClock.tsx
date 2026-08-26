@@ -11,7 +11,11 @@ import {
   consumeActionFromUrl, isDuplicateAction, rememberAction, SOURCE_META,
   type ParsedAction, type ActionSource,
 } from "../lib/actions";
-import { syncPush, syncDeleteAccount, SYNC_TOKEN_KEY, SYNC_USERNAME_KEY, SYNC_PHONE_KEY, type SyncState } from "../lib/sync";
+import {
+  syncPush, syncPull, syncDeleteAccount,
+  SYNC_TOKEN_KEY, SYNC_REV_KEY, SYNC_DIRTY_KEY, SYNC_USERNAME_KEY, SYNC_PHONE_KEY,
+  type SyncState,
+} from "../lib/sync";
 import {
   type WeekSchedule, type DayConfig,
   DEFAULT_SCHEDULE, dayKeyOf, netDayMin, shiftMinutes, weeklyNetMin, fmtMin,
@@ -603,6 +607,49 @@ function save(data: StorageShape) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch { /* ignore */ }
 }
 
+// ─── Sync merge ───────────────────────────────────────────────
+// Used only when this device has local edits the server has never seen *and* another
+// device wrote in the meantime. Union by id — an entry that exists on either side is
+// kept, and the local copy wins for an id present on both (the user just touched it).
+// When the device is clean we adopt the server state wholesale instead, so deletions
+// made on the other device propagate properly.
+function mergeById<T extends { id: string }>(server: T[], local: T[]): T[] {
+  const byId = new Map<string, T>();
+  for (const e of server) if (e && e.id) byId.set(e.id, e);
+  for (const e of local)  if (e && e.id) byId.set(e.id, e);
+  return [...byId.values()];
+}
+
+function mergeSyncState(server: SyncState, local: SyncState): SyncState {
+  const trackingStartDate = [server.trackingStartDate, local.trackingStartDate]
+    .filter((d): d is string => !!d)
+    .sort()[0];
+  return {
+    // Scalars: the local device has unsaved edits, so its values win.
+    name:            local.name || server.name,
+    department:      local.department ?? server.department,
+    schedule:        local.schedule ?? server.schedule,
+    flexBaseMinutes: local.flexBaseMinutes,
+    trackingStartDate,
+    sessions: mergeById(
+      (server.sessions ?? []) as Session[],
+      (local.sessions ?? []) as Session[],
+    ).sort((a, b) => a.checkIn - b.checkIn),
+    absences: mergeById(
+      (server.absences ?? []) as AbsenceEntry[],
+      (local.absences ?? []) as AbsenceEntry[],
+    ),
+    expenses: mergeById(
+      (server.expenses ?? []) as ExpenseEntry[],
+      (local.expenses ?? []) as ExpenseEntry[],
+    ),
+    scheduleExceptions: {
+      ...(server.scheduleExceptions as Record<string, ScheduleException> ?? {}),
+      ...(local.scheduleExceptions as Record<string, ScheduleException> ?? {}),
+    },
+  };
+}
+
 // ─── Icons ────────────────────────────────────────────────────
 function IconEdit() {
   return (
@@ -660,12 +707,18 @@ function IconCalendarX() {
 
 // ─── Main App ─────────────────────────────────────────────────
 export default function PunchClock() {
-  const [name, setName] = useState("");
-  const [schedule, setSchedule] = useState<WeekSchedule>(DEFAULT_SCHEDULE);
-  const [department, setDepartment] = useState<string | undefined>();
-  const [onboardingDone, setOnboardingDone] = useState(true);
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [absences, setAbsences] = useState<AbsenceEntry[]>([]);
+  // Read localStorage once, synchronously, before the first render. Loading in an
+  // effect instead used to let the save-effect fire with empty defaults first.
+  const bootRef = useRef<StorageShape | null>(null);
+  if (bootRef.current === null) bootRef.current = load();
+  const boot = bootRef.current;
+
+  const [name, setName] = useState(boot.name);
+  const [schedule, setSchedule] = useState<WeekSchedule>(boot.schedule);
+  const [department, setDepartment] = useState<string | undefined>(boot.department);
+  const [onboardingDone, setOnboardingDone] = useState(boot.onboardingDone);
+  const [sessions, setSessions] = useState<Session[]>(boot.sessions);
+  const [absences, setAbsences] = useState<AbsenceEntry[]>(boot.absences);
   const [, setTick] = useState(0);
   const [view, setView] = useState<"clock" | "history" | "share" | "expenses">("clock");
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("all");
@@ -679,14 +732,14 @@ export default function PunchClock() {
   const [shareText, setShareText] = useState("");
   const [shared, setShared] = useState(false);
   const [shortWarn, setShortWarn] = useState(false);
-  const [expenses, setExpenses] = useState<ExpenseEntry[]>([]);
+  const [expenses, setExpenses] = useState<ExpenseEntry[]>(boot.expenses ?? []);
   const [expenseModal, setExpenseModal] = useState(false);
   const [expenseMonth, setExpenseMonth] = useState<{ year: number; month: number }>(() => {
     const n = new Date(); return { year: n.getFullYear(), month: n.getMonth() };
   });
-  const [flexBaseMinutes, setFlexBaseMinutes] = useState(0);
-  const [trackingStartDate, setTrackingStartDate] = useState<string | undefined>();
-  const [scheduleExceptions, setScheduleExceptions] = useState<Record<string, ScheduleException>>({});
+  const [flexBaseMinutes, setFlexBaseMinutes] = useState(boot.flexBaseMinutes ?? 0);
+  const [trackingStartDate, setTrackingStartDate] = useState<string | undefined>(boot.trackingStartDate);
+  const [scheduleExceptions, setScheduleExceptions] = useState<Record<string, ScheduleException>>(boot.scheduleExceptions ?? {});
   const [exceptionModal, setExceptionModal] = useState<string | null>(null); // YYYY-MM-DD being edited
   const [flexBreakdownOpen, setFlexBreakdownOpen] = useState(false);
   const [latePunchoutOpen, setLatePunchoutOpen] = useState(false);
@@ -700,11 +753,27 @@ export default function PunchClock() {
     const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-01`;
   });
   const [reportTo, setReportTo] = useState(() => todayStr());
-  const [syncToken, setSyncToken]   = useState<string | null>(null);
-  const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "ok" | "error">("idle");
+  const [syncToken, setSyncToken]   = useState<string | null>(() => localStorage.getItem(SYNC_TOKEN_KEY));
+  const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "pulling" | "ok" | "error">("idle");
   const [syncedAt, setSyncedAt]     = useState<number | null>(null);
+  const [syncError, setSyncError]   = useState<string | null>(null);
   const [syncModal, setSyncModal]   = useState(false);
   const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Sync bookkeeping ──
+  // syncRev      last server revision this device has seen (pushed or pulled)
+  // dirty        local edits the server has not acknowledged (survives reloads)
+  // hydrated     we have read the server at least once this session → safe to push
+  // suppressPush the next save-effect run comes from applying server data, not the user
+  // stateRef     latest payload, so timers/listeners never push a stale closure
+  const syncRevRef     = useRef<number>(Number(localStorage.getItem(SYNC_REV_KEY) ?? 0) || 0);
+  const dirtyRef       = useRef<boolean>(localStorage.getItem(SYNC_DIRTY_KEY) === "1");
+  const hydratedRef    = useRef(false);
+  const suppressPushRef = useRef(false);
+  const pullingRef     = useRef(false);
+  const stateRef       = useRef<SyncState | null>(null);
+  const syncTokenRef   = useRef<string | null>(null);
+  syncTokenRef.current = syncToken;
   const [automationModal, setAutomationModal] = useState(false);
   const [pendingAction, setPendingAction] = useState<ParsedAction | null>(null);
   const [confirmAction, setConfirmAction] = useState<ParsedAction | null>(null);
@@ -749,22 +818,8 @@ export default function PunchClock() {
   }, []);
 
   useEffect(() => {
-    const d = load();
-    setName(d.name);
-    setSchedule(d.schedule);
-    setDepartment(d.department);
-    setOnboardingDone(d.onboardingDone);
-    setSessions(d.sessions);
-    setAbsences(d.absences);
-    setExpenses(d.expenses ?? []);
-    setFlexBaseMinutes(d.flexBaseMinutes ?? 0);
-    setTrackingStartDate(d.trackingStartDate);
-    setScheduleExceptions(d.scheduleExceptions ?? {});
-    const token = localStorage.getItem(SYNC_TOKEN_KEY);
-    if (token) { setSyncToken(token); setSyncStatus("idle"); }
     // ?action=in|out|toggle from a QR code / NFC tag / WiFi automation.
-    // Parked in state and executed by the effect below once data is loaded
-    // (and, for brand-new users, once onboarding is done).
+    // Parked in state and executed by the effect below once onboarding is done.
     const urlAction = consumeActionFromUrl();
     if (urlAction) setPendingAction(urlAction);
   }, []);
@@ -776,20 +831,146 @@ export default function PunchClock() {
     executeAction(a);
   }, [pendingAction, onboardingDone]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Sync engine ─────────────────────────────────────────────
+  function rememberRev(rev: number) {
+    syncRevRef.current = rev;
+    try { localStorage.setItem(SYNC_REV_KEY, String(rev)); } catch { /* ignore */ }
+  }
+
+  function markDirty(dirty: boolean) {
+    dirtyRef.current = dirty;
+    try {
+      if (dirty) localStorage.setItem(SYNC_DIRTY_KEY, "1");
+      else localStorage.removeItem(SYNC_DIRTY_KEY);
+    } catch { /* ignore */ }
+  }
+
+  /** Write the server's copy into local state. Does not trigger a push. */
+  function applyRemoteState(s: SyncState, opts: { push?: boolean } = {}) {
+    suppressPushRef.current = !opts.push;
+    setName(s.name ?? "");
+    setDepartment(s.department);
+    setSchedule(s.schedule ? migrateSchedule(s.schedule as Record<string, unknown>) : DEFAULT_SCHEDULE);
+    setSessions((s.sessions ?? []) as Session[]);
+    setAbsences((s.absences ?? []) as AbsenceEntry[]);
+    setExpenses((s.expenses ?? []) as ExpenseEntry[]);
+    setFlexBaseMinutes(typeof s.flexBaseMinutes === "number" ? s.flexBaseMinutes : 0);
+    setTrackingStartDate(s.trackingStartDate);
+    setScheduleExceptions((s.scheduleExceptions && typeof s.scheduleExceptions === "object" && !Array.isArray(s.scheduleExceptions))
+      ? s.scheduleExceptions as Record<string, ScheduleException>
+      : {});
+  }
+
+  async function pushNow() {
+    const token   = syncTokenRef.current;
+    const payload = stateRef.current;
+    if (!token || !payload || !hydratedRef.current) return;
+    setSyncStatus("syncing");
+    try {
+      const rev = await syncPush(token, payload);
+      rememberRev(rev);
+      markDirty(false);
+      setSyncedAt(Date.now());
+      setSyncError(null);
+      setSyncStatus("ok");
+    } catch (e) {
+      setSyncError((e as Error).message);
+      setSyncStatus("error");
+    }
+  }
+
+  function pushSoon(delay = 3000) {
+    if (!syncTokenRef.current || !hydratedRef.current) return;
+    if (syncTimer.current) clearTimeout(syncTimer.current);
+    syncTimer.current = setTimeout(() => { void pushNow(); }, delay);
+  }
+
+  /**
+   * Read the server and reconcile. This is what makes the sync two-way: without it
+   * a device only ever pushed, so whichever device you opened last silently
+   * overwrote the other one's day.
+   */
+  async function pullNow(opts: { manual?: boolean } = {}) {
+    const token = syncTokenRef.current;
+    if (!token || pullingRef.current) return;
+    pullingRef.current = true;
+    setSyncStatus("pulling");
+    try {
+      const { state, updatedAt } = await syncPull(token);
+      if (!state) {
+        // Account exists but has never been written to — this device seeds it.
+        hydratedRef.current = true;
+        rememberRev(updatedAt);
+        setSyncError(null);
+        setSyncStatus("ok");
+        if (opts.manual) showToast("Molnet är tomt ännu — dina data laddas upp.");
+        pushSoon(0);
+        return;
+      }
+      const changed = updatedAt !== syncRevRef.current;
+      const local   = stateRef.current;
+      hydratedRef.current = true;
+      rememberRev(updatedAt);
+      let merged = false;
+      if (changed || opts.manual) {
+        if (dirtyRef.current && local) {
+          // Both sides moved: keep everything. The save effect pushes the union back
+          // once React has committed it — pushing here would send the pre-merge state.
+          merged = true;
+          applyRemoteState(mergeSyncState(state, local), { push: true });
+          if (opts.manual) showToast("Data hämtad och sammanslagen med dina lokala ändringar.");
+        } else {
+          applyRemoteState(state);
+          markDirty(false);
+          if (opts.manual) showToast(changed ? "Data hämtad från molnet." : "Redan uppdaterad.");
+        }
+      }
+      setSyncedAt(Date.now());
+      setSyncError(null);
+      setSyncStatus("ok");
+      // Edits made while offline / before hydration: get them up now.
+      if (!merged && dirtyRef.current) pushSoon(0);
+    } catch (e) {
+      setSyncError((e as Error).message);
+      setSyncStatus("error");
+      if (opts.manual) showToast("Kunde inte hämta: " + (e as Error).message);
+    } finally {
+      pullingRef.current = false;
+    }
+  }
+
+  // Persist locally on every change, then push (once we know what the server holds).
   useEffect(() => {
     save({ name, schedule, department, onboardingDone, sessions, absences, expenses, flexBaseMinutes, trackingStartDate, scheduleExceptions });
-    if (syncToken) {
-      if (syncTimer.current) clearTimeout(syncTimer.current);
-      const token = syncToken;
-      const payload: SyncState = { name, schedule, department, sessions, absences, expenses, flexBaseMinutes, trackingStartDate, scheduleExceptions };
-      syncTimer.current = setTimeout(() => {
-        setSyncStatus("syncing");
-        syncPush(token, payload)
-          .then(() => { setSyncedAt(Date.now()); setSyncStatus("ok"); })
-          .catch(() => setSyncStatus("error"));
-      }, 3000);
-    }
-  }, [name, schedule, department, onboardingDone, sessions, absences, expenses, flexBaseMinutes, trackingStartDate, scheduleExceptions, syncToken]);
+    stateRef.current = { name, schedule, department, sessions, absences, expenses, flexBaseMinutes, trackingStartDate, scheduleExceptions };
+    if (!syncToken) return;
+    if (suppressPushRef.current) { suppressPushRef.current = false; return; }
+    markDirty(true);
+    pushSoon();
+  }, [name, schedule, department, onboardingDone, sessions, absences, expenses, flexBaseMinutes, trackingStartDate, scheduleExceptions, syncToken]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Pull when the app opens with a token, and whenever it comes back to the
+  // foreground or regains network — that is when the other device's changes land.
+  useEffect(() => {
+    if (!syncToken) return;
+    void pullNow();
+    const onVisible = () => { if (document.visibilityState === "visible") void pullNow(); };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    window.addEventListener("online", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+      window.removeEventListener("online", onVisible);
+    };
+  }, [syncToken]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Don't leave a queued push behind when the tab goes away.
+  useEffect(() => {
+    const flush = () => { if (dirtyRef.current) void pushNow(); };
+    window.addEventListener("pagehide", flush);
+    return () => window.removeEventListener("pagehide", flush);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const weeklyNorm = weeklyNetMin(schedule);
   const activeSession = sessions.find(s => !s.checkOut);
@@ -904,24 +1085,38 @@ export default function PunchClock() {
       localStorage.setItem(SYNC_USERNAME_KEY, result.syncUsername);
     }
     if (result.restoredState) {
-      const s = result.restoredState;
-      setName(s.name ?? result.name);
-      setSchedule(s.schedule ? migrateSchedule(s.schedule as Record<string, unknown>) : result.schedule);
-      setDepartment(s.department ?? result.department);
-      setSessions((s.sessions ?? []) as Session[]);
-      setAbsences((s.absences ?? []) as AbsenceEntry[]);
-      setExpenses((s.expenses ?? []) as ExpenseEntry[]);
-      setFlexBaseMinutes(typeof s.flexBaseMinutes === "number" ? s.flexBaseMinutes : 0);
-      setTrackingStartDate(s.trackingStartDate);
-      setScheduleExceptions((s.scheduleExceptions && typeof s.scheduleExceptions === "object" && !Array.isArray(s.scheduleExceptions))
-        ? s.scheduleExceptions as Record<string, ScheduleException>
-        : {});
+      // The server copy is the truth here — the user asked to restore it.
+      adoptRestoredState(result.restoredState, result.syncRev ?? 0, {
+        fallbackName: result.name,
+        fallbackSchedule: result.schedule,
+        fallbackDepartment: result.department,
+      });
     } else {
       setName(result.name);
       setSchedule(result.schedule);
       setDepartment(result.department);
     }
     setOnboardingDone(true);
+  }
+
+  /** Replace everything local with a state fetched from the server (restore / login). */
+  function adoptRestoredState(
+    s: SyncState,
+    rev: number,
+    fallback?: { fallbackName?: string; fallbackSchedule?: WeekSchedule; fallbackDepartment?: string },
+  ) {
+    hydratedRef.current = true;
+    rememberRev(rev);
+    markDirty(false);
+    applyRemoteState({
+      ...s,
+      name: s.name ?? fallback?.fallbackName ?? "",
+      department: s.department ?? fallback?.fallbackDepartment,
+      schedule: s.schedule ?? fallback?.fallbackSchedule ?? DEFAULT_SCHEDULE,
+    });
+    setSyncedAt(Date.now());
+    setSyncError(null);
+    setSyncStatus("ok");
   }
 
   function handleSettingsSave(result: { name: string; department?: string }) {
@@ -933,37 +1128,48 @@ export default function PunchClock() {
   function handleSyncToken(token: string, username: string) {
     localStorage.setItem(SYNC_TOKEN_KEY, token);
     localStorage.setItem(SYNC_USERNAME_KEY, username);
+    // Fresh account: this device's data is the seed, so it is by definition unpushed.
+    hydratedRef.current = false;
+    rememberRev(0);
+    markDirty(true);
     setSyncToken(token);
     setSyncModal(false);
   }
 
-  function handleSyncRestore(token: string, state: SyncState, username: string) {
+  function handleSyncRestore(token: string, state: SyncState, username: string, rev: number) {
     localStorage.setItem(SYNC_TOKEN_KEY, token);
     localStorage.setItem(SYNC_USERNAME_KEY, username);
     setSyncToken(token);
-    setName(state.name ?? name);
-    setSchedule(state.schedule ? migrateSchedule(state.schedule as Record<string, unknown>) : schedule);
-    setDepartment(state.department ?? department);
-    setSessions((state.sessions ?? []) as Session[]);
-    setAbsences((state.absences ?? []) as AbsenceEntry[]);
-    setExpenses((state.expenses ?? []) as ExpenseEntry[]);
-    setFlexBaseMinutes(typeof state.flexBaseMinutes === "number" ? state.flexBaseMinutes : 0);
-    setTrackingStartDate(state.trackingStartDate);
-    setScheduleExceptions((state.scheduleExceptions && typeof state.scheduleExceptions === "object" && !Array.isArray(state.scheduleExceptions))
-      ? state.scheduleExceptions as Record<string, ScheduleException>
-      : {});
+    adoptRestoredState(state, rev, { fallbackName: name, fallbackSchedule: schedule, fallbackDepartment: department });
     setSyncModal(false);
+    showToast("Data hämtad från molnet.");
   }
 
-  async function handleDisconnectSync() {
-    if (!syncToken) return;
-    try { await syncDeleteAccount(syncToken); } catch { /* ignore */ }
+  /** Stop syncing on this device. The account and its data stay on the server. */
+  function handleDisconnectSync() {
+    if (syncTimer.current) clearTimeout(syncTimer.current);
     localStorage.removeItem(SYNC_TOKEN_KEY);
     localStorage.removeItem(SYNC_USERNAME_KEY);
     localStorage.removeItem(SYNC_PHONE_KEY);
+    localStorage.removeItem(SYNC_REV_KEY);
+    localStorage.removeItem(SYNC_DIRTY_KEY);
+    hydratedRef.current = false;
+    syncRevRef.current  = 0;
+    dirtyRef.current    = false;
     setSyncToken(null);
     setSyncStatus("idle");
+    setSyncError(null);
     setSyncedAt(null);
+    showToast("Synk avstängd här. Kontot finns kvar — logga in igen när du vill.");
+  }
+
+  /** Destructive: removes the account and every synced copy from the server. */
+  async function handleDeleteSyncAccount() {
+    const token = syncTokenRef.current;
+    if (!token) return;
+    try { await syncDeleteAccount(token); } catch { /* ignore */ }
+    handleDisconnectSync();
+    showToast("Synk-kontot raderat. Dina data finns kvar på den här enheten.");
   }
 
   function handleShare() {
@@ -1981,10 +2187,13 @@ export default function PunchClock() {
         syncToken={syncToken}
         syncStatus={syncStatus}
         syncedAt={syncedAt}
+        syncError={syncError}
         onClose={() => setSettingsModal(false)}
         onSave={handleSettingsSave}
         onSetupSync={() => { setSettingsModal(false); setSyncModal(true); }}
+        onPullNow={() => { void pullNow({ manual: true }); }}
         onDisconnectSync={handleDisconnectSync}
+        onDeleteSyncAccount={handleDeleteSyncAccount}
         onOpenAutomation={() => { setSettingsModal(false); setAutomationModal(true); }}
       />
 

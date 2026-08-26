@@ -16,7 +16,7 @@ const BCRYPT_ROUNDS = 12;
 const INACTIVE_MS   = 60 * 24 * 60 * 60 * 1000; // 60 days
 
 // ─── JSON store ───────────────────────────────────────────────
-// Shape: { users: { [username_lower]: { id, username, secretHash, state, createdAt, lastActivity } } }
+// Shape: { users: { [username_lower]: { id, username, secretHash, state, stateUpdatedAt, createdAt, lastActivity } } }
 
 function readStore() {
   try { return JSON.parse(fs.readFileSync(DATA_PATH, "utf8")); }
@@ -207,7 +207,7 @@ app.post("/api/auth/login", async (req, res) => {
   const key = username.toLowerCase();
   upsert(key, { ...user, lastActivity: Date.now() });
   const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: "30d" });
-  res.json({ userId: user.id, token, state: user.state ?? null });
+  res.json({ userId: user.id, token, state: user.state ?? null, updatedAt: user.stateUpdatedAt ?? 0 });
 });
 
 // ─── Auth middleware ──────────────────────────────────────────
@@ -222,21 +222,24 @@ function auth(req, res, next) {
   }
 }
 
-// ─── GET /api/sync  →  { state }
+// ─── GET /api/sync  →  { state, updatedAt }
+// updatedAt is the revision marker: the client stores it after every pull/push and
+// compares it on the next pull to detect "another device wrote after me".
 app.get("/api/sync", auth, (req, res) => {
   const entry = findEntry(req.userId);
   if (!entry) return res.status(404).json({ error: "Användare inte hittad." });
-  res.json({ state: entry[1].state ?? null });
+  res.json({ state: entry[1].state ?? null, updatedAt: entry[1].stateUpdatedAt ?? 0 });
 });
 
-// ─── PUT /api/sync  { state }  →  { ok }
+// ─── PUT /api/sync  { state }  →  { ok, updatedAt }
 app.put("/api/sync", auth, (req, res) => {
   const { state } = req.body ?? {};
   if (!state || typeof state !== "object") return res.status(400).json({ error: "Ogiltig data." });
   const entry = findEntry(req.userId);
   if (!entry) return res.status(404).json({ error: "Användare inte hittad." });
-  upsert(entry[0], { ...entry[1], state, lastActivity: Date.now() });
-  res.json({ ok: true });
+  const now = Date.now();
+  upsert(entry[0], { ...entry[1], state, stateUpdatedAt: now, lastActivity: now });
+  res.json({ ok: true, updatedAt: now });
 });
 
 // ─── DELETE /api/account  →  { ok }
@@ -330,7 +333,7 @@ app.post("/api/auth/recover/confirm", async (req, res) => {
   const user = entry[1];
   upsert(entry[0], { ...user, lastActivity: Date.now() });
   const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: "30d" });
-  res.json({ username: user.username, token, state: user.state ?? null });
+  res.json({ username: user.username, token, state: user.state ?? null, updatedAt: user.stateUpdatedAt ?? 0 });
 });
 
 if (PROD) {

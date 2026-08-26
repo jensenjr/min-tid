@@ -13,7 +13,7 @@ export default function SyncModal({
   open: boolean;
   onClose: () => void;
   onToken: (token: string, username: string) => void;
-  onRestore: (token: string, state: SyncState, username: string) => void;
+  onRestore: (token: string, state: SyncState, username: string, rev: number) => void;
 }) {
   const [tab, setTab]           = useState<Tab>("create");
   const [username, setUsername] = useState("");
@@ -66,12 +66,14 @@ export default function SyncModal({
     if (!secret) { setErr("Ange din synk-kod."); return; }
     setLoading(true); setErr("");
     try {
-      const { token, state } = await syncLogin(username, secret);
-      if (state) {
-        onRestore(token, state, username);
-      } else {
-        onToken(token, username);
+      const { token, state, updatedAt } = await syncLogin(username, secret);
+      if (!state) {
+        // Right credentials, but nothing stored yet — say so instead of quietly
+        // "succeeding" with the local data still in place.
+        setErr("Inloggningen fungerade, men det finns inga data i molnet ännu. Öppna appen på din andra enhet (den laddar upp automatiskt) och försök igen.");
+        return;
       }
+      onRestore(token, state, username, updatedAt);
       setDone(true);
     } catch (e) {
       setErr((e as Error).message);
@@ -99,11 +101,11 @@ export default function SyncModal({
     if (code.length !== 6) { setErr("Koden är 6 siffror."); return; }
     setLoading(true); setErr("");
     try {
-      const { username: u, token, state } = await syncRecoverConfirm(recoverPhone.trim(), code);
+      const { username: u, token, state, updatedAt } = await syncRecoverConfirm(recoverPhone.trim(), code);
       setRecoverUser(u);
       setRecoverStep("done");
       if (state) {
-        onRestore(token, state, u);
+        onRestore(token, state, u, updatedAt);
       } else {
         onToken(token, u);
       }

@@ -18,22 +18,28 @@ export default function SettingsModal({
   syncToken,
   syncStatus,
   syncedAt,
+  syncError,
   onClose,
   onSave,
   onSetupSync,
+  onPullNow,
   onDisconnectSync,
+  onDeleteSyncAccount,
   onOpenAutomation,
 }: {
   open: boolean;
   initialName: string;
   initialDepartment?: string;
   syncToken: string | null;
-  syncStatus: "idle" | "syncing" | "ok" | "error";
+  syncStatus: "idle" | "syncing" | "pulling" | "ok" | "error";
   syncedAt: number | null;
+  syncError?: string | null;
   onClose: () => void;
   onSave: (r: SettingsResult) => void;
   onSetupSync: () => void;
+  onPullNow: () => void;
   onDisconnectSync: () => void;
+  onDeleteSyncAccount: () => void;
   onOpenAutomation: () => void;
 }) {
   const [name, setName]             = useState(initialName);
@@ -59,6 +65,9 @@ export default function SettingsModal({
   const [phoneLoading, setPhoneLoading] = useState(false);
   const [phoneErr, setPhoneErr]         = useState("");
 
+  // "Radera konto" needs a second tap — it wipes the server copy for every device.
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
   useEffect(() => {
     if (open) {
       setName(initialName);
@@ -69,6 +78,7 @@ export default function SettingsModal({
       setShowPin(false);
       setNewSecret(""); setConfirmSec(""); setPinLoading(false); setPinErr(""); setPinDone(false);
       setPhoneStep("idle"); setPhoneInput(""); setPhoneCode(""); setPhoneLoading(false); setPhoneErr("");
+      setConfirmDelete(false);
     }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -194,12 +204,13 @@ export default function SettingsModal({
             {/* Status card */}
             <div className="bg-[#fdf6ee] border border-[#ece6df] rounded-[16px] px-4 py-3 mb-3 flex items-center gap-3">
               <span className="text-[20px] leading-none shrink-0">
-                {syncStatus === "syncing" ? "⏳" : syncStatus === "error" ? "⚠️" : "☁️"}
+                {syncStatus === "syncing" || syncStatus === "pulling" ? "⏳" : syncStatus === "error" ? "⚠️" : "☁️"}
               </span>
               <div className="flex-1 min-w-0">
                 <div className="text-[13px] font-bold text-[#2d1717] leading-tight">
-                  {syncStatus === "syncing" ? "Synkroniserar…"
-                    : syncStatus === "error" ? "Synkfel – försöker snart igen"
+                  {syncStatus === "pulling" ? "Hämtar från molnet…"
+                    : syncStatus === "syncing" ? "Synkroniserar…"
+                    : syncStatus === "error" ? "Synkfel – försöker igen strax"
                     : syncedAt ? `Synkat ${new Date(syncedAt).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })}`
                     : "Synkronisering aktiv"}
                 </div>
@@ -208,14 +219,23 @@ export default function SettingsModal({
                     Inloggad som: <span className="text-[#ff5f00]">@{syncUsername}</span>
                   </div>
                 )}
+                {syncStatus === "error" && syncError && (
+                  <div className="text-[11px] text-red-600 mt-0.5 font-semibold break-words">{syncError}</div>
+                )}
               </div>
               <button
-                onClick={onDisconnectSync}
-                className="shrink-0 text-[11px] font-semibold text-[#9c7c5c] underline"
+                onClick={onPullNow}
+                disabled={syncStatus === "pulling"}
+                className="shrink-0 text-[11px] font-bold text-[#ff5f00] underline"
               >
-                Koppla från
+                Hämta nu
               </button>
             </div>
+
+            <p className="text-[11px] text-[#9c7c5c] mb-3 leading-relaxed">
+              Data hämtas automatiskt när appen öppnas eller tas fram igen. Tryck <span className="font-bold">Hämta nu</span>
+              {" "}om du precis stämplat på en annan enhet.
+            </p>
 
             {/* PIN done banner */}
             {pinDone && (
@@ -362,6 +382,27 @@ export default function SettingsModal({
                 </div>
               )}
             </div>
+
+            {/* Leaving sync — two clearly separated levels */}
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <button
+                onClick={onDisconnectSync}
+                className="text-[12px] font-semibold text-[#9c7c5c] underline"
+              >
+                Koppla från här
+              </button>
+              <button
+                onClick={() => { if (confirmDelete) { setConfirmDelete(false); onDeleteSyncAccount(); } else setConfirmDelete(true); }}
+                className={`text-[12px] font-semibold underline ${confirmDelete ? "text-red-600" : "text-[#9c7c5c]"}`}
+              >
+                {confirmDelete ? "Tryck igen för att radera kontot" : "Radera synk-konto"}
+              </button>
+            </div>
+            <p className="text-[11px] text-[#9c7c5c] mb-4 leading-relaxed">
+              <span className="font-bold">Koppla från här</span> stänger bara av synk på den här enheten — kontot och dina
+              data ligger kvar i molnet och du kan logga in igen. <span className="font-bold">Radera synk-konto</span> tar
+              bort kontot och molnkopian för alla enheter.
+            </p>
           </>
         ) : (
           <button

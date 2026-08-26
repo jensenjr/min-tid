@@ -12,6 +12,25 @@ All notable changes to **min-tid** are recorded here. Format loosely follows [Ke
 
 _Nothing yet._
 
+## [1.0.0-beta.11] — 2026-08-26
+
+### Fixed
+- **Synk är nu tvåvägs.** Appen hämtade aldrig data från servern efter första återställningen — den bara skickade. Enheten du öppnade sist skrev tyst över den andra enhetens dag. Nu hämtas molnkopian när appen öppnas, när den tas fram i förgrunden igen och när nätet kommer tillbaka.
+- **"Återställ" hämtar på riktigt.** Om kontot fanns men inte hade någon sparad data visade appen "klart" och lämnade kvar den lokala datan utan att säga något. Nu byts data ut när det finns något att hämta, och när molnet är tomt får du en tydlig förklaring i stället för en falsk bekräftelse.
+- **"Koppla från" raderade hela synk-kontot** på servern (och därmed molnkopian för alla enheter). Nu finns två separata val i inställningarna: *Koppla från här* (stänger av synk lokalt, kontot ligger kvar) och *Radera synk-konto* (destruktivt, kräver en extra tryckning).
+- **Ingen data försvinner när båda enheterna ändrat.** Har den här enheten ändringar som inte nått servern samtidigt som en annan enhet skrivit, slås posterna ihop per `id` i stället för att den ena sidan skriver över den andra. Är enheten ren adopteras molnkopian rakt av, så borttagningar på den andra enheten slår igenom.
+- **Ingen uppladdning innan appen läst servern.** En enhet som legat oöppnad kunde tidigare skicka upp sin gamla data 3 sekunder efter att den öppnades. Push sker nu först efter en lyckad hämtning; ändringar gjorda offline märks som osparade och går upp när nätet är tillbaka.
+- Lokal data läses in synkront vid start i stället för i en effekt — spar-effekten hann annars köra en gång med tomma standardvärden.
+
+### Added
+- **"Hämta nu"-knapp** i synk-kortet i inställningarna, för när du precis stämplat på en annan enhet och inte vill vänta. Statuskortet visar också "Hämtar från molnet…" och felmeddelandet vid synkfel.
+
+### Internal
+- Server: `stateUpdatedAt` per användare som revisionsmarkör. `GET /api/sync` returnerar `{ state, updatedAt }`, `PUT /api/sync` returnerar `{ ok, updatedAt }`, och `login` / `recover/confirm` returnerar `updatedAt` tillsammans med state.
+- `sync.ts`: `syncPull` returnerar `{ state, updatedAt }`, `syncPush` returnerar den nya revisionen; nya nycklar `SYNC_REV_KEY` (`sync_rev`) och `SYNC_DIRTY_KEY` (`sync_dirty`).
+- `PunchClock.tsx`: ny synkmotor — `pullNow` / `pushNow` / `pushSoon` / `applyRemoteState` / `adoptRestoredState` med `syncRevRef`, `dirtyRef`, `hydratedRef`, `suppressPushRef` och `stateRef`; `mergeSyncState()` + `mergeById()` på modulnivå; `pagehide` flushar väntande push.
+- `SettingsModal` tar `syncError`, `onPullNow` och `onDeleteSyncAccount`; `syncStatus` har ett nytt läge `"pulling"`.
+
 ## [1.0.0-beta.10] — 2026-06-24
 
 ### Added
@@ -184,6 +203,7 @@ First public beta. The app is feature-complete for time, absence and expense tra
 - **`nixpacks.toml`** overrides the default Caddy start command if Coolify falls back to Nixpacks instead of Dockerfile.
 - **Zero native deps** on the server — `better-sqlite3` was replaced with a plain JSON file store.
 
+[1.0.0-beta.11]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.11
 [1.0.0-beta.10]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.10
 [1.0.0-beta.9]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.9
 [1.0.0-beta.8]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.8
