@@ -5,6 +5,10 @@ import {
   syncVerifyPhone,
   SYNC_PHONE_KEY,
 } from "../lib/sync";
+import {
+  explainSyncError, buildSyncReportMailto, SUPPORT_EMAIL,
+  type SyncFailure,
+} from "../lib/syncDiagnostics";
 
 export type SettingsResult = {
   name: string;
@@ -18,7 +22,10 @@ export default function SettingsModal({
   syncToken,
   syncStatus,
   syncedAt,
-  syncError,
+  syncFailure,
+  syncErrorLog,
+  openSyncHelp,
+  dirty,
   onClose,
   onSave,
   onSetupSync,
@@ -33,7 +40,12 @@ export default function SettingsModal({
   syncToken: string | null;
   syncStatus: "idle" | "syncing" | "pulling" | "ok" | "error";
   syncedAt: number | null;
-  syncError?: string | null;
+  syncFailure: SyncFailure | null;
+  syncErrorLog: SyncFailure[];
+  /** Opened straight from the red banner — expand the help panel immediately. */
+  openSyncHelp?: boolean;
+  /** There are local changes the server hasn't got yet. */
+  dirty?: boolean;
   onClose: () => void;
   onSave: (r: SettingsResult) => void;
   onSetupSync: () => void;
@@ -68,6 +80,9 @@ export default function SettingsModal({
   // "Radera konto" needs a second tap — it wipes the server copy for every device.
   const [confirmDelete, setConfirmDelete] = useState(false);
 
+  // Sync troubleshooting panel (the "Läs mer" target from the red banner).
+  const [showSyncHelp, setShowSyncHelp] = useState(false);
+
   useEffect(() => {
     if (open) {
       setName(initialName);
@@ -79,10 +94,26 @@ export default function SettingsModal({
       setNewSecret(""); setConfirmSec(""); setPinLoading(false); setPinErr(""); setPinDone(false);
       setPhoneStep("idle"); setPhoneInput(""); setPhoneCode(""); setPhoneLoading(false); setPhoneErr("");
       setConfirmDelete(false);
+      setShowSyncHelp(!!openSyncHelp);
+      if (openSyncHelp) {
+        // Opened from the red banner — put the explanation on screen, not below the fold.
+        setTimeout(() => document.getElementById("sync-help")?.scrollIntoView({ block: "center" }), 60);
+      }
     }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!open) return null;
+
+  const explain     = explainSyncError(syncFailure);
+  const hasFailure  = !!syncFailure;
+  const reportHref  = buildSyncReportMailto({
+    failure: syncFailure,
+    log: syncErrorLog,
+    username: syncUsername,
+    version: __APP_VERSION__,
+    lastSyncedAt: syncedAt,
+    pendingChanges: !!dirty,
+  });
 
   function handleSave() {
     if (!name.trim()) { setNameErr("Namn krävs."); return; }
@@ -210,7 +241,7 @@ export default function SettingsModal({
                 <div className="text-[13px] font-bold text-[#2d1717] leading-tight">
                   {syncStatus === "pulling" ? "Hämtar från molnet…"
                     : syncStatus === "syncing" ? "Synkroniserar…"
-                    : syncStatus === "error" ? "Synkfel – försöker igen strax"
+                    : syncStatus === "error" ? "Synken fungerar inte"
                     : syncedAt ? `Synkat ${new Date(syncedAt).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })}`
                     : "Synkronisering aktiv"}
                 </div>
@@ -219,8 +250,8 @@ export default function SettingsModal({
                     Inloggad som: <span className="text-[#ff5f00]">@{syncUsername}</span>
                   </div>
                 )}
-                {syncStatus === "error" && syncError && (
-                  <div className="text-[11px] text-red-600 mt-0.5 font-semibold break-words">{syncError}</div>
+                {syncStatus === "error" && syncFailure && (
+                  <div className="text-[11px] text-red-600 mt-0.5 font-semibold">Se rutan nedan ↓</div>
                 )}
               </div>
               <button
@@ -236,6 +267,77 @@ export default function SettingsModal({
               Data hämtas automatiskt när appen öppnas eller tas fram igen. Tryck <span className="font-bold">Hämta nu</span>
               {" "}om du precis stämplat på en annan enhet.
             </p>
+
+            {/* Troubleshooting — expanded automatically when opened from the red banner */}
+            {hasFailure && (
+              <div
+                id="sync-help"
+                className="rounded-[16px] mb-3 overflow-hidden"
+                style={{ background: "#fef2f2", border: "1.5px solid #fca5a5" }}
+              >
+                <button
+                  onClick={() => setShowSyncHelp(v => !v)}
+                  className="w-full px-4 py-3 flex items-center gap-2 text-left"
+                >
+                  <span className="text-[16px]">⚠️</span>
+                  <div className="flex-1">
+                    <div className="text-[13px] font-extrabold" style={{ color: "#b91c1c" }}>{explain.headline}</div>
+                    <div className="text-[11px] font-semibold" style={{ color: "#9f1239" }}>
+                      Senast {new Date(syncFailure!.at).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })}
+                      {syncFailure!.status > 0 ? ` · HTTP ${syncFailure!.status}` : " · ingen kontakt"}
+                    </div>
+                  </div>
+                  <span className="text-[11px] font-bold" style={{ color: "#b91c1c" }}>{showSyncHelp ? "↑" : "↓"}</span>
+                </button>
+
+                {showSyncHelp && (
+                  <div className="px-4 pb-4">
+                    <p className="text-[12px] leading-relaxed mb-3" style={{ color: "#7f1d1d" }}>
+                      {explain.cause}
+                    </p>
+
+                    <div className="text-[11px] font-bold uppercase tracking-[0.1em] mb-1.5" style={{ color: "#b91c1c" }}>
+                      Så löser du det
+                    </div>
+                    <ol className="mb-3 space-y-1.5">
+                      {explain.fixes.map((f, i) => (
+                        <li key={i} className="flex gap-2 text-[12px] leading-snug" style={{ color: "#7f1d1d" }}>
+                          <span className="font-extrabold shrink-0">{i + 1}.</span>
+                          <span>{f}</span>
+                        </li>
+                      ))}
+                    </ol>
+
+                    <div className="rounded-[12px] px-3 py-2 mb-3" style={{ background: "#fff", border: "1px solid #fecaca" }}>
+                      <div className="text-[11px] font-semibold" style={{ color: "#7f1d1d" }}>
+                        {dirty
+                          ? "Du har ändringar som ännu inte nått molnet. De ligger kvar på enheten och laddas upp automatiskt så fort synken fungerar igen."
+                          : "Allt du stämplat finns sparat på enheten. Inget går förlorat."}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={onPullNow}
+                        disabled={syncStatus === "pulling"}
+                        style={{ padding: "11px", borderRadius: "12px", background: "#fff", border: "1.5px solid #fca5a5", fontWeight: 700, fontSize: "13px", color: "#b91c1c" }}
+                      >
+                        Försök igen
+                      </button>
+                      <a
+                        href={reportHref}
+                        style={{ padding: "11px", borderRadius: "12px", background: "#dc2626", color: "white", fontWeight: 700, fontSize: "13px", textAlign: "center", textDecoration: "none" }}
+                      >
+                        Skicka fellogg
+                      </a>
+                    </div>
+                    <div className="text-[10px] mt-2 text-center" style={{ color: "#9f1239" }}>
+                      Felloggen mejlas till {SUPPORT_EMAIL} — den innehåller tidpunkt, felkod och enhet, aldrig din synk-kod.
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* PIN done banner */}
             {pinDone && (

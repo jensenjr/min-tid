@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> **Current version: 1.0.0-beta.11.** Exposed to the UI via `__APP_VERSION__` (set by Vite from the root `package.json`) and shown at the bottom of the settings modal. Bump versions in both `package.json` and `server/package.json` together.
+> **Current version: 1.0.0-beta.12.** Exposed to the UI via `__APP_VERSION__` (set by Vite from the root `package.json`) and shown at the bottom of the settings modal. Bump versions in both `package.json` and `server/package.json` together.
 
 ## Commands
 
@@ -50,6 +50,7 @@ localStorage["sync_token"]    = "<JWT>"   // set only when sync is configured
 localStorage["sync_username"] = "<username>"
 localStorage["sync_rev"]      = "<ms>"    // last server revision this device has seen
 localStorage["sync_dirty"]    = "1"       // local edits the server hasn't acknowledged
+localStorage["sync_error_log"] = [...]    // last 10 sync failures (device-local, never synced)
 ```
 
 `trackingStartDate` (YYYY-MM-DD, optional) anchors flex accrual. Set automatically to today on a user's first punch-in; for migrating users it's backfilled in `load()` from the earliest session date so historic flex stays sensible. It also round-trips through sync (`SyncState.trackingStartDate`).
@@ -276,6 +277,33 @@ card in `SettingsModal`.
 - Restore paths (`SyncModal`, onboarding login/restore) call `adoptRestoredState()`, which sets the revision, clears `dirty`, and replaces local state. If the server has **no** state, the UI now says so instead of silently keeping the local data.
 - "Koppla från här" only drops the local token. Deleting the account is a separate, explicitly confirmed action ("Radera synk-konto").
 
+### Surfacing sync failures
+
+A silently broken sync is the one failure a user cannot discover on their own — the
+app keeps working offline, so nothing looks wrong until weeks of hours are missing on
+the other device. The motivating case: a corporate WiFi serves the static app fine but
+its proxy answers **403 on `/api`**.
+
+- `SyncApiError` (`src/lib/sync.ts`) carries `status` / `path` / `method`. `status === 0`
+  means the request never got a response (offline, DNS/TLS, captive portal, filtering) —
+  `fetch` only rejects in that case.
+- `src/lib/syncDiagnostics.ts` owns everything user-facing about a failure:
+  `explainSyncError()` maps a `SyncFailure` to `{ headline, cause, fixes[], networkBlocked }`
+  in plain Swedish (403/407/451/0 → "byt nät"; 401 → logga in igen; 405 → deploy pågår;
+  5xx → serverfel), a rolling 10-entry log in `localStorage["sync_error_log"]`, and
+  `buildSyncReportMailto()` which composes the felanmälan to `christian@krut.it`
+  (subject `mintid sync error kl HH:MM`). **The report never includes the JWT or the secret.**
+- `PunchClock.noteSyncFailure()` is the single funnel: every failed pull/push records the
+  failure, appends to the log, and sets `syncStatus = "error"`. `clearSyncFailure()` runs on
+  every success.
+- `<SyncErrorBanner>` renders red between `<header>` and `<main>` (both `shrink-0`, so it
+  stays visible on every tab and never scrolls away). Dismissal is keyed to
+  `syncFailure.at` — hiding one failure, not all future ones.
+- "Läs mer och åtgärda" opens `SettingsModal` with `openSyncHelp`, which expands the
+  troubleshooting panel and scrolls `#sync-help` into view. The panel holds the cause, the
+  numbered fixes, a reassurance line driven by the `dirty` flag, "Försök igen" (`onPullNow`)
+  and "Skicka fellogg" (the mailto).
+
 ### Debugging 405 errors
 
 A 405 from `Allow: GET, HEAD` always means a static file server (Caddy or nginx) is handling the request instead of Express. Common causes:
@@ -356,3 +384,54 @@ Bump (and add a `CHANGELOG.md` section) whenever you ship anything user-visible 
 ### When work is in flight
 
 Smaller in-progress changes can land under `[Unreleased]` in the changelog without a version bump. When the next deploy goes out, roll `[Unreleased]` into the new beta number. Don't ship to users without bumping.
+
+---
+
+## Framtida riktning: admin + schemaläggning (separat app)
+
+**Status: bara plan. Ingenting av det här är byggt, och det ska inte byggas in i min-tid.**
+
+Nästa steg är en **arbetsgivarsida** — en admin som ser flera anställdas tid och lägger ut
+scheman centralt. Den bryter mot i stort sett varje antagande den här appen vilar på och
+blir därför en egen app i ett eget (privat) repo, forkat härifrån för att återanvända
+UI-språket och tidslogiken.
+
+### Varför det inte kan bo här
+
+| min-tid idag | Vad admin kräver |
+|---|---|
+| Ett konto = en person = ett JSON-blob | Relationer: organisation → avdelning → anställd → pass |
+| Användarnamn + delad hemlighet, ingen identitet | Riktig identitet: inbjudan, e-post/BankID, sessioner, utloggning |
+| Ingen auktorisation — har du token äger du datan | Roller (anställd / chef / löneadmin) och per-post-behörighet |
+| `data.json`, hela state skrivs om vid varje PUT | Databas med per-entitet-skrivningar, historik och audit |
+| Schemat är lokalt och personligt (`WeekSchedule`) | Scheman läggs ut centralt, anställd ser och avviker mot dem |
+| Offline-först, enheten äger sanningen | Servern äger sanningen, klienten är en vy |
+
+Att lägga admin ovanpå dagens JSON-store skulle betyda att en token ger läsning av
+andras tid. Det är en säkerhetsmodell, inte en refaktorering — därför nytt repo.
+
+### Vad som bör återanvändas
+
+- **`src/lib/schedule.ts`** — `DayConfig`, `netDayMin`, `weeklyNetMin` och lunchkonventionen
+  gäller oförändrat. Flyttas till delad kod (eller kopieras och hålls i synk).
+- **Flexberäkningen** i `PunchClock.tsx` (`computeFlexMinutes` + hjälparna) — reglerna för
+  norm, frånvaro och flexuttag är samma på arbetsgivarsidan.
+- **Designspråket** (`pc-*`-tokens, bottom sheets, banners) så de två apparna hör ihop.
+- **`buildShareText` / `buildCsvExport`** — rapportformatet chefen ska godkänna är samma
+  som den anställde redan skickar.
+
+### Vad min-tid får för roll
+
+Klienten kan i princip vara oförändrad — den är redan offline-först och pratar med servern
+genom ett tunt lager (`src/lib/sync.ts`). Byter man endpoint och auth där kan samma app
+peka på det nya backendet, med tillägget att scheman kan komma *utifrån* (serverns schema
+blir grunden, `scheduleExceptions` blir avvikelser mot den). Gaffla inte frontend i onödan.
+
+### Öppna frågor att ta ställning till innan bygget
+
+1. Behåller anställda sina egna konton (personlig app, delar frivilligt) eller ägs kontot av
+   arbetsgivaren? Det avgör hela integritets- och GDPR-hållningen.
+2. Godkännandeflöde: attesterar chefen tid i efterhand, eller är utlagt schema sanningen som
+   den anställde avviker från?
+3. Vad händer med data när en anställning tar slut? (Dagens svar: 60-dagarsstädning av
+   inaktiva konton — det håller inte för en arbetsgivare med bevarandekrav.)
