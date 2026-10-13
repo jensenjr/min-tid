@@ -11,6 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run dev          # Vite dev server on port 5000 (host 0.0.0.0)
 npm run build        # Production build → dist/
 npm run lint         # ESLint
+npm test             # Vitest (runs with TZ=Europe/Stockholm)
 npm run format       # Prettier
 
 # Backend (run in a second terminal alongside npm run dev)
@@ -18,7 +19,7 @@ npm run server:install   # First-time only: installs server/node_modules
 npm run server:dev       # node --watch server/index.js  (port 3001)
 ```
 
-There are no tests. To verify a change works, run `npm run build` — Vite will surface TypeScript errors at transform time.
+Tests live in `src/lib/__tests__/` (Vitest, `vitest.config.ts` pins `TZ=Europe/Stockholm`). Definition of done: `npm ci && npm run lint && npm run build && npm test`. `npm run build` also surfaces TypeScript errors at transform time.
 
 > **Note:** `vite` is not on PATH; always invoke via `npm run` or `node_modules/.bin/vite` directly.
 
