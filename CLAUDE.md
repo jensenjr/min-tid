@@ -73,6 +73,8 @@ This keeps the nav anchored to the visible viewport bottom while only the main a
 
 ### Schedule data model (`src/lib/schedule.ts`)
 
+`getEffectiveDayConfig(date, schedule, exceptions)` also lives in `schedule.ts`; the `ScheduleException` type is in `src/lib/types.ts`.
+
 Everything time-related flows through this file. Key types and functions:
 
 ```ts
@@ -88,7 +90,9 @@ weeklyNetMin(schedule); // sum of netDayMin across all 7 days
 
 ### Flex bank
 
-Three flex functions in `PunchClock.tsx`:
+Flex logic lives in pure, tested modules (no React): `src/lib/flex.ts` (the four functions below), `src/lib/days.ts` (`computeDayMinutes`, `getAbsencesForDate`), `src/lib/dates.ts` (`ymdLocal`, `todayLocal`, week helpers, `isoWeekNumber`) and `src/lib/types.ts` (`Session`, `ScheduleException`, `AppState`, re-exports of absence/expense types). Tests are in `src/lib/__tests__/`; `it.fails` cases there document known bugs (scheduled empty day = −norm, flex absence counted twice, lunch deducted despite lunch punch-out, 00:00–02:00 sessions on the previous UTC day). Day keys here still use UTC `toISOString` — kept on purpose until the bug-fix PR.
+
+Three flex functions in `src/lib/flex.ts`:
 
 **`computeFlexMinutes(sessions, absences, schedule, trackingStartDate, rangeStart?, rangeEnd?)`**
 
@@ -419,7 +423,7 @@ andras tid. Det är en säkerhetsmodell, inte en refaktorering — därför nytt
 
 - **`src/lib/schedule.ts`** — `DayConfig`, `netDayMin`, `weeklyNetMin` och lunchkonventionen
   gäller oförändrat. Flyttas till delad kod (eller kopieras och hålls i synk).
-- **Flexberäkningen** i `PunchClock.tsx` (`computeFlexMinutes` + hjälparna) — reglerna för
+- **Flexberäkningen** i `src/lib/flex.ts` (`computeFlexMinutes` + hjälparna) — reglerna för
   norm, frånvaro och flexuttag är samma på arbetsgivarsidan.
 - **Designspråket** (`pc-*`-tokens, bottom sheets, banners) så de två apparna hör ihop.
 - **`buildShareText` / `buildCsvExport`** — rapportformatet chefen ska godkänna är samma

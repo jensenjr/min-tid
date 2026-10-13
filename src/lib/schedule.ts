@@ -1,3 +1,5 @@
+import type { ScheduleException } from "./types";
+
 // ─── Types ────────────────────────────────────────────────────
 export type DayKey = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 
@@ -136,4 +138,21 @@ export function migrateSchedule(raw: Record<string, unknown>): WeekSchedule {
     }
   }
   return result;
+}
+
+// Returns the effective DayConfig for a specific date, applying any schedule
+// exception (e.g. company-wide shortened day). Falls back to the weekly schedule.
+export function getEffectiveDayConfig(
+  dateStr: string,
+  schedule: WeekSchedule,
+  exceptions: Record<string, ScheduleException> = {},
+): DayConfig {
+  const base = schedule[dayKeyOf(new Date(dateStr + "T12:00:00"))];
+  const exc = exceptions[dateStr];
+  if (!exc) return base;
+  return {
+    ...base,
+    endTime: exc.endTime,
+    lunchMinutes: exc.lunchMinutes ?? base.lunchMinutes,
+  };
 }
