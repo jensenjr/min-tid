@@ -3,6 +3,7 @@
 All notable changes to **min-tid** are recorded here. Format loosely follows [Keep a Changelog](https://keepachangelog.com).
 
 **Versioning policy:**
+
 - Pre-1.0 we use `1.0.0-beta.N`. Each batch of changes that ships → bump `-beta.N` (no patch suffix inside a beta).
 - After 1.0.0 stable: standard semver — `1.0.1` for bug fixes, `1.1.0` for new features, `2.0.0` for breaking changes.
 - The version in `package.json` and `server/package.json` must move in lockstep. The running version is shown at the bottom of the settings modal.
@@ -15,34 +16,40 @@ _Nothing yet._
 ## [1.0.0-beta.12] — 2026-08-26
 
 ### Added
+
 - **Röd banner när synken inte fungerar.** Ett jobbnätverk kan släppa fram appen men blockera synken (403 från en proxy) — appen fortsatte då tyst att spara lokalt utan att någon märkte att timmarna aldrig lämnade telefonen. Nu visas en röd varning direkt under rubriken, på alla flikar, så länge synken felar. Den går att dölja, men kommer tillbaka vid nästa fel, och försvinner av sig själv så fort synken fungerar igen.
 - **”Läs mer och åtgärda”** öppnar inställningarna med en felsökningsruta som förklarar vad som hände (”Nätverket blockerar synken”, felkod, tidpunkt), varför det oftast händer, och en numrerad åtgärdslista — byt till mobildata, stäng av VPN, försök igen. Rutan säger också rakt ut att inget är förlorat: allt ligger kvar på enheten och laddas upp när nätet fungerar.
 - **”Skicka fellogg”** mejlar en färdig felanmälan till christian@krut.it med ämnet `mintid sync error kl HH:MM` och en logg med app-version, tidpunkt, användarnamn, felkod, nätverksstatus, senaste lyckade synk och enhet — plus de senaste felen. Synk-koden och inloggnings-token följer aldrig med.
 - **”Försök igen”** direkt i felsökningsrutan.
 
 ### Internal
+
 - `SyncApiError` i `sync.ts` bär `status` / `path` / `method`; `status === 0` betyder att förfrågan aldrig fick svar (offline, blockerad, captive portal).
 - Nytt `src/lib/syncDiagnostics.ts`: `explainSyncError()` (felkod → rubrik, orsak och åtgärder på svenska), rullande logg med de 10 senaste felen i `localStorage["sync_error_log"]` (aldrig synkad), och `buildSyncReportMailto()`.
 - `PunchClock`: `noteSyncFailure()` / `clearSyncFailure()` som enda väg in och ut ur feltillståndet, ny `SyncErrorBanner`-komponent mellan header och main (båda `shrink-0`, så bannern följer med på alla flikar).
 - `SettingsModal` tar `syncFailure`, `syncErrorLog`, `openSyncHelp` och `dirty` i stället för den tidigare `syncError`-strängen.
 
 ### Docs
+
 - `CLAUDE.md`: nytt avsnitt om hur synkfel ytas, samt ett planeringsavsnitt om den framtida admin- och schemaläggningsappen (separat privat repo — inget av det byggs här).
 
 ## [1.0.0-beta.11] — 2026-08-26
 
 ### Fixed
+
 - **Synk är nu tvåvägs.** Appen hämtade aldrig data från servern efter första återställningen — den bara skickade. Enheten du öppnade sist skrev tyst över den andra enhetens dag. Nu hämtas molnkopian när appen öppnas, när den tas fram i förgrunden igen och när nätet kommer tillbaka.
 - **"Återställ" hämtar på riktigt.** Om kontot fanns men inte hade någon sparad data visade appen "klart" och lämnade kvar den lokala datan utan att säga något. Nu byts data ut när det finns något att hämta, och när molnet är tomt får du en tydlig förklaring i stället för en falsk bekräftelse.
-- **"Koppla från" raderade hela synk-kontot** på servern (och därmed molnkopian för alla enheter). Nu finns två separata val i inställningarna: *Koppla från här* (stänger av synk lokalt, kontot ligger kvar) och *Radera synk-konto* (destruktivt, kräver en extra tryckning).
+- **"Koppla från" raderade hela synk-kontot** på servern (och därmed molnkopian för alla enheter). Nu finns två separata val i inställningarna: _Koppla från här_ (stänger av synk lokalt, kontot ligger kvar) och _Radera synk-konto_ (destruktivt, kräver en extra tryckning).
 - **Ingen data försvinner när båda enheterna ändrat.** Har den här enheten ändringar som inte nått servern samtidigt som en annan enhet skrivit, slås posterna ihop per `id` i stället för att den ena sidan skriver över den andra. Är enheten ren adopteras molnkopian rakt av, så borttagningar på den andra enheten slår igenom.
 - **Ingen uppladdning innan appen läst servern.** En enhet som legat oöppnad kunde tidigare skicka upp sin gamla data 3 sekunder efter att den öppnades. Push sker nu först efter en lyckad hämtning; ändringar gjorda offline märks som osparade och går upp när nätet är tillbaka.
 - Lokal data läses in synkront vid start i stället för i en effekt — spar-effekten hann annars köra en gång med tomma standardvärden.
 
 ### Added
+
 - **"Hämta nu"-knapp** i synk-kortet i inställningarna, för när du precis stämplat på en annan enhet och inte vill vänta. Statuskortet visar också "Hämtar från molnet…" och felmeddelandet vid synkfel.
 
 ### Internal
+
 - Server: `stateUpdatedAt` per användare som revisionsmarkör. `GET /api/sync` returnerar `{ state, updatedAt }`, `PUT /api/sync` returnerar `{ ok, updatedAt }`, och `login` / `recover/confirm` returnerar `updatedAt` tillsammans med state.
 - `sync.ts`: `syncPull` returnerar `{ state, updatedAt }`, `syncPush` returnerar den nya revisionen; nya nycklar `SYNC_REV_KEY` (`sync_rev`) och `SYNC_DIRTY_KEY` (`sync_dirty`).
 - `PunchClock.tsx`: ny synkmotor — `pullNow` / `pushNow` / `pushSoon` / `applyRemoteState` / `adoptRestoredState` med `syncRevRef`, `dirtyRef`, `hydratedRef`, `suppressPushRef` och `stateRef`; `mergeSyncState()` + `mergeById()` på modulnivå; `pagehide` flushar väntande push.
@@ -51,6 +58,7 @@ _Nothing yet._
 ## [1.0.0-beta.10] — 2026-06-24
 
 ### Added
+
 - **Username shown clearly in settings.** When sync is active the settings modal now shows "Inloggad som: @username" under the sync status — no more wondering which account you're on.
 - **Change PIN without disconnecting.** A new "Byt synk-kod" section in settings (visible when synced) lets you set a new secret in-place. The server re-hashes and saves it; the existing JWT stays valid and sync continues uninterrupted.
 - **SMS recovery via 46elks.** Attach a mobile number to your account at any time:
@@ -59,6 +67,7 @@ _Nothing yet._
 - **Phone-based account recovery.** In the sync modal ("Återställ" tab), a new "Återhämta med mobilnummer" link opens a recovery flow: enter registered phone → receive SMS code → confirm → logged in and data restored. Works both during onboarding and when adding sync to an existing device.
 
 ### Internal
+
 - Server: new in-memory OTP store with SHA-256 hashing, 10-min TTL, per-phone rate limiting (configurable via `SMS_RESEND_COOLDOWN_SEC`, `SMS_MAX_PER_HOUR`, `SMS_MAX_PER_DAY`). 46elks credentials: `ELKS_API_USERNAME`, `ELKS_API_PASSWORD`, `ELKS_FROM`.
 - Server: 5 new routes — `PUT /api/auth/secret`, `POST /api/auth/phone`, `POST /api/auth/phone/verify`, `POST /api/auth/recover/request`, `POST /api/auth/recover/confirm`.
 - `sync.ts`: `SYNC_USERNAME_KEY`, `SYNC_PHONE_KEY` constants; `syncChangeSecret`, `syncSendPhoneCode`, `syncVerifyPhone`, `syncRecoverRequest`, `syncRecoverConfirm` functions.
@@ -67,25 +76,30 @@ _Nothing yet._
 ## [1.0.0-beta.9] — 2026-06-24
 
 ### Added
+
 - **Long-session reassurance on the clock.** When an active session passes the late-punchout threshold (forgotten check-out territory — a timer reading "29h 0min"), an amber card now appears under the punch button: _"Långt pass (29h 0min). Glömde du checka ut? Bekräftelse sker innan utcheckning."_ with a **Välj sluttid** button that opens the end-time chooser directly. Removes the fear that tapping "Checka ut" silently records the full inflated duration.
-- **"Stämpla ut enligt schema" one-tap option.** The late-punchout sheet now offers a recommended button that checks out at the *scheduled* end time of the day the session started (e.g. kl. 17:00), showing the resulting pass length. This is the practical "automatic checkout" for forgotten punch-outs — one tap credits a normal scheduled day instead of an all-night session. The custom time picker also defaults to that scheduled end.
+- **"Stämpla ut enligt schema" one-tap option.** The late-punchout sheet now offers a recommended button that checks out at the _scheduled_ end time of the day the session started (e.g. kl. 17:00), showing the resulting pass length. This is the practical "automatic checkout" for forgotten punch-outs — one tap credits a normal scheduled day instead of an all-night session. The custom time picker also defaults to that scheduled end.
 - **"+X över schemat" statement.** Once today's net target is reached during an active session, the leave-time line appends how far over the schedule you are (e.g. _"Mål uppnått — du kan gå hem · +1h 30min över schemat"_).
 
 ### Internal
+
 - `LatePunchoutModal` gained an optional `scheduledEndMs` prop; `PunchClock` derives it from the active session's start-day effective schedule and passes it through.
 - New derived state in `PunchClock`: `isLongSession`, `overScheduleMin`, `lateScheduledEndMs`.
 
 ## [1.0.0-beta.8] — 2026-06-23
 
 ### Added
+
 - **Helgdag (röd dag) absence category.** A new "Helgdag" entry in the absence modal (🏖️) covers Swedish public holidays when no work is done. Like other non-flex absences it excuses the day — the daily norm drops to 0 and flex is unaffected. Entry flow: Historik → Kalender → tap the holiday date → `+ Avvikelse` → Helgdag.
 - **Förkortad arbetsdag — schedule exception per date.** When the company has everyone leave early (e.g. Thursday ends at 13:00 instead of 17:00), a small gear ⚙️ button on each history day row opens "Ändra schema för dag". Set a new end time and optional lunch minutes; the effective norm for that date is recalculated accordingly so the user gets 0 flex rather than hours of unearned minus. The same button appears in the calendar detail card. Exceptions are stored as `scheduleExceptions: Record<YYYY-MM-DD, ScheduleException>` in localStorage, included in sync, and auto-removed via "Återställ normalt schema".
 - Exception badge shown inline under the date label in each history row when an override is active.
 
 ### Changed
+
 - All flex computation functions (`computeFlexMinutes`, `computeTodayContribution`, `computeTodayDelta`, `computeWeekNet`, `buildShareText`, `buildCsvExport`) now resolve the **effective** `DayConfig` via the new `getEffectiveDayConfig(dateStr, schedule, exceptions)` helper before calculating norms and actuals. Today's leave-time predictor, schedule nudge banners, and late punch-out threshold also use the effective config, so a shortened day shows the correct leave time.
 
 ### Internal
+
 - New `ScheduleException = { type: "override"; endTime; lunchMinutes?; note? }` type in `PunchClock.tsx`.
 - `getEffectiveDayConfig()` module-level helper merges a date's exception (if any) into the base weekly `DayConfig`.
 - `computeDayMinutes` and `computeWeekNet` accept an optional `exceptions` parameter; all call sites inside the flex and report flows pass it through.
@@ -95,6 +109,7 @@ _Nothing yet._
 ## [1.0.0-beta.7] — 2026-06-12
 
 ### Added
+
 - **Stämpling utan att öppna appen (URL-actions).** The app now accepts `/?action=in|out|toggle&source=qr|nfc|wifi|shortcut|link`. Any trigger that can open a URL punches the clock: printed QR codes, NFC tags, iOS Shortcuts WiFi automations ("when I connect to the office WiFi → check in"), and home-screen shortcuts. The action is consumed and stripped from the address bar on load (a reload never re-punches), and execution is schedule-aware:
   - Duplicate triggers within 2 minutes are swallowed (WiFi flapping, double-scanned QR codes).
   - An automatic check-in on a day the schedule marks as free asks for confirmation instead of silently punching in.
@@ -108,20 +123,24 @@ _Nothing yet._
 - `docs/ios-automation.md` — how the URL-action architecture works, the office setup guide, and the roadmap for a native iOS wrapper (Capacitor) for push notifications, Live Activities and Siri.
 
 ### Changed
+
 - **Horizontal swipe pickers replaced** — the sideways-scrolling month pills in "Skapa rapport" and "Utlägg" worked poorly on desktop. New `MonthPicker`: two pills for the current and previous month (labelled with the month names) plus **"Annan…"**, which reveals a native dropdown with the last 24 months (native on both phone and desktop, and reaches further back than the old 6-pill row). The history filter pills ("Den här veckan" etc.) became a 2×2 grid instead of a scroll row.
 
 ### Internal
+
 - New `src/lib/actions.ts` (action parsing/URLs/dedupe), `src/components/AutomationModal.tsx`, `public/` (manifest, icons, service worker), `scripts/gen-icons.mjs` (dependency-free PNG icon generator). New dependency: `uqr` (pure-JS QR rendering).
 
 ## [1.0.0-beta.6] — 2026-06-01
 
 ### Fixed
-- **Calendar showed every day one slot off.** Each grid cell derived its date key with `toISOString()` on a *local-midnight* `Date`, which in a positive-UTC-offset timezone (Sweden is UTC+1/+2) rolls back to the previous day. So tapping "1 Maj" opened "30 April", and the day-dots/hours appeared shifted — which also read as "the week starts on Sunday" even though the header and grid offset were already Monday-first. Cells now use a local `ymdLocal()` formatter, so the displayed number, the selected-day detail, the data dots, and the today/past highlighting all line up.
+
+- **Calendar showed every day one slot off.** Each grid cell derived its date key with `toISOString()` on a _local-midnight_ `Date`, which in a positive-UTC-offset timezone (Sweden is UTC+1/+2) rolls back to the previous day. So tapping "1 Maj" opened "30 April", and the day-dots/hours appeared shifted — which also read as "the week starts on Sunday" even though the header and grid offset were already Monday-first. Cells now use a local `ymdLocal()` formatter, so the displayed number, the selected-day detail, the data dots, and the today/past highlighting all line up.
 
 ### Changed
+
 - **"Dela" is now a report builder.** Instead of auto-generating a fixed last-8-weeks text, the tab opens a **"Skapa rapport"** flow:
   - Pick a **period**: a month (last-6-months pills) or a custom **datumintervall** (Från/Till).
-  - **Skapa rapport** then produces the text report *for that exact period* and reveals the share/export actions.
+  - **Skapa rapport** then produces the text report _for that exact period_ and reveals the share/export actions.
   - **Kopiera text / Dela text** for the plain-text version, plus **Ladda ner CSV** and **Dela fil** (shares the CSV via the native share sheet where supported, falls back to download).
   - The receipt-to-attach reminder is now scoped to the selected period.
 - `buildShareText` and `buildCsvExport` take an explicit `[start, end]` range instead of "last 8 weeks" / `(year, month)`; the text report carries a `📅 <period>` header line.
@@ -129,34 +148,40 @@ _Nothing yet._
 ## [1.0.0-beta.5] — 2026-05-29
 
 ### Added
-- **Multi-day percentage entry in "Lägg till tid".** The add-time sheet now has an "En dag / Flera dagar" toggle (single-day stays the default). In "Flera dagar" mode a **Från/Till** range picker appears plus **100 % / 75 % / 50 % / 25 %** presets — the same percentage idea already in "Avvikelse". Saving creates one session per scheduled day in the range, each worth that percentage of *that day's* scheduled net.
+
+- **Multi-day percentage entry in "Lägg till tid".** The add-time sheet now has an "En dag / Flera dagar" toggle (single-day stays the default). In "Flera dagar" mode a **Från/Till** range picker appears plus **100 % / 75 % / 50 % / 25 %** presets — the same percentage idea already in "Avvikelse". Saving creates one session per scheduled day in the range, each worth that percentage of _that day's_ scheduled net.
   - Covers the two real cases: VAB 50 % shared with a partner while still working 50 % (→ log 50 % of the workday), and "forgot to punch a whole week, nothing changed" (→ 100 % for every day that week).
   - **Inactive/weekend days are skipped** (no schedule = nothing added), and **days that already have a session are skipped** so re-running can't double-count. A live preview shows how many days will be filled, the total time, and how many were skipped (lediga / redan registrerade).
   - Each generated session respects the lunch convention: raw length = `pct% of net + lunchMinutes`, so the resulting net matches the chosen percentage. A 100 % day reproduces the exact scheduled shift.
   - Range capped at ~4 months as a fat-finger guard.
 
 ### Internal
+
 - `SessionModal` gained `existingSessions` and `onSaveMany` props. New module-level `ymdLocal()` helper formats local `YYYY-MM-DD` to avoid the UTC date-shift `toISOString` can cause near midnight (also now used for the edit-session initial date).
 
 ## [1.0.0-beta.4] — 2026-05-27
 
 ### Added
+
 - **Lunch convention surfaced in the UI.** The schedule editor (both onboarding and "Planera dagar") now opens with a small info card: 🍽️ Lunch räknas av automatiskt — stämpla inte ut för lunch, minuterna nedan dras från din punchade tid. Removes a hidden assumption that bit users by tying lunch deduction to a number they couldn't see acting.
 - **Lunch reminder under the leave-time predictor.** When today's schedule has `lunchMinutes > 0` and a session is active, a faint line below "Du kan gå hem kl. HH:MM" reads `🍽️ Inkl. NN min lunch (räknas av automatiskt)` so users see exactly why the predicted leave time is later than `start + target`.
 
 ## [1.0.0-beta.3] — 2026-05-27
 
 ### Fixed
+
 - **Leave-time predictor was telling users to leave too early.** The line assumed sessions were pure work (lunch punched out), but the flex calc auto-deducts `lunchMinutes` from raw punched time. So a user with an 8 h target + 1 h lunch who punched in continuously was told to leave at 8 h raw — and got penalised −1 h flex when net came out to 7 h. The predictor now uses `target + lunch` raw minutes (matching `computeDayMinutes.net`) so the predicted leave-time, the "Mål uppnått" banner, and the flex contribution all agree.
 - **Late punch-out modal was firing on normal workdays.** The 4 h threshold triggered the "långt pass — välj sluttid" sheet at 8 h 09 min on a regular 8 h day. Threshold is now schedule-aware: `max(10 h, scheduled shift duration + 4 h)`. A standard 8-17 shift won't trigger it until ~13 h punched in; a 6 h shift not until 10 h. Real forgotten-punch-out cases (overnight, 12+ h) still fire.
 - The "Sätt annan sluttid" picker in `LatePunchoutModal` defaults to `sessionStart + (target + lunch)` to match the predictor, so confirming the default credits a full day's net.
 
 ### Internal
+
 - `shiftMinutes` is now imported from `schedule.ts`. `LONG_SESSION_THRESHOLD_MS` constant replaced by the `lateThresholdMs(todayCfg)` helper.
 
 ## [1.0.0-beta.2] — 2026-05-27
 
 ### Added
+
 - **Per-day "Avvikelse" button** in the calendar day card and per-day rows of the history list — alongside the existing "Tid" button, so you can register absence on any day directly from history. `AbsenceModal` now accepts `initialDate` and `schedule` props.
 - **Percentage presets** (100% / 75% / 50% / 25%) in `AbsenceModal` when "Ange timmar" is active. Each preset fills the manual-hours field with that fraction of the start day's scheduled net hours (or 8 h fallback). Snapped to 0.5 h. Numeric input still editable.
 - **Optional `amount` on `ExpenseEntry`** — milersättning entries can be saved with only km, no SEK amount required. The label gets a "(valfri — räcker med km)" hint when milersättning is selected.
@@ -167,6 +192,7 @@ _Nothing yet._
 - New components: `FlexBreakdownModal.tsx`, `LatePunchoutModal.tsx`.
 
 ### Changed
+
 - **`computeFlexMinutes`** rewritten for day-by-day accrual from `trackingStartDate`. Every scheduled workday strictly **before today** contributes `actual − scheduled net`; non-flex absences (VAB, semester, etc.) reduce that day's norm but don't drain the bank; flex-leave absences still deduct from the bank.
 - **Today rolls in when you punch out — not the next morning.** New `computeTodayContribution` adds today's `actual − target` to the total flex (and the week/month sub-stats + the current-week row in the breakdown) the moment the day is "settled" (no active session AND at least one completed session today). During an active session today contributes 0 — no red −8 h in the morning.
 - **Live "Idag" sub-stat** = `worked today − today's target`. Green if ≥ 0, red if < 0. Independent of whether the contribution has rolled into total yet.
@@ -176,6 +202,7 @@ _Nothing yet._
 - Sync `SyncState` includes `trackingStartDate`; it round-trips with login/restore and the debounced push.
 
 ### Skipped (intentionally)
+
 - Push notifications for long sessions — reliable background firing on iOS PWAs requires Service Worker + Web Push + backend infra. The late punch-out modal is the durable safety net instead.
 
 ## [1.0.0-beta.1] — 2026-05-26

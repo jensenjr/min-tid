@@ -17,22 +17,22 @@ The entire UI is in Swedish. The app works fully offline — sync between device
 - **History view** — list and calendar modes; sessions grouped by week, weekly totals compared against norm
 - **CSV export** — month-by-month export for payroll / accounting
 - **Share report** — generates a plain-text time + expense report for copying or sharing via the native OS share sheet; receipt reminders surfaced as an amber card
-- **Multi-device sync** *(optional)* — username + secret pair via a tiny self-hostable backend. No e-mail, no personal data — bcrypt-hashed secret + JWT only
+- **Multi-device sync** _(optional)_ — username + secret pair via a tiny self-hostable backend. No e-mail, no personal data — bcrypt-hashed secret + JWT only
 - **Short-session guard** — sessions under 1 minute trigger a warning and can be discarded instead of saved
 - **PWA-ready** — `apple-mobile-web-app-capable` and theme-color meta tags configured for installation on iOS
 
 ## Tech stack
 
-| Layer | Choice |
-|---|---|
-| Frontend framework | React 19 |
-| Routing | TanStack Router (file-based) |
-| Build | Vite 7 |
-| Styling | Tailwind CSS v4 + custom `pc-*` design tokens |
-| Language | TypeScript 5.8 |
-| Backend *(optional sync)* | Express 4 + bcryptjs + jsonwebtoken |
-| Storage | `localStorage` on client; JSON file (`data.json`) on server |
-| Deployment | Single Docker image (`node:22-slim`) serving both SPA and `/api` |
+| Layer                     | Choice                                                           |
+| ------------------------- | ---------------------------------------------------------------- |
+| Frontend framework        | React 19                                                         |
+| Routing                   | TanStack Router (file-based)                                     |
+| Build                     | Vite 7                                                           |
+| Styling                   | Tailwind CSS v4 + custom `pc-*` design tokens                    |
+| Language                  | TypeScript 5.8                                                   |
+| Backend _(optional sync)_ | Express 4 + bcryptjs + jsonwebtoken                              |
+| Storage                   | `localStorage` on client; JSON file (`data.json`) on server      |
+| Deployment                | Single Docker image (`node:22-slim`) serving both SPA and `/api` |
 
 ## Getting started
 
@@ -50,15 +50,15 @@ Then open `http://localhost:5000`. Vite proxies `/api` → `http://localhost:300
 
 ## Scripts
 
-| Command | Description |
-|---|---|
-| `npm run dev` | Vite dev server with HMR (port 5000) |
-| `npm run server:dev` | Express server with `node --watch` (port 3001) |
-| `npm run server:install` | Install server dependencies (first-time only) |
-| `npm run build` | Production build → `dist/` |
-| `npm run preview` | Preview the production build locally |
-| `npm run lint` | Run ESLint |
-| `npm run format` | Run Prettier |
+| Command                  | Description                                    |
+| ------------------------ | ---------------------------------------------- |
+| `npm run dev`            | Vite dev server with HMR (port 5000)           |
+| `npm run server:dev`     | Express server with `node --watch` (port 3001) |
+| `npm run server:install` | Install server dependencies (first-time only)  |
+| `npm run build`          | Production build → `dist/`                     |
+| `npm run preview`        | Preview the production build locally           |
+| `npm run lint`           | Run ESLint                                     |
+| `npm run format`         | Run Prettier                                   |
 
 There are no unit tests. Run `npm run build` to surface TypeScript errors.
 
@@ -76,10 +76,10 @@ docker compose up --build
 
 **Required environment variables for production:**
 
-| Variable | Notes |
-|---|---|
-| `JWT_SECRET` | Long random string — must be set, do not ship the default |
-| `DATA_PATH` | Defaults to `/app/data/data.json` in Docker; persist this directory |
+| Variable     | Notes                                                               |
+| ------------ | ------------------------------------------------------------------- |
+| `JWT_SECRET` | Long random string — must be set, do not ship the default           |
+| `DATA_PATH`  | Defaults to `/app/data/data.json` in Docker; persist this directory |
 
 See [CLAUDE.md](CLAUDE.md) for the full sync API spec, debugging tips, and architecture details.
 
@@ -113,15 +113,15 @@ server/
 
 Custom colors defined in `src/styles.css` under the `pc-` namespace:
 
-| Token | Value | Usage |
-|---|---|---|
-| `pc-orange` | `#ff5f00` | Primary action colour |
-| `pc-orange-deep` | `#fb4f00` | Hover / active states |
-| `pc-ink` | `#2d1717` | Body text |
-| `pc-muted` | `#9a8a82` | Secondary text |
-| `pc-bg` | `#faf6f1` | Page background |
-| `pc-peach` | `#fff1cd` | Informational callouts |
-| `pc-apricot` | `#fdf6ee` | Stat card background |
+| Token            | Value     | Usage                  |
+| ---------------- | --------- | ---------------------- |
+| `pc-orange`      | `#ff5f00` | Primary action colour  |
+| `pc-orange-deep` | `#fb4f00` | Hover / active states  |
+| `pc-ink`         | `#2d1717` | Body text              |
+| `pc-muted`       | `#9a8a82` | Secondary text         |
+| `pc-bg`          | `#faf6f1` | Page background        |
+| `pc-peach`       | `#fff1cd` | Informational callouts |
+| `pc-apricot`     | `#fdf6ee` | Stat card background   |
 
 ## Business rules
 

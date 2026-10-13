@@ -12,12 +12,12 @@ const MAX_LOG = 10;
 export const SUPPORT_EMAIL = "christian@krut.it";
 
 export type SyncFailure = {
-  at: number;       // ms
-  status: number;   // HTTP status, or 0 when the request never got a response
-  path: string;     // "/api/sync"
-  method: string;   // "GET" | "PUT" | …
-  message: string;  // server error text, or the fetch failure
-  online: boolean;  // navigator.onLine at the time
+  at: number; // ms
+  status: number; // HTTP status, or 0 when the request never got a response
+  path: string; // "/api/sync"
+  method: string; // "GET" | "PUT" | …
+  message: string; // server error text, or the fetch failure
+  online: boolean; // navigator.onLine at the time
 };
 
 export type SyncErrorExplanation = {
@@ -130,12 +130,20 @@ export function readSyncErrorLog(): SyncFailure[] {
 
 export function logSyncFailure(f: SyncFailure): SyncFailure[] {
   const next = [f, ...readSyncErrorLog()].slice(0, MAX_LOG);
-  try { localStorage.setItem(SYNC_ERROR_LOG_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+  try {
+    localStorage.setItem(SYNC_ERROR_LOG_KEY, JSON.stringify(next));
+  } catch {
+    /* ignore */
+  }
   return next;
 }
 
 export function clearSyncErrorLog() {
-  try { localStorage.removeItem(SYNC_ERROR_LOG_KEY); } catch { /* ignore */ }
+  try {
+    localStorage.removeItem(SYNC_ERROR_LOG_KEY);
+  } catch {
+    /* ignore */
+  }
 }
 
 // ─── Felanmälan ───────────────────────────────────────────────
@@ -179,7 +187,9 @@ export function buildSyncReportMailto(opts: {
   if (log.length > 1) {
     lines.push("", "Tidigare fel:");
     for (const e of log.slice(1)) {
-      lines.push(`  ${hhmm(e.at)}  ${e.status === 0 ? "ingen kontakt" : "HTTP " + e.status}  ${e.method} ${e.path}`);
+      lines.push(
+        `  ${hhmm(e.at)}  ${e.status === 0 ? "ingen kontakt" : "HTTP " + e.status}  ${e.method} ${e.path}`,
+      );
     }
   }
 

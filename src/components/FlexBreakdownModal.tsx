@@ -33,7 +33,7 @@ export default function FlexBreakdownModal({
 }) {
   if (!open) return null;
 
-  const totalSign  = total >= 0 ? "+" : "−";
+  const totalSign = total >= 0 ? "+" : "−";
   const totalColor = total > 0 ? "text-green-600" : total < 0 ? "text-red-500" : "text-pc-ink";
 
   return (
@@ -49,21 +49,38 @@ export default function FlexBreakdownModal({
           animation: "pcSheet 0.32s cubic-bezier(0.32,0.72,0,1)",
           maxHeight: "92dvh",
         }}
-        onClick={e => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
       >
         <div className="w-10 h-1 bg-pc-line rounded-full mx-auto mb-5" />
 
         <div className="font-extrabold text-[22px] tracking-tight mb-1">Flexsaldo</div>
         <div className="text-[13px] text-pc-muted mb-5">
-          {trackingStartDate
-            ? <>Räknar från <span className="font-semibold text-pc-ink">{new Date(trackingStartDate + "T12:00:00").toLocaleDateString("sv-SE", { day: "numeric", month: "long", year: "numeric" })}</span>.</>
-            : "Flex börjar räknas så fort du stämplar in första gången."}
+          {trackingStartDate ? (
+            <>
+              Räknar från{" "}
+              <span className="font-semibold text-pc-ink">
+                {new Date(trackingStartDate + "T12:00:00").toLocaleDateString("sv-SE", {
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                })}
+              </span>
+              .
+            </>
+          ) : (
+            "Flex börjar räknas så fort du stämplar in första gången."
+          )}
         </div>
 
         <div className="bg-pc-apricot rounded-2xl px-4 py-4 mb-5">
-          <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-1">Totalt</div>
-          <div className={`text-[34px] font-extrabold tabular-nums tracking-tight leading-none ${totalColor}`}>
-            {totalSign}{fmtMin(Math.abs(total))}
+          <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-1">
+            Totalt
+          </div>
+          <div
+            className={`text-[34px] font-extrabold tabular-nums tracking-tight leading-none ${totalColor}`}
+          >
+            {totalSign}
+            {fmtMin(Math.abs(total))}
           </div>
         </div>
 
@@ -77,16 +94,21 @@ export default function FlexBreakdownModal({
           </div>
         ) : (
           <div className="space-y-1 mb-2">
-            {weeks.map(w => {
-              const sign  = w.minutes >= 0 ? "+" : "−";
-              const color = w.minutes > 0 ? "text-green-600" : w.minutes < 0 ? "text-red-500" : "text-pc-muted";
+            {weeks.map((w) => {
+              const sign = w.minutes >= 0 ? "+" : "−";
+              const color =
+                w.minutes > 0 ? "text-green-600" : w.minutes < 0 ? "text-red-500" : "text-pc-muted";
               return (
-                <div key={w.mondayStr} className="flex items-center justify-between py-2 px-1 border-b border-pc-line last:border-b-0">
+                <div
+                  key={w.mondayStr}
+                  className="flex items-center justify-between py-2 px-1 border-b border-pc-line last:border-b-0"
+                >
                   <div className="text-[13px] font-semibold text-pc-ink">
                     {weekRangeLabel(w.mondayStr)}
                   </div>
                   <div className={`text-[14px] font-extrabold tabular-nums ${color}`}>
-                    {sign}{fmtMin(Math.abs(w.minutes))}
+                    {sign}
+                    {fmtMin(Math.abs(w.minutes))}
                   </div>
                 </div>
               );
@@ -96,7 +118,17 @@ export default function FlexBreakdownModal({
 
         <button
           onClick={onClose}
-          style={{ width: "100%", padding: "15px", borderRadius: "16px", background: "#ff5f00", color: "white", fontWeight: 700, fontSize: "15px", boxShadow: "0 8px 20px -8px rgba(255,95,0,0.6)", marginTop: "12px" }}
+          style={{
+            width: "100%",
+            padding: "15px",
+            borderRadius: "16px",
+            background: "#ff5f00",
+            color: "white",
+            fontWeight: 700,
+            fontSize: "15px",
+            boxShadow: "0 8px 20px -8px rgba(255,95,0,0.6)",
+            marginTop: "12px",
+          }}
         >
           Stäng
         </button>

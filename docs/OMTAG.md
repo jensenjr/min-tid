@@ -19,7 +19,7 @@ CLAUDE.md in the repo stays the source of truth for conventions (mobile layout i
   or entry-point button. If a PR needs more, stop and note it in the report instead of doing it.
 - **No version bumps** in PR 1–8. Each PR adds its own subsection under `## [Unreleased]` in CHANGELOG.md
   (Swedish, user-facing wording). PR 9 bumps to `1.0.0`.
-- Each PR updates only *its own* section of CLAUDE.md.
+- Each PR updates only _its own_ section of CLAUDE.md.
 - Definition of done for every PR: `npm ci && npm run lint && npm run build && npm test` all pass, the
   app starts with `npm run dev`, and no existing localStorage data is lost (load old state → migrate →
   save → reload works).
@@ -54,12 +54,12 @@ Run the waves in order. Inside a wave, start **one sub-agent per PR in parallel*
 `isolation: "worktree"`. Give each sub-agent: the PR section below verbatim, section 0, and the
 instruction "Read CLAUDE.md and docs/OMTAG.md first. Branch from the current origin/omtag/v1."
 
-| Wave | PRs (parallel) | Merge order into `omtag/v1` |
-|---|---|---|
-| 1 | PR 1, PR 2 | 1, then 2 |
-| 2 | PR 3, PR 4 | 4, then 3 (PR 3 rebases onto 4's `getEffectiveDayConfig`) |
-| 3 | PR 5, PR 6, PR 7, PR 8 | 5 first, then 6, 7, 8 — each rebased onto the new tip and its entry point moved into the *Mer* view |
-| 4 | PR 9 | 9 |
+| Wave | PRs (parallel)         | Merge order into `omtag/v1`                                                                         |
+| ---- | ---------------------- | --------------------------------------------------------------------------------------------------- |
+| 1    | PR 1, PR 2             | 1, then 2                                                                                           |
+| 2    | PR 3, PR 4             | 4, then 3 (PR 3 rebases onto 4's `getEffectiveDayConfig`)                                           |
+| 3    | PR 5, PR 6, PR 7, PR 8 | 5 first, then 6, 7, 8 — each rebased onto the new tip and its entry point moved into the _Mer_ view |
+| 4    | PR 9                   | 9                                                                                                   |
 
 Do not start a wave until every PR of the previous wave is merged and `omtag/v1` passes the full check.
 
@@ -69,45 +69,49 @@ The orchestrator (you) runs on **Claude Opus 5.5 at effort `high`** (the human s
 way): planning, reviewing each sub-agent's diff against its spec, resolving merge conflicts and writing
 the report. Opus is reserved for the PRs where a subtle mistake costs money or data.
 
-| PR | Builder agent | Model | Effort | Why |
-|---|---|---|---|---|
-| 1 Core lib | `omtag-builder` | `claude-sonnet-5-5` | `medium` | Mechanical move, guarded by tests |
-| 2 Encrypted sync | `omtag-critical` | `claude-opus-5-5` | `xhigh` | Security and data migration |
-| 3 Day status | `omtag-critical` | `claude-opus-5-5` | `xhigh` | The calculation everything else trusts |
-| 4 Rotation | `omtag-builder` | `claude-sonnet-5-5` | `high` | Date math, well-specified |
-| 5 Navigation | `omtag-builder` | `claude-sonnet-5-5` | `high` | Large UI restructuring |
-| 6 Excel | `omtag-builder` | `claude-sonnet-5-5` | `high` | Parsing + UI |
-| 7 Vacation | `omtag-builder` | `claude-sonnet-5-5` | `medium` | Small, tested |
-| 8 Travel time | `omtag-builder` | `claude-sonnet-5-5` | `high` | Rules with edge cases |
-| 9 Demo & 1.0 | `omtag-builder` | `claude-sonnet-5-5` | `medium` | Seed data and docs |
+| PR               | Builder agent    | Model               | Effort   | Why                                    |
+| ---------------- | ---------------- | ------------------- | -------- | -------------------------------------- |
+| 1 Core lib       | `omtag-builder`  | `claude-sonnet-5-5` | `medium` | Mechanical move, guarded by tests      |
+| 2 Encrypted sync | `omtag-critical` | `claude-opus-5-5`   | `xhigh`  | Security and data migration            |
+| 3 Day status     | `omtag-critical` | `claude-opus-5-5`   | `xhigh`  | The calculation everything else trusts |
+| 4 Rotation       | `omtag-builder`  | `claude-sonnet-5-5` | `high`   | Date math, well-specified              |
+| 5 Navigation     | `omtag-builder`  | `claude-sonnet-5-5` | `high`   | Large UI restructuring                 |
+| 6 Excel          | `omtag-builder`  | `claude-sonnet-5-5` | `high`   | Parsing + UI                           |
+| 7 Vacation       | `omtag-builder`  | `claude-sonnet-5-5` | `medium` | Small, tested                          |
+| 8 Travel time    | `omtag-builder`  | `claude-sonnet-5-5` | `high`   | Rules with edge cases                  |
+| 9 Demo & 1.0     | `omtag-builder`  | `claude-sonnet-5-5` | `medium` | Seed data and docs                     |
 
 **How to apply it.** During setup (section 1), create two agent definitions locally and keep them out of
 git (`echo ".claude/agents/omtag-*" >> .git/info/exclude`):
 
 ```markdown
-<!-- .claude/agents/omtag-builder.md -->
----
+## <!-- .claude/agents/omtag-builder.md -->
+
 name: omtag-builder
 description: Builds one PR from docs/OMTAG.md on its own branch and reports back.
 model: claude-sonnet-5-5
 effort: high
 isolation: worktree
 permissionMode: acceptEdits
+
 ---
+
 You build exactly one PR from docs/OMTAG.md. Read CLAUDE.md and docs/OMTAG.md sections 0 and 3 first.
 Stay inside the files your PR owns. Finish with the report described in section 3.
 ```
 
 ```markdown
-<!-- .claude/agents/omtag-critical.md -->
----
+## <!-- .claude/agents/omtag-critical.md -->
+
 name: omtag-critical
 description: Builds a security- or calculation-critical PR from docs/OMTAG.md.
 model: claude-opus-5-5
 effort: xhigh
 isolation: worktree
 permissionMode: acceptEdits
+
 ---
+
 (same body as omtag-builder, plus:) Write the tests before the implementation and list every edge case
 you covered in your report.
 ```
@@ -206,7 +210,7 @@ Own `src/lib/{days,flex,absence,confirm}.ts` and their tests. Minimal UI wiring 
    `'punch'` for existing users who have sessions, so nobody's behaviour changes silently).
 2. `type DayStatus = 'missing' | 'unconfirmed' | 'ongoing' | 'reported' | 'absent' | 'partial' | 'off'`.
    `evaluateDay(date, ctx) → { status, normMin, workedMin, breakMin, absence: { flexMin, excusedMin },
-   travel: { inScheduleMin, outsideMin }, flexDelta, explanation: string[] }`. `explanation` is Swedish
+travel: { inScheduleMin, outsideMin }, flexDelta, explanation: string[] }`. `explanation` is Swedish
    lines such as "Norm 8 h (08:00–17:00, lunch 1 h)", "Arbetat 7 h 40 min", "Flex −20 min".
 3. Rules:
    - Schedule mode: a scheduled past day with no entries → `unconfirmed`, counted as worked per schedule
@@ -221,7 +225,7 @@ Own `src/lib/{days,flex,absence,confirm}.ts` and their tests. Minimal UI wiring 
      when the user punched out over lunch.
    - All day keys local.
 4. `flex.ts` becomes a fold over `evaluateDay`: `computeFlex(range) → { minutes, missingDays,
-   unconfirmedDays }`.
+unconfirmedDays }`.
 5. `confirm.ts`: `confirmedDays: Record<date, true>`, `lockedMonths: Record<'YYYY-MM', { at, by }>`,
    `confirmMonth(month)` (marks every unconfirmed day reported and locks; in punch mode refuses while
    missing days exist), `unlockMonth(month)` with an audit log entry `{ at, action, month }`.
@@ -236,10 +240,10 @@ Own `src/lib/{days,flex,absence,confirm}.ts` and their tests. Minimal UI wiring 
 Own `src/lib/schedule.ts`, `src/components/schedule/*`, `WeekScheduleEditor` in `Onboarding.tsx`.
 
 1. Types: `ScheduleRotation = { weeks: WeekSchedule[] }` (1–8), `SchedulePeriod = { validFrom;
-   anchorMonday; rotation }`. State gets `schedules: SchedulePeriod[]` sorted by `validFrom`. Migrate the
+anchorMonday; rotation }`. State gets `schedules: SchedulePeriod[]` sorted by `validFrom`. Migrate the
    old single `schedule` into one period (`validFrom` = trackingStartDate ?? '2000-01-01').
 2. `getEffectiveDayConfig(date) = exceptions[date] ?? periodFor(date).rotation.weeks[mod(weeksBetween(
-   anchorMonday, mondayOf(date)), n)][dayKey]`, positive modulo for dates before the anchor.
+anchorMonday, mondayOf(date)), n)][dayKey]`, positive modulo for dates before the anchor.
 3. Editing asks "Gäller från" (default today) and appends a period instead of overwriting, so history
    keeps its old norm.
 4. UI: rotation length 1–8 veckor, tabs "Vecka 1…N", line "Den här veckan är vecka 2 av 4",
@@ -282,7 +286,7 @@ Own `src/lib/excel/*`, `src/components/ImportModal.tsx`, `vendor/xlsx-0.20.3.tgz
    Semesterdagar kvar, Sparade semesterdagar), hidden Listor (with Mallversion 1). Add a **Restid** sheet
    (Datum, Från, Till, Resmål, Kommentar) — PR 8 consumes it.
 3. `parseWorkbook(file) → { sessions, absences, expenses, travel, balances, errors: {sheet,row,message}[],
-   duplicates }`. Accept Excel dates/times and text `2026-03-04` / `08:00`. Skip rows whose Kommentar is
+duplicates }`. Accept Excel dates/times and text `2026-03-04` / `08:00`. Skip rows whose Kommentar is
    "EXEMPEL – skriv över eller radera". Dedupe on date+start. Times are Europe/Stockholm local.
 4. ImportModal: download template, choose file, preview counts + errors with row numbers, "Importera"
    (snapshot first), "Ångra senaste import". Move trackingStartDate to the earliest imported date if
@@ -305,7 +309,7 @@ Own `src/lib/travel.ts`, `src/components/TravelTimeEditor.tsx`, and in `ExpenseM
 removal of the "Resetimmar" category.
 
 1. `TravelEntry { id, date, from: 'HH:MM', to: 'HH:MM', destination?, note?, linkedExpenseId? }`.
-2. Settings (`travelRules`), all user-editable in *Mer → Restidsregler*:
+2. Settings (`travelRules`), all user-editable in _Mer → Restidsregler_:
    - inside scheduled hours → counts as worked time (fixed),
    - outside scheduled hours → `'payroll'` (default) | `'flex'` | `'none'`,
    - `factor` (default 1.0), `maxPerDayMin` (default none), `excludeNight` 22–06 (default false).

@@ -1,7 +1,7 @@
 # Effortless check-in/out — architecture & iOS roadmap
 
 The goal: track office worktime **without effort**. You should not have to open
-an app and press a button — arriving at the office *is* the check-in.
+an app and press a button — arriving at the office _is_ the check-in.
 
 This is how Visma Tid / Fortnox Tid–class products approach it too: the punch
 itself is a tiny event that many different triggers can fire, and the app's job
@@ -19,15 +19,15 @@ Opening that URL punches the clock. `src/lib/actions.ts` parses it,
 `PunchClock.tsx` executes it. The URL is stripped from the address bar
 immediately, so a reload never re-punches.
 
-Because *anything on an iPhone that can open a URL* becomes a punch trigger,
+Because _anything on an iPhone that can open a URL_ becomes a punch trigger,
 all three requested mechanisms work without an App Store app:
 
-| Trigger | How | Setup |
-|---|---|---|
-| **QR code** | iPhone camera scans a printed sign → opens the URL | "Automatisering" sheet in the app → print signs |
-| **NFC tag** | iOS Shortcuts personal automation: *When NFC tag is scanned → Open URL* | Genvägar → Automation → NFC |
-| **WiFi (automatic)** | iOS Shortcuts personal automation: *When joining "Office-WiFi" → Open URL* (`action=in`), *When leaving → Open URL* (`action=out`) | Genvägar → Automation → WiFi, turn off "Ask before running" |
-| **Home-screen shortcut** | PWA app shortcuts (long-press the app icon) declared in `manifest.webmanifest` | Install to home screen |
+| Trigger                  | How                                                                                                                                | Setup                                                       |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| **QR code**              | iPhone camera scans a printed sign → opens the URL                                                                                 | "Automatisering" sheet in the app → print signs             |
+| **NFC tag**              | iOS Shortcuts personal automation: _When NFC tag is scanned → Open URL_                                                            | Genvägar → Automation → NFC                                 |
+| **WiFi (automatic)**     | iOS Shortcuts personal automation: _When joining "Office-WiFi" → Open URL_ (`action=in`), _When leaving → Open URL_ (`action=out`) | Genvägar → Automation → WiFi, turn off "Ask before running" |
+| **Home-screen shortcut** | PWA app shortcuts (long-press the app icon) declared in `manifest.webmanifest`                                                     | Install to home screen                                      |
 
 The in-app **"Automatisera in/ut-checkning"** sheet generates the QR codes and
 contains copy-ready links plus step-by-step Shortcuts recipes.
@@ -56,13 +56,13 @@ offline-capable. Install via Safari → Dela → "Lägg till på hemskärmen".
 Web + Shortcuts covers QR, NFC and WiFi today. A native wrapper becomes worth
 it for the things Safari cannot do:
 
-| Capability | Why native |
-|---|---|
+| Capability             | Why native                                                                                                                                       |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Push notifications** | Reliable "du glömde checka ut"-pushar även när appen är stängd. (iOS ≥16.4 supports Web Push for installed PWAs, but native is more dependable.) |
-| **Live Activities** | Pågående pass som live-widget på låsskärmen/Dynamic Island |
-| **App Intents / Siri** | "Hej Siri, checka in" + native Shortcuts actions without opening a URL |
-| **Geofencing** | Check-in on *arrival at the address* rather than WiFi join — works even if the phone hesitates to join WiFi |
-| **Background NFC** | Tag reading without the Shortcuts indirection |
+| **Live Activities**    | Pågående pass som live-widget på låsskärmen/Dynamic Island                                                                                       |
+| **App Intents / Siri** | "Hej Siri, checka in" + native Shortcuts actions without opening a URL                                                                           |
+| **Geofencing**         | Check-in on _arrival at the address_ rather than WiFi join — works even if the phone hesitates to join WiFi                                      |
+| **Background NFC**     | Tag reading without the Shortcuts indirection                                                                                                    |
 
 Recommended path: **Capacitor** (capacitorjs.com). The entire React app is
 reused as-is:

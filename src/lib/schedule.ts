@@ -3,8 +3,8 @@ export type DayKey = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 
 export type DayConfig = {
   active: boolean;
-  startTime: string;    // "HH:MM" 24-hour
-  endTime: string;      // "HH:MM" 24-hour
+  startTime: string; // "HH:MM" 24-hour
+  endTime: string; // "HH:MM" 24-hour
   lunchMinutes: number; // deducted from shift for net work time
 };
 
@@ -14,25 +14,37 @@ export type WeekSchedule = Record<DayKey, DayConfig>;
 export const DAY_KEYS: DayKey[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 
 export const DAY_LABEL_LONG: Record<DayKey, string> = {
-  mon: "Måndag", tue: "Tisdag", wed: "Onsdag", thu: "Torsdag",
-  fri: "Fredag", sat: "Lördag", sun: "Söndag",
+  mon: "Måndag",
+  tue: "Tisdag",
+  wed: "Onsdag",
+  thu: "Torsdag",
+  fri: "Fredag",
+  sat: "Lördag",
+  sun: "Söndag",
 };
 
 export const DAY_LABEL_SHORT: Record<DayKey, string> = {
-  mon: "Mån", tue: "Tis", wed: "Ons", thu: "Tor",
-  fri: "Fre", sat: "Lör", sun: "Sön",
+  mon: "Mån",
+  tue: "Tis",
+  wed: "Ons",
+  thu: "Tor",
+  fri: "Fre",
+  sat: "Lör",
+  sun: "Sön",
 };
 
 const JS_TO_KEY: DayKey[] = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
-export function dayKeyOf(date: Date): DayKey { return JS_TO_KEY[date.getDay()]; }
+export function dayKeyOf(date: Date): DayKey {
+  return JS_TO_KEY[date.getDay()];
+}
 
 // Mon-Fri 08:00-17:00 with 1h lunch = 8h net — used as skip/default
 export const DEFAULT_SCHEDULE: WeekSchedule = {
-  mon: { active: true,  startTime: "08:00", endTime: "17:00", lunchMinutes: 60 },
-  tue: { active: true,  startTime: "08:00", endTime: "17:00", lunchMinutes: 60 },
-  wed: { active: true,  startTime: "08:00", endTime: "17:00", lunchMinutes: 60 },
-  thu: { active: true,  startTime: "08:00", endTime: "17:00", lunchMinutes: 60 },
-  fri: { active: true,  startTime: "08:00", endTime: "17:00", lunchMinutes: 60 },
+  mon: { active: true, startTime: "08:00", endTime: "17:00", lunchMinutes: 60 },
+  tue: { active: true, startTime: "08:00", endTime: "17:00", lunchMinutes: 60 },
+  wed: { active: true, startTime: "08:00", endTime: "17:00", lunchMinutes: 60 },
+  thu: { active: true, startTime: "08:00", endTime: "17:00", lunchMinutes: 60 },
+  fri: { active: true, startTime: "08:00", endTime: "17:00", lunchMinutes: 60 },
   sat: { active: false, startTime: "08:00", endTime: "17:00", lunchMinutes: 0 },
   sun: { active: false, startTime: "08:00", endTime: "17:00", lunchMinutes: 0 },
 };
@@ -43,7 +55,7 @@ export const DEFAULT_SCHEDULE: WeekSchedule = {
 export function shiftMinutes(cfg: DayConfig): number {
   const [sh, sm] = cfg.startTime.split(":").map(Number);
   const [eh, em] = cfg.endTime.split(":").map(Number);
-  return Math.max(0, (eh * 60 + em) - (sh * 60 + sm));
+  return Math.max(0, eh * 60 + em - (sh * 60 + sm));
 }
 
 /** Net worked minutes for one day (shift − lunch). 0 if inactive. */
@@ -79,13 +91,13 @@ export function addMinutes(baseHour: number, offsetMinutes: number): string {
 export function migrateNormHours(normHours: number): WeekSchedule {
   const endTime = addMinutes(8, Math.round(normHours * 60));
   return {
-    mon: { active: true,  startTime: "08:00", endTime, lunchMinutes: 60 },
-    tue: { active: true,  startTime: "08:00", endTime, lunchMinutes: 60 },
-    wed: { active: true,  startTime: "08:00", endTime, lunchMinutes: 60 },
-    thu: { active: true,  startTime: "08:00", endTime, lunchMinutes: 60 },
-    fri: { active: true,  startTime: "08:00", endTime, lunchMinutes: 60 },
-    sat: { active: false, startTime: "08:00", endTime, lunchMinutes: 0  },
-    sun: { active: false, startTime: "08:00", endTime, lunchMinutes: 0  },
+    mon: { active: true, startTime: "08:00", endTime, lunchMinutes: 60 },
+    tue: { active: true, startTime: "08:00", endTime, lunchMinutes: 60 },
+    wed: { active: true, startTime: "08:00", endTime, lunchMinutes: 60 },
+    thu: { active: true, startTime: "08:00", endTime, lunchMinutes: 60 },
+    fri: { active: true, startTime: "08:00", endTime, lunchMinutes: 60 },
+    sat: { active: false, startTime: "08:00", endTime, lunchMinutes: 0 },
+    sun: { active: false, startTime: "08:00", endTime, lunchMinutes: 0 },
   };
 }
 
@@ -99,7 +111,10 @@ export function migrateSchedule(raw: Record<string, unknown>): WeekSchedule {
   const result = {} as WeekSchedule;
   for (const k of DAY_KEYS) {
     const day = raw[k] as Record<string, unknown> | undefined;
-    if (!day) { result[k] = DEFAULT_SCHEDULE[k]; continue; }
+    if (!day) {
+      result[k] = DEFAULT_SCHEDULE[k];
+      continue;
+    }
 
     if (typeof day.startTime === "string" && typeof day.endTime === "string") {
       result[k] = {

@@ -75,10 +75,10 @@ This keeps the nav anchored to the visible viewport bottom while only the main a
 Everything time-related flows through this file. Key types and functions:
 
 ```ts
-DayConfig = { active, startTime, endTime, lunchMinutes }
-shiftMinutes(cfg)      // gross: endTime − startTime
-netDayMin(cfg)         // net: shiftMinutes − lunchMinutes (0 if inactive)
-weeklyNetMin(schedule) // sum of netDayMin across all 7 days
+DayConfig = { active, startTime, endTime, lunchMinutes };
+shiftMinutes(cfg); // gross: endTime − startTime
+netDayMin(cfg); // net: shiftMinutes − lunchMinutes (0 if inactive)
+weeklyNetMin(schedule); // sum of netDayMin across all 7 days
 ```
 
 `DEFAULT_SCHEDULE` = Mon–Fri 08:00–17:00 with 60 min lunch (8 h net, 40 h/week).
@@ -111,20 +111,20 @@ Total displayed = `flexBaseMinutes + computeFlexMinutes(...) + computeTodayContr
 
 ### Components
 
-| File | Responsibility |
-|---|---|
-| `PunchClock.tsx` | Main app shell — clock, history, expenses, share views; all inline sub-components. `SessionModal` ("Lägg till tid") supports single-day time entry and a "Flera dagar" mode that fills a date range with a percentage (100/75/50/25) of each scheduled day's net, skipping inactive/weekend days and days that already have a session. The "Dela" tab is a report builder: choose a month or a custom date range, then `buildShareText`/`buildCsvExport` generate a text + CSV report for that exact `[start, end]` window |
-| `Onboarding.tsx` | First-run flow with welcome → info/login → choice → schedule → sync. Exports `WeekScheduleEditor` used by both onboarding and the "Planera dagar" modal |
-| `SettingsModal.tsx` | Bottom sheet for editing name + department, controlling sync (activate / disconnect), opening the automation sheet, and showing app version |
-| `AbsenceModal.tsx` | Bottom sheet for logging absence entries (VAB, semester, etc.) |
-| `ExpenseModal.tsx` | Bottom sheet for logging expense entries (milersättning with km, kost, etc.) |
-| `SyncModal.tsx` | Bottom sheet for setting up sync on an existing device (create code or restore) — collects username + secret |
-| `FlexBreakdownModal.tsx` | Bottom sheet showing total flex + the last 12 weeks of flex broken down individually |
-| `LatePunchoutModal.tsx` | Bottom sheet that intercepts punch-outs after a 4+ hour active session — offers "use now", a custom end-time picker, or cancel |
-| `AutomationModal.tsx` | Bottom sheet ("Automatisera in/ut-checkning", opened from settings) — QR codes (via `uqr`), printable office signs, iOS Shortcuts recipes for WiFi/NFC punching, install-to-home-screen instructions |
-| `src/lib/schedule.ts` | Pure schedule types, constants, calculations, and localStorage migration |
-| `src/lib/sync.ts` | Thin fetch wrapper for all sync API calls; passes `username` + `secret` |
-| `src/lib/actions.ts` | URL actions (`?action=in\|out\|toggle&source=…`): parse-and-strip from the address bar, build trigger URLs, 2-min dedupe window |
+| File                     | Responsibility                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PunchClock.tsx`         | Main app shell — clock, history, expenses, share views; all inline sub-components. `SessionModal` ("Lägg till tid") supports single-day time entry and a "Flera dagar" mode that fills a date range with a percentage (100/75/50/25) of each scheduled day's net, skipping inactive/weekend days and days that already have a session. The "Dela" tab is a report builder: choose a month or a custom date range, then `buildShareText`/`buildCsvExport` generate a text + CSV report for that exact `[start, end]` window |
+| `Onboarding.tsx`         | First-run flow with welcome → info/login → choice → schedule → sync. Exports `WeekScheduleEditor` used by both onboarding and the "Planera dagar" modal                                                                                                                                                                                                                                                                                                                                                                    |
+| `SettingsModal.tsx`      | Bottom sheet for editing name + department, controlling sync (activate / disconnect), opening the automation sheet, and showing app version                                                                                                                                                                                                                                                                                                                                                                                |
+| `AbsenceModal.tsx`       | Bottom sheet for logging absence entries (VAB, semester, etc.)                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `ExpenseModal.tsx`       | Bottom sheet for logging expense entries (milersättning with km, kost, etc.)                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `SyncModal.tsx`          | Bottom sheet for setting up sync on an existing device (create code or restore) — collects username + secret                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `FlexBreakdownModal.tsx` | Bottom sheet showing total flex + the last 12 weeks of flex broken down individually                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `LatePunchoutModal.tsx`  | Bottom sheet that intercepts punch-outs after a 4+ hour active session — offers "use now", a custom end-time picker, or cancel                                                                                                                                                                                                                                                                                                                                                                                             |
+| `AutomationModal.tsx`    | Bottom sheet ("Automatisera in/ut-checkning", opened from settings) — QR codes (via `uqr`), printable office signs, iOS Shortcuts recipes for WiFi/NFC punching, install-to-home-screen instructions                                                                                                                                                                                                                                                                                                                       |
+| `src/lib/schedule.ts`    | Pure schedule types, constants, calculations, and localStorage migration                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `src/lib/sync.ts`        | Thin fetch wrapper for all sync API calls; passes `username` + `secret`                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `src/lib/actions.ts`     | URL actions (`?action=in\|out\|toggle&source=…`): parse-and-strip from the address bar, build trigger URLs, 2-min dedupe window                                                                                                                                                                                                                                                                                                                                                                                            |
 
 ### URL actions & automation
 
@@ -160,7 +160,9 @@ All modals are bottom sheets. They use `if (!open) return null` — the componen
 
 ```ts
 useEffect(() => {
-  if (open) { setState(prop); }
+  if (open) {
+    setState(prop);
+  }
 }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 ```
 
@@ -180,12 +182,12 @@ A minimal Express + Node.js server. No database — state is stored in a single 
 
 ### Files
 
-| File | Purpose |
-|---|---|
-| `server/index.js` | Express app — all routes, JSON store logic, and 60-day inactive-account cleanup |
-| `server/package.json` | Server dependencies |
+| File                       | Purpose                                                                                                                                           |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `server/index.js`          | Express app — all routes, JSON store logic, and 60-day inactive-account cleanup                                                                   |
+| `server/package.json`      | Server dependencies                                                                                                                               |
 | `server/package-lock.json` | **Must be committed.** Required for `npm ci` in Docker/Nixpacks. If missing, builds fail with `EUSAGE`. Regenerate with `npm run server:install`. |
-| `server/data.json` | Runtime data file — gitignored, created automatically on first write |
+| `server/data.json`         | Runtime data file — gitignored, created automatically on first write                                                                              |
 
 ### Data model
 
@@ -219,24 +221,24 @@ data.json = {
 
 ### API endpoints
 
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| POST | `/api/auth/register` | none | Body: `{ username, secret }`. Hash secret, create user, return JWT. 409 if username taken. |
-| POST | `/api/auth/login` | none | Body: `{ username, secret }`. Verify, update `lastActivity`, return JWT + stored state + `updatedAt`. |
-| GET | `/api/sync` | Bearer JWT | Return `{ state, updatedAt }` — `updatedAt` is the revision the client compares against |
-| PUT | `/api/sync` | Bearer JWT | Replace stored state, bump `stateUpdatedAt`, update `lastActivity`; returns `{ ok, updatedAt }` |
-| DELETE | `/api/account` | Bearer JWT | Delete user record |
+| Method | Path                 | Auth       | Description                                                                                           |
+| ------ | -------------------- | ---------- | ----------------------------------------------------------------------------------------------------- |
+| POST   | `/api/auth/register` | none       | Body: `{ username, secret }`. Hash secret, create user, return JWT. 409 if username taken.            |
+| POST   | `/api/auth/login`    | none       | Body: `{ username, secret }`. Verify, update `lastActivity`, return JWT + stored state + `updatedAt`. |
+| GET    | `/api/sync`          | Bearer JWT | Return `{ state, updatedAt }` — `updatedAt` is the revision the client compares against               |
+| PUT    | `/api/sync`          | Bearer JWT | Replace stored state, bump `stateUpdatedAt`, update `lastActivity`; returns `{ ok, updatedAt }`       |
+| DELETE | `/api/account`       | Bearer JWT | Delete user record                                                                                    |
 
 Login errors are deliberately ambiguous ("Fel användarnamn eller synk-kod") so the existence of a username can't be probed.
 
 ### Environment variables
 
-| Variable | Default | Description |
-|---|---|---|
-| `PORT` | `3001` (dev) / `3000` (prod) | Port the server listens on |
-| `JWT_SECRET` | `dev-secret-change-in-production` | **Must be overridden in production** |
-| `DATA_PATH` | `server/data.json` | Path to the JSON data file |
-| `NODE_ENV` | — | Set to `production` to enable static file serving from `dist/` |
+| Variable     | Default                           | Description                                                    |
+| ------------ | --------------------------------- | -------------------------------------------------------------- |
+| `PORT`       | `3001` (dev) / `3000` (prod)      | Port the server listens on                                     |
+| `JWT_SECRET` | `dev-secret-change-in-production` | **Must be overridden in production**                           |
+| `DATA_PATH`  | `server/data.json`                | Path to the JSON data file                                     |
+| `NODE_ENV`   | —                                 | Set to `production` to enable static file serving from `dist/` |
 
 ### How sync works in `PunchClock.tsx`
 
@@ -245,13 +247,13 @@ only ever pushed, so whichever device you opened last silently overwrote the oth
 
 State lives in refs so timers and event listeners never act on a stale closure:
 
-| Ref | Meaning |
-|---|---|
-| `syncRevRef` | Last server revision seen (`updatedAt`, mirrored in `localStorage["sync_rev"]`) |
-| `dirtyRef` | Local edits the server hasn't acknowledged (mirrored in `localStorage["sync_dirty"]`, so it survives a reload/offline session) |
-| `hydratedRef` | We have read the server at least once this session |
-| `suppressPushRef` | The next save-effect run comes from applying server data, not from the user |
-| `stateRef` | Latest `SyncState` payload |
+| Ref               | Meaning                                                                                                                        |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `syncRevRef`      | Last server revision seen (`updatedAt`, mirrored in `localStorage["sync_rev"]`)                                                |
+| `dirtyRef`        | Local edits the server hasn't acknowledged (mirrored in `localStorage["sync_dirty"]`, so it survives a reload/offline session) |
+| `hydratedRef`     | We have read the server at least once this session                                                                             |
+| `suppressPushRef` | The next save-effect run comes from applying server data, not from the user                                                    |
+| `stateRef`        | Latest `SyncState` payload                                                                                                     |
 
 **Pull** (`pullNow`) runs on mount with a token, on `visibilitychange`/`focus`/`online`, and from
 the "Hämta nu" button in settings:
@@ -272,6 +274,7 @@ next successful pull. A `pagehide` listener flushes a pending push.
 card in `SettingsModal`.
 
 **Key invariants:**
+
 - `onboardingDone` is never synced — it is always set to `true` on the local device after any onboarding path completes.
 - Persisted state is read **synchronously** into `useState` initializers via `load()` (a `bootRef`), not in an effect. Loading in an effect let the save effect fire once with empty defaults first.
 - Restore paths (`SyncModal`, onboarding login/restore) call `adoptRestoredState()`, which sets the revision, clears `dirty`, and replaces local state. If the server has **no** state, the UI now says so instead of silently keeping the local data.
@@ -365,6 +368,7 @@ This project follows semver with `-beta.N` suffixes during pre-1.0.
 **Pre-1.0 (we are here):** every batch of changes that ships → bump `-beta.N`. So beta.1 → beta.2 → beta.3, etc. There is no patch suffix inside a beta — each shipped beta is the next integer. The "1.0.0" prefix doesn't move until we declare 1.0.0 stable.
 
 **Post-1.0 stable:** standard semver:
+
 - `1.0.1` — backwards-compatible bug fixes
 - `1.1.0` — backwards-compatible new features
 - `2.0.0` — breaking change (storage shape, API, etc.)
@@ -398,14 +402,14 @@ UI-språket och tidslogiken.
 
 ### Varför det inte kan bo här
 
-| min-tid idag | Vad admin kräver |
-|---|---|
-| Ett konto = en person = ett JSON-blob | Relationer: organisation → avdelning → anställd → pass |
-| Användarnamn + delad hemlighet, ingen identitet | Riktig identitet: inbjudan, e-post/BankID, sessioner, utloggning |
-| Ingen auktorisation — har du token äger du datan | Roller (anställd / chef / löneadmin) och per-post-behörighet |
-| `data.json`, hela state skrivs om vid varje PUT | Databas med per-entitet-skrivningar, historik och audit |
-| Schemat är lokalt och personligt (`WeekSchedule`) | Scheman läggs ut centralt, anställd ser och avviker mot dem |
-| Offline-först, enheten äger sanningen | Servern äger sanningen, klienten är en vy |
+| min-tid idag                                      | Vad admin kräver                                                 |
+| ------------------------------------------------- | ---------------------------------------------------------------- |
+| Ett konto = en person = ett JSON-blob             | Relationer: organisation → avdelning → anställd → pass           |
+| Användarnamn + delad hemlighet, ingen identitet   | Riktig identitet: inbjudan, e-post/BankID, sessioner, utloggning |
+| Ingen auktorisation — har du token äger du datan  | Roller (anställd / chef / löneadmin) och per-post-behörighet     |
+| `data.json`, hela state skrivs om vid varje PUT   | Databas med per-entitet-skrivningar, historik och audit          |
+| Schemat är lokalt och personligt (`WeekSchedule`) | Scheman läggs ut centralt, anställd ser och avviker mot dem      |
+| Offline-först, enheten äger sanningen             | Servern äger sanningen, klienten är en vy                        |
 
 Att lägga admin ovanpå dagens JSON-store skulle betyda att en token ger läsning av
 andras tid. Det är en säkerhetsmodell, inte en refaktorering — därför nytt repo.
@@ -424,7 +428,7 @@ andras tid. Det är en säkerhetsmodell, inte en refaktorering — därför nytt
 
 Klienten kan i princip vara oförändrad — den är redan offline-först och pratar med servern
 genom ett tunt lager (`src/lib/sync.ts`). Byter man endpoint och auth där kan samma app
-peka på det nya backendet, med tillägget att scheman kan komma *utifrån* (serverns schema
+peka på det nya backendet, med tillägget att scheman kan komma _utifrån_ (serverns schema
 blir grunden, `scheduleExceptions` blir avvikelser mot den). Gaffla inte frontend i onödan.
 
 ### Öppna frågor att ta ställning till innan bygget

@@ -1,29 +1,57 @@
 import { useState, useEffect, useRef } from "react";
 import Onboarding, { type OnboardingResult, WeekScheduleEditor } from "./Onboarding";
-import AbsenceModal, { type AbsenceEntry, type AbsenceCategory, ABSENCE_META } from "./AbsenceModal";
-import ExpenseModal, { type ExpenseEntry, type ExpenseCategory, EXPENSE_META } from "./ExpenseModal";
+import AbsenceModal, {
+  type AbsenceEntry,
+  type AbsenceCategory,
+  ABSENCE_META,
+} from "./AbsenceModal";
+import ExpenseModal, {
+  type ExpenseEntry,
+  type ExpenseCategory,
+  EXPENSE_META,
+} from "./ExpenseModal";
 import SettingsModal from "./SettingsModal";
 import SyncModal from "./SyncModal";
 import FlexBreakdownModal from "./FlexBreakdownModal";
 import LatePunchoutModal from "./LatePunchoutModal";
 import AutomationModal from "./AutomationModal";
 import {
-  consumeActionFromUrl, isDuplicateAction, rememberAction, SOURCE_META,
-  type ParsedAction, type ActionSource,
+  consumeActionFromUrl,
+  isDuplicateAction,
+  rememberAction,
+  SOURCE_META,
+  type ParsedAction,
+  type ActionSource,
 } from "../lib/actions";
 import {
-  syncPush, syncPull, syncDeleteAccount, SyncApiError,
-  SYNC_TOKEN_KEY, SYNC_REV_KEY, SYNC_DIRTY_KEY, SYNC_USERNAME_KEY, SYNC_PHONE_KEY,
+  syncPush,
+  syncPull,
+  syncDeleteAccount,
+  SyncApiError,
+  SYNC_TOKEN_KEY,
+  SYNC_REV_KEY,
+  SYNC_DIRTY_KEY,
+  SYNC_USERNAME_KEY,
+  SYNC_PHONE_KEY,
   type SyncState,
 } from "../lib/sync";
 import {
-  logSyncFailure, readSyncErrorLog, explainSyncError,
+  logSyncFailure,
+  readSyncErrorLog,
+  explainSyncError,
   type SyncFailure,
 } from "../lib/syncDiagnostics";
 import {
-  type WeekSchedule, type DayConfig,
-  DEFAULT_SCHEDULE, dayKeyOf, netDayMin, shiftMinutes, weeklyNetMin, fmtMin,
-  migrateNormHours, migrateSchedule,
+  type WeekSchedule,
+  type DayConfig,
+  DEFAULT_SCHEDULE,
+  dayKeyOf,
+  netDayMin,
+  shiftMinutes,
+  weeklyNetMin,
+  fmtMin,
+  migrateNormHours,
+  migrateSchedule,
 } from "../lib/schedule";
 
 // ─── Constants ────────────────────────────────────────────────
@@ -41,7 +69,11 @@ function lateThresholdMs(todayCfg: DayConfig): number {
 
 // ─── Types ────────────────────────────────────────────────────
 type Session = {
-  id: string; checkIn: number; checkOut: number | null; manual: boolean; note?: string;
+  id: string;
+  checkIn: number;
+  checkOut: number | null;
+  manual: boolean;
+  note?: string;
   source?: ActionSource; // set when the punch came from a QR/NFC/WiFi/shortcut trigger
 };
 type HistoryFilter = "week" | "lastweek" | "month" | "all";
@@ -52,8 +84,8 @@ type HistoryFilter = "week" | "lastweek" | "month" | "all";
 // absence category instead — that excuses the day via the norm calculation.
 type ScheduleException = {
   type: "override";
-  endTime: string;        // shortened/changed end time, e.g. "13:00"
-  lunchMinutes?: number;  // optional: 0 if no lunch on a short day
+  endTime: string; // shortened/changed end time, e.g. "13:00"
+  lunchMinutes?: number; // optional: 0 if no lunch on a short day
   note?: string;
 };
 
@@ -71,8 +103,12 @@ type StorageShape = {
 };
 
 // ─── Time helpers ─────────────────────────────────────────────
-function now() { return Date.now(); }
-function todayStr() { return new Date().toISOString().slice(0, 10); }
+function now() {
+  return Date.now();
+}
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
 
 function fmtTime(ms: number | null | undefined) {
   if (!ms) return "--:--";
@@ -182,7 +218,9 @@ function computeWeekNet(
 
 function fmtDateLabel(dateStr: string) {
   return new Date(dateStr + "T12:00:00").toLocaleDateString("sv-SE", {
-    weekday: "long", day: "numeric", month: "long",
+    weekday: "long",
+    day: "numeric",
+    month: "long",
   });
 }
 
@@ -199,13 +237,19 @@ function expandAbsenceDates(absence: AbsenceEntry): string[] {
 }
 
 function getAbsencesForDate(absences: AbsenceEntry[], date: string): AbsenceEntry[] {
-  return absences.filter(a => a.startDate <= date && a.endDate >= date);
+  return absences.filter((a) => a.startDate <= date && a.endDate >= date);
 }
 
 function absenceDateRangeLabel(a: AbsenceEntry): string {
   if (a.startDate === a.endDate) return fmtDateLabel(a.startDate);
-  const s = new Date(a.startDate + "T12:00:00").toLocaleDateString("sv-SE", { day: "numeric", month: "short" });
-  const e = new Date(a.endDate + "T12:00:00").toLocaleDateString("sv-SE", { day: "numeric", month: "short" });
+  const s = new Date(a.startDate + "T12:00:00").toLocaleDateString("sv-SE", {
+    day: "numeric",
+    month: "short",
+  });
+  const e = new Date(a.endDate + "T12:00:00").toLocaleDateString("sv-SE", {
+    day: "numeric",
+    month: "short",
+  });
   return `${s} – ${e}`;
 }
 
@@ -215,17 +259,25 @@ function filterSessions(sessions: Session[], filter: HistoryFilter): Session[] {
   if (filter === "all") return sessions;
   if (filter === "week") {
     const mon = getWeekMonday(ref);
-    const sun = new Date(mon); sun.setDate(sun.getDate() + 7);
-    return sessions.filter(s => { const d = new Date(s.checkIn); return d >= mon && d < sun; });
+    const sun = new Date(mon);
+    sun.setDate(sun.getDate() + 7);
+    return sessions.filter((s) => {
+      const d = new Date(s.checkIn);
+      return d >= mon && d < sun;
+    });
   }
   if (filter === "lastweek") {
     const thisMon = getWeekMonday(ref);
-    const lastMon = new Date(thisMon); lastMon.setDate(lastMon.getDate() - 7);
-    return sessions.filter(s => { const d = new Date(s.checkIn); return d >= lastMon && d < thisMon; });
+    const lastMon = new Date(thisMon);
+    lastMon.setDate(lastMon.getDate() - 7);
+    return sessions.filter((s) => {
+      const d = new Date(s.checkIn);
+      return d >= lastMon && d < thisMon;
+    });
   }
   if (filter === "month") {
     const start = new Date(ref.getFullYear(), ref.getMonth(), 1);
-    return sessions.filter(s => new Date(s.checkIn) >= start);
+    return sessions.filter((s) => new Date(s.checkIn) >= start);
   }
   return sessions;
 }
@@ -235,34 +287,42 @@ function filterAbsences(absences: AbsenceEntry[], filter: HistoryFilter): Absenc
   if (filter === "all") return absences;
   if (filter === "week") {
     const mon = getWeekMonday(ref).toISOString().slice(0, 10);
-    const sun = new Date(getWeekMonday(ref)); sun.setDate(sun.getDate() + 6);
+    const sun = new Date(getWeekMonday(ref));
+    sun.setDate(sun.getDate() + 6);
     const sunStr = sun.toISOString().slice(0, 10);
-    return absences.filter(a => a.startDate <= sunStr && a.endDate >= mon);
+    return absences.filter((a) => a.startDate <= sunStr && a.endDate >= mon);
   }
   if (filter === "lastweek") {
     const thisMon = getWeekMonday(ref);
-    const lastMon = new Date(thisMon); lastMon.setDate(lastMon.getDate() - 7);
-    const lastSun = new Date(thisMon); lastSun.setDate(lastSun.getDate() - 1);
+    const lastMon = new Date(thisMon);
+    lastMon.setDate(lastMon.getDate() - 7);
+    const lastSun = new Date(thisMon);
+    lastSun.setDate(lastSun.getDate() - 1);
     const lmStr = lastMon.toISOString().slice(0, 10);
     const lsStr = lastSun.toISOString().slice(0, 10);
-    return absences.filter(a => a.startDate <= lsStr && a.endDate >= lmStr);
+    return absences.filter((a) => a.startDate <= lsStr && a.endDate >= lmStr);
   }
   if (filter === "month") {
     const start = new Date(ref.getFullYear(), ref.getMonth(), 1).toISOString().slice(0, 10);
-    return absences.filter(a => a.endDate >= start);
+    return absences.filter((a) => a.endDate >= start);
   }
   return absences;
 }
 
 // ─── Share text ───────────────────────────────────────────────
 function buildShareText(
-  sessions: Session[], absences: AbsenceEntry[], expenses: ExpenseEntry[],
-  name: string, schedule: WeekSchedule,
-  periodStart: string, periodEnd: string, periodLabel: string,
+  sessions: Session[],
+  absences: AbsenceEntry[],
+  expenses: ExpenseEntry[],
+  name: string,
+  schedule: WeekSchedule,
+  periodStart: string,
+  periodEnd: string,
+  periodLabel: string,
   exceptions: Record<string, ScheduleException> = {},
 ) {
   const wNorm = weeklyNetMin(schedule);
-  const completed = sessions.filter(s => s.checkOut !== null);
+  const completed = sessions.filter((s) => s.checkOut !== null);
   const inRange = (d: string) => d >= periodStart && d <= periodEnd;
 
   const dateSet = new Set<string>();
@@ -270,7 +330,10 @@ function buildShareText(
     const d = new Date(s.checkIn).toISOString().slice(0, 10);
     if (inRange(d)) dateSet.add(d);
   }
-  for (const a of absences) expandAbsenceDates(a).forEach(d => { if (inRange(d)) dateSet.add(d); });
+  for (const a of absences)
+    expandAbsenceDates(a).forEach((d) => {
+      if (inRange(d)) dateSet.add(d);
+    });
 
   const weekMap: Record<string, Set<string>> = {};
   for (const d of dateSet) {
@@ -290,13 +353,11 @@ function buildShareText(
 
   for (const wMon of weeks) {
     const wDates = [...weekMap[wMon]].sort();
-    const wSessions = wDates.flatMap(d => byDate[d] ?? []);
+    const wSessions = wDates.flatMap((d) => byDate[d] ?? []);
     const wNet = computeWeekNet(wSessions, schedule, exceptions);
     grandNet += wNet;
     const diff = wNet - wNorm;
-    const diffStr = diff >= 0
-      ? `+${fmtMin(diff)}`
-      : `−${fmtMin(Math.abs(diff))}`;
+    const diffStr = diff >= 0 ? `+${fmtMin(diff)}` : `−${fmtMin(Math.abs(diff))}`;
     lines.push(`── ${weekRangeLabel(wMon)} ──`);
     lines.push(`Totalt: ${fmtMin(wNet)}  (${diffStr} mot norm)\n`);
 
@@ -315,13 +376,17 @@ function buildShareText(
         const a = da[0];
         if (a.startDate === d) {
           const meta = ABSENCE_META[a.category];
-          lines.push(`  ${a.startDate === a.endDate ? fmtDateLabel(d) : absenceDateRangeLabel(a)}: ${meta.emoji} ${meta.label}`);
+          lines.push(
+            `  ${a.startDate === a.endDate ? fmtDateLabel(d) : absenceDateRangeLabel(a)}: ${meta.emoji} ${meta.label}`,
+          );
         }
       }
       if (ds.length > 0) {
         for (const a of da) {
           const meta = ABSENCE_META[a.category];
-          lines.push(`    ${meta.emoji} ${meta.label}${a.startDate !== a.endDate ? ` (${absenceDateRangeLabel(a)})` : ""}`);
+          lines.push(
+            `    ${meta.emoji} ${meta.label}${a.startDate !== a.endDate ? ` (${absenceDateRangeLabel(a)})` : ""}`,
+          );
         }
       }
     }
@@ -332,7 +397,7 @@ function buildShareText(
 
   // Expenses within the selected period
   const periodExpenses = expenses
-    .filter(e => inRange(e.date))
+    .filter((e) => inRange(e.date))
     .sort((a, b) => a.date.localeCompare(b.date));
   if (periodExpenses.length > 0) {
     lines.push(`\n── Utlägg ──`);
@@ -343,7 +408,9 @@ function buildShareText(
       if (e.km != null) parts.push(`${e.km} km`);
       if (e.amount != null) parts.push(`${e.amount} kr`);
       const detail = parts.length ? ` — ${parts.join(" · ")}` : "";
-      lines.push(`  ${fmtDateLabel(e.date)}: ${meta.emoji} ${meta.label}${detail}${e.hasReceipt ? " 🧾" : ""}${e.note ? ` (${e.note})` : ""}`);
+      lines.push(
+        `  ${fmtDateLabel(e.date)}: ${meta.emoji} ${meta.label}${detail}${e.hasReceipt ? " 🧾" : ""}${e.note ? ` (${e.note})` : ""}`,
+      );
       totalExpenses += e.amount ?? 0;
     }
     lines.push(`Total utlägg: ${totalExpenses} kr`);
@@ -407,7 +474,10 @@ function computeFlexMinutes(
 
     const scheduledNorm = dayCfg.active ? netDayMin(dayCfg) : 0;
     const norm = Math.max(0, scheduledNorm - nonFlexAbsMin);
-    const actual = daySessions.length > 0 ? computeDayMinutes(daySessions, dateStr, schedule, exceptions).net : 0;
+    const actual =
+      daySessions.length > 0
+        ? computeDayMinutes(daySessions, dateStr, schedule, exceptions).net
+        : 0;
 
     flex += actual - norm;
     flex -= flexAbsMin;
@@ -432,10 +502,12 @@ function computeTodayContribution(
 ): number {
   if (!trackingStartDate || today < trackingStartDate) return 0;
 
-  const todaySessions = sessions.filter(s => new Date(s.checkIn).toISOString().slice(0, 10) === today);
-  const hasActive = todaySessions.some(s => s.checkOut === null);
+  const todaySessions = sessions.filter(
+    (s) => new Date(s.checkIn).toISOString().slice(0, 10) === today,
+  );
+  const hasActive = todaySessions.some((s) => s.checkOut === null);
   if (hasActive) return 0;
-  const completedToday = todaySessions.filter(s => s.checkOut !== null);
+  const completedToday = todaySessions.filter((s) => s.checkOut !== null);
 
   const dayCfg = getEffectiveDayConfig(today, schedule, exceptions);
   const dayAbsences = getAbsencesForDate(absences, today);
@@ -454,18 +526,18 @@ function computeTodayContribution(
 
   const scheduledNorm = dayCfg.active ? netDayMin(dayCfg) : 0;
   const norm = Math.max(0, scheduledNorm - nonFlexAbsMin);
-  const actual = completedToday.length > 0 ? computeDayMinutes(completedToday, today, schedule, exceptions).net : 0;
+  const actual =
+    completedToday.length > 0
+      ? computeDayMinutes(completedToday, today, schedule, exceptions).net
+      : 0;
 
-  return (actual - norm) - flexAbsMin;
+  return actual - norm - flexAbsMin;
 }
 
 // Live per-day flex shown on the dashboard. Unlike `computeTodayContribution`,
 // this updates continuously while you're punched in so you can see "how today is
 // going" in real time — even mid-shift.
-function computeTodayDelta(
-  todaySessions: Session[],
-  todayCfg: DayConfig,
-): number {
+function computeTodayDelta(todaySessions: Session[], todayCfg: DayConfig): number {
   let raw = 0;
   for (const s of todaySessions) {
     const end = s.checkOut ?? now();
@@ -498,7 +570,15 @@ function computeWeeklyFlexBreakdown(
     const monStr = mon.toISOString().slice(0, 10);
     const sunStr = sun.toISOString().slice(0, 10);
     if (sunStr < trackingStartDate) break;
-    let minutes = computeFlexMinutes(sessions, absences, schedule, trackingStartDate, monStr, sunStr, exceptions);
+    let minutes = computeFlexMinutes(
+      sessions,
+      absences,
+      schedule,
+      trackingStartDate,
+      monStr,
+      sunStr,
+      exceptions,
+    );
     if (i === 0) minutes += todayContribution; // current week picks up today's committed flex
     out.push({ mondayStr: monStr, minutes });
   }
@@ -506,11 +586,28 @@ function computeWeeklyFlexBreakdown(
 }
 
 // ─── CSV export ───────────────────────────────────────────────
-function buildCsvExport(sessions: Session[], absences: AbsenceEntry[], schedule: WeekSchedule, periodStart: string, periodEnd: string, exceptions: Record<string, ScheduleException> = {}): string {
+function buildCsvExport(
+  sessions: Session[],
+  absences: AbsenceEntry[],
+  schedule: WeekSchedule,
+  periodStart: string,
+  periodEnd: string,
+  exceptions: Record<string, ScheduleException> = {},
+): string {
   const monthStart = periodStart;
   const monthEnd = periodEnd;
 
-  const header = ["Datum", "Veckodag", "Incheckning", "Utcheckning", "Netto (min)", "Netto (h)", "Typ", "Kategori", "Anteckning"];
+  const header = [
+    "Datum",
+    "Veckodag",
+    "Incheckning",
+    "Utcheckning",
+    "Netto (min)",
+    "Netto (h)",
+    "Typ",
+    "Kategori",
+    "Anteckning",
+  ];
   const dataRows: string[][] = [];
 
   for (const s of sessions) {
@@ -525,20 +622,23 @@ function buildCsvExport(sessions: Session[], absences: AbsenceEntry[], schedule:
       fmtTime(s.checkOut),
       String(Math.round(net)),
       fmtDur(net),
-      "Arbete", "", "",
+      "Arbete",
+      "",
+      "",
     ]);
   }
 
   for (const a of absences) {
     if (a.startDate > monthEnd || a.endDate < monthStart) continue;
     const meta = ABSENCE_META[a.category];
-    for (const d of expandAbsenceDates(a).filter(x => x >= monthStart && x <= monthEnd)) {
+    for (const d of expandAbsenceDates(a).filter((x) => x >= monthStart && x <= monthEnd)) {
       const dayCfg = getEffectiveDayConfig(d, schedule, exceptions);
       const absMin = a.hours !== undefined ? Math.round(a.hours * 60) : netDayMin(dayCfg);
       dataRows.push([
         d,
         new Date(d + "T12:00:00").toLocaleDateString("sv-SE", { weekday: "long" }),
-        "", "",
+        "",
+        "",
         String(absMin),
         fmtDur(absMin),
         "Avvikelse",
@@ -549,7 +649,9 @@ function buildCsvExport(sessions: Session[], absences: AbsenceEntry[], schedule:
   }
 
   dataRows.sort((a, b) => a[0].localeCompare(b[0]) || a[2].localeCompare(b[2]));
-  const csv = [header, ...dataRows].map(row => row.map(c => `"${c.replace(/"/g, '""')}"`).join(",")).join("\r\n");
+  const csv = [header, ...dataRows]
+    .map((row) => row.map((c) => `"${c.replace(/"/g, '""')}"`).join(","))
+    .join("\r\n");
   return "﻿" + csv; // BOM for Excel UTF-8 detection
 }
 
@@ -584,7 +686,7 @@ function load(): StorageShape {
     let trackingStartDate: string | undefined = p.trackingStartDate;
     if (!trackingStartDate && Array.isArray(p.sessions) && p.sessions.length > 0) {
       const dates = (p.sessions as Session[])
-        .map(s => new Date(s.checkIn).toISOString().slice(0, 10))
+        .map((s) => new Date(s.checkIn).toISOString().slice(0, 10))
         .sort();
       trackingStartDate = dates[0];
     }
@@ -598,17 +700,33 @@ function load(): StorageShape {
       expenses: p.expenses ?? [],
       flexBaseMinutes: typeof p.flexBaseMinutes === "number" ? p.flexBaseMinutes : 0,
       trackingStartDate,
-      scheduleExceptions: (p.scheduleExceptions && typeof p.scheduleExceptions === "object" && !Array.isArray(p.scheduleExceptions))
-        ? p.scheduleExceptions as Record<string, ScheduleException>
-        : {},
+      scheduleExceptions:
+        p.scheduleExceptions &&
+        typeof p.scheduleExceptions === "object" &&
+        !Array.isArray(p.scheduleExceptions)
+          ? (p.scheduleExceptions as Record<string, ScheduleException>)
+          : {},
     };
   } catch {
-    return { name: "", schedule: DEFAULT_SCHEDULE, onboardingDone: false, sessions: [], absences: [], expenses: [], flexBaseMinutes: 0, scheduleExceptions: {} };
+    return {
+      name: "",
+      schedule: DEFAULT_SCHEDULE,
+      onboardingDone: false,
+      sessions: [],
+      absences: [],
+      expenses: [],
+      flexBaseMinutes: 0,
+      scheduleExceptions: {},
+    };
   }
 }
 
 function save(data: StorageShape) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch { /* ignore */ }
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch {
+    /* ignore */
+  }
 }
 
 // ─── Sync merge ───────────────────────────────────────────────
@@ -620,7 +738,7 @@ function save(data: StorageShape) {
 function mergeById<T extends { id: string }>(server: T[], local: T[]): T[] {
   const byId = new Map<string, T>();
   for (const e of server) if (e && e.id) byId.set(e.id, e);
-  for (const e of local)  if (e && e.id) byId.set(e.id, e);
+  for (const e of local) if (e && e.id) byId.set(e.id, e);
   return [...byId.values()];
 }
 
@@ -630,9 +748,9 @@ function mergeSyncState(server: SyncState, local: SyncState): SyncState {
     .sort()[0];
   return {
     // Scalars: the local device has unsaved edits, so its values win.
-    name:            local.name || server.name,
-    department:      local.department ?? server.department,
-    schedule:        local.schedule ?? server.schedule,
+    name: local.name || server.name,
+    department: local.department ?? server.department,
+    schedule: local.schedule ?? server.schedule,
     flexBaseMinutes: local.flexBaseMinutes,
     trackingStartDate,
     sessions: mergeById(
@@ -648,8 +766,8 @@ function mergeSyncState(server: SyncState, local: SyncState): SyncState {
       (local.expenses ?? []) as ExpenseEntry[],
     ),
     scheduleExceptions: {
-      ...(server.scheduleExceptions as Record<string, ScheduleException> ?? {}),
-      ...(local.scheduleExceptions as Record<string, ScheduleException> ?? {}),
+      ...((server.scheduleExceptions as Record<string, ScheduleException>) ?? {}),
+      ...((local.scheduleExceptions as Record<string, ScheduleException>) ?? {}),
     },
   };
 }
@@ -657,7 +775,15 @@ function mergeSyncState(server: SyncState, local: SyncState): SyncState {
 // ─── Icons ────────────────────────────────────────────────────
 function IconEdit() {
   return (
-    <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      viewBox="0 0 24 24"
+      className="w-4 h-4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
       <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
     </svg>
@@ -666,7 +792,15 @@ function IconEdit() {
 
 function IconTrash() {
   return (
-    <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      viewBox="0 0 24 24"
+      className="w-4 h-4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <polyline points="3 6 5 6 21 6" />
       <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
       <path d="M10 11v6M14 11v6" />
@@ -677,7 +811,15 @@ function IconTrash() {
 
 function IconGear() {
   return (
-    <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      viewBox="0 0 24 24"
+      className="w-5 h-5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <circle cx="12" cy="12" r="3" />
       <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
     </svg>
@@ -686,7 +828,15 @@ function IconGear() {
 
 function IconCalendar() {
   return (
-    <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      viewBox="0 0 24 24"
+      className="w-5 h-5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
       <line x1="16" y1="2" x2="16" y2="6" />
       <line x1="8" y1="2" x2="8" y2="6" />
@@ -698,7 +848,15 @@ function IconCalendar() {
 
 function IconCalendarX() {
   return (
-    <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      viewBox="0 0 24 24"
+      className="w-5 h-5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
       <line x1="16" y1="2" x2="16" y2="6" />
       <line x1="8" y1="2" x2="8" y2="6" />
@@ -739,34 +897,47 @@ export default function PunchClock() {
   const [expenses, setExpenses] = useState<ExpenseEntry[]>(boot.expenses ?? []);
   const [expenseModal, setExpenseModal] = useState(false);
   const [expenseMonth, setExpenseMonth] = useState<{ year: number; month: number }>(() => {
-    const n = new Date(); return { year: n.getFullYear(), month: n.getMonth() };
+    const n = new Date();
+    return { year: n.getFullYear(), month: n.getMonth() };
   });
   const [flexBaseMinutes, setFlexBaseMinutes] = useState(boot.flexBaseMinutes ?? 0);
-  const [trackingStartDate, setTrackingStartDate] = useState<string | undefined>(boot.trackingStartDate);
-  const [scheduleExceptions, setScheduleExceptions] = useState<Record<string, ScheduleException>>(boot.scheduleExceptions ?? {});
+  const [trackingStartDate, setTrackingStartDate] = useState<string | undefined>(
+    boot.trackingStartDate,
+  );
+  const [scheduleExceptions, setScheduleExceptions] = useState<Record<string, ScheduleException>>(
+    boot.scheduleExceptions ?? {},
+  );
   const [exceptionModal, setExceptionModal] = useState<string | null>(null); // YYYY-MM-DD being edited
   const [flexBreakdownOpen, setFlexBreakdownOpen] = useState(false);
   const [latePunchoutOpen, setLatePunchoutOpen] = useState(false);
   const [historyMode, setHistoryMode] = useState<"list" | "calendar">("list");
   const [calendarSelectedDate, setCalendarSelectedDate] = useState<string | null>(null);
   const [exportMonth, setExportMonth] = useState<{ year: number; month: number }>(() => {
-    const n = new Date(); return { year: n.getFullYear(), month: n.getMonth() };
+    const n = new Date();
+    return { year: n.getFullYear(), month: n.getMonth() };
   });
   const [reportType, setReportType] = useState<"month" | "range">("month");
   const [reportFrom, setReportFrom] = useState(() => {
-    const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-01`;
+    const n = new Date();
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-01`;
   });
   const [reportTo, setReportTo] = useState(() => todayStr());
-  const [syncToken, setSyncToken]   = useState<string | null>(() => localStorage.getItem(SYNC_TOKEN_KEY));
-  const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "pulling" | "ok" | "error">("idle");
-  const [syncedAt, setSyncedAt]     = useState<number | null>(null);
-  const [syncFailure, setSyncFailure] = useState<SyncFailure | null>(() => readSyncErrorLog()[0] ?? null);
+  const [syncToken, setSyncToken] = useState<string | null>(() =>
+    localStorage.getItem(SYNC_TOKEN_KEY),
+  );
+  const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "pulling" | "ok" | "error">(
+    "idle",
+  );
+  const [syncedAt, setSyncedAt] = useState<number | null>(null);
+  const [syncFailure, setSyncFailure] = useState<SyncFailure | null>(
+    () => readSyncErrorLog()[0] ?? null,
+  );
   const [syncErrorLog, setSyncErrorLog] = useState<SyncFailure[]>(() => readSyncErrorLog());
   // A dismissed banner stays hidden until the *next* failure — a red bar you can
   // never get rid of is worse than one that comes back when it matters.
   const [bannerHiddenFor, setBannerHiddenFor] = useState<number | null>(null);
   const [syncHelpOpen, setSyncHelpOpen] = useState(false);
-  const [syncModal, setSyncModal]   = useState(false);
+  const [syncModal, setSyncModal] = useState(false);
   const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Sync bookkeeping ──
@@ -775,13 +946,13 @@ export default function PunchClock() {
   // hydrated     we have read the server at least once this session → safe to push
   // suppressPush the next save-effect run comes from applying server data, not the user
   // stateRef     latest payload, so timers/listeners never push a stale closure
-  const syncRevRef     = useRef<number>(Number(localStorage.getItem(SYNC_REV_KEY) ?? 0) || 0);
-  const dirtyRef       = useRef<boolean>(localStorage.getItem(SYNC_DIRTY_KEY) === "1");
-  const hydratedRef    = useRef(false);
+  const syncRevRef = useRef<number>(Number(localStorage.getItem(SYNC_REV_KEY) ?? 0) || 0);
+  const dirtyRef = useRef<boolean>(localStorage.getItem(SYNC_DIRTY_KEY) === "1");
+  const hydratedRef = useRef(false);
   const suppressPushRef = useRef(false);
-  const pullingRef     = useRef(false);
-  const stateRef       = useRef<SyncState | null>(null);
-  const syncTokenRef   = useRef<string | null>(null);
+  const pullingRef = useRef(false);
+  const stateRef = useRef<SyncState | null>(null);
+  const syncTokenRef = useRef<string | null>(null);
   syncTokenRef.current = syncToken;
   const [automationModal, setAutomationModal] = useState(false);
   const [pendingAction, setPendingAction] = useState<ParsedAction | null>(null);
@@ -790,12 +961,12 @@ export default function PunchClock() {
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Schedule banners ("you start at 08:00 — check in?") are dismissible per day.
   const [bannerDismissed, setBannerDismissed] = useState<string>(
-    () => localStorage.getItem("punchclock_banner_dismissed") ?? ""
+    () => localStorage.getItem("punchclock_banner_dismissed") ?? "",
   );
 
   function dismissBanner(kind: "start" | "end") {
     // Keep today's dismissals only — yesterday's are irrelevant tomorrow.
-    const keys = bannerDismissed.split(",").filter(k => k.startsWith(todayStr()));
+    const keys = bannerDismissed.split(",").filter((k) => k.startsWith(todayStr()));
     keys.push(`${todayStr()}:${kind}`);
     const next = keys.join(",");
     localStorage.setItem("punchclock_banner_dismissed", next);
@@ -810,7 +981,7 @@ export default function PunchClock() {
 
   useEffect(() => {
     const t = setInterval(() => {
-      setTick(x => x + 1);
+      setTick((x) => x + 1);
 
       // 🔔 NOTIFICATION HOOK — fires every 10 s.
       // To add smart start/stop reminders, check here:
@@ -843,7 +1014,11 @@ export default function PunchClock() {
   // ── Sync engine ─────────────────────────────────────────────
   function rememberRev(rev: number) {
     syncRevRef.current = rev;
-    try { localStorage.setItem(SYNC_REV_KEY, String(rev)); } catch { /* ignore */ }
+    try {
+      localStorage.setItem(SYNC_REV_KEY, String(rev));
+    } catch {
+      /* ignore */
+    }
   }
 
   /** Record a failed sync call so the banner, the help panel and the felanmälan agree. */
@@ -872,7 +1047,9 @@ export default function PunchClock() {
     try {
       if (dirty) localStorage.setItem(SYNC_DIRTY_KEY, "1");
       else localStorage.removeItem(SYNC_DIRTY_KEY);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   /** Write the server's copy into local state. Does not trigger a push. */
@@ -880,19 +1057,25 @@ export default function PunchClock() {
     suppressPushRef.current = !opts.push;
     setName(s.name ?? "");
     setDepartment(s.department);
-    setSchedule(s.schedule ? migrateSchedule(s.schedule as Record<string, unknown>) : DEFAULT_SCHEDULE);
+    setSchedule(
+      s.schedule ? migrateSchedule(s.schedule as Record<string, unknown>) : DEFAULT_SCHEDULE,
+    );
     setSessions((s.sessions ?? []) as Session[]);
     setAbsences((s.absences ?? []) as AbsenceEntry[]);
     setExpenses((s.expenses ?? []) as ExpenseEntry[]);
     setFlexBaseMinutes(typeof s.flexBaseMinutes === "number" ? s.flexBaseMinutes : 0);
     setTrackingStartDate(s.trackingStartDate);
-    setScheduleExceptions((s.scheduleExceptions && typeof s.scheduleExceptions === "object" && !Array.isArray(s.scheduleExceptions))
-      ? s.scheduleExceptions as Record<string, ScheduleException>
-      : {});
+    setScheduleExceptions(
+      s.scheduleExceptions &&
+        typeof s.scheduleExceptions === "object" &&
+        !Array.isArray(s.scheduleExceptions)
+        ? (s.scheduleExceptions as Record<string, ScheduleException>)
+        : {},
+    );
   }
 
   async function pushNow() {
-    const token   = syncTokenRef.current;
+    const token = syncTokenRef.current;
     const payload = stateRef.current;
     if (!token || !payload || !hydratedRef.current) return;
     setSyncStatus("syncing");
@@ -911,7 +1094,9 @@ export default function PunchClock() {
   function pushSoon(delay = 3000) {
     if (!syncTokenRef.current || !hydratedRef.current) return;
     if (syncTimer.current) clearTimeout(syncTimer.current);
-    syncTimer.current = setTimeout(() => { void pushNow(); }, delay);
+    syncTimer.current = setTimeout(() => {
+      void pushNow();
+    }, delay);
   }
 
   /**
@@ -937,7 +1122,7 @@ export default function PunchClock() {
         return;
       }
       const changed = updatedAt !== syncRevRef.current;
-      const local   = stateRef.current;
+      const local = stateRef.current;
       hydratedRef.current = true;
       rememberRev(updatedAt);
       let merged = false;
@@ -961,11 +1146,18 @@ export default function PunchClock() {
       if (!merged && dirtyRef.current) pushSoon(0);
     } catch (e) {
       noteSyncFailure(e);
-      if (opts.manual) showToast("Kunde inte hämta: " + explainSyncError({
-        at: Date.now(), status: e instanceof SyncApiError ? e.status : 0,
-        path: "", method: "", message: (e as Error).message,
-        online: typeof navigator === "undefined" ? true : navigator.onLine,
-      }).headline.toLowerCase());
+      if (opts.manual)
+        showToast(
+          "Kunde inte hämta: " +
+            explainSyncError({
+              at: Date.now(),
+              status: e instanceof SyncApiError ? e.status : 0,
+              path: "",
+              method: "",
+              message: (e as Error).message,
+              online: typeof navigator === "undefined" ? true : navigator.onLine,
+            }).headline.toLowerCase(),
+        );
     } finally {
       pullingRef.current = false;
     }
@@ -973,20 +1165,58 @@ export default function PunchClock() {
 
   // Persist locally on every change, then push (once we know what the server holds).
   useEffect(() => {
-    save({ name, schedule, department, onboardingDone, sessions, absences, expenses, flexBaseMinutes, trackingStartDate, scheduleExceptions });
-    stateRef.current = { name, schedule, department, sessions, absences, expenses, flexBaseMinutes, trackingStartDate, scheduleExceptions };
+    save({
+      name,
+      schedule,
+      department,
+      onboardingDone,
+      sessions,
+      absences,
+      expenses,
+      flexBaseMinutes,
+      trackingStartDate,
+      scheduleExceptions,
+    });
+    stateRef.current = {
+      name,
+      schedule,
+      department,
+      sessions,
+      absences,
+      expenses,
+      flexBaseMinutes,
+      trackingStartDate,
+      scheduleExceptions,
+    };
     if (!syncToken) return;
-    if (suppressPushRef.current) { suppressPushRef.current = false; return; }
+    if (suppressPushRef.current) {
+      suppressPushRef.current = false;
+      return;
+    }
     markDirty(true);
     pushSoon();
-  }, [name, schedule, department, onboardingDone, sessions, absences, expenses, flexBaseMinutes, trackingStartDate, scheduleExceptions, syncToken]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [
+    name,
+    schedule,
+    department,
+    onboardingDone,
+    sessions,
+    absences,
+    expenses,
+    flexBaseMinutes,
+    trackingStartDate,
+    scheduleExceptions,
+    syncToken,
+  ]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Pull when the app opens with a token, and whenever it comes back to the
   // foreground or regains network — that is when the other device's changes land.
   useEffect(() => {
     if (!syncToken) return;
     void pullNow();
-    const onVisible = () => { if (document.visibilityState === "visible") void pullNow(); };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void pullNow();
+    };
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onVisible);
     window.addEventListener("online", onVisible);
@@ -999,14 +1229,18 @@ export default function PunchClock() {
 
   // Don't leave a queued push behind when the tab goes away.
   useEffect(() => {
-    const flush = () => { if (dirtyRef.current) void pushNow(); };
+    const flush = () => {
+      if (dirtyRef.current) void pushNow();
+    };
     window.addEventListener("pagehide", flush);
     return () => window.removeEventListener("pagehide", flush);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const weeklyNorm = weeklyNetMin(schedule);
-  const activeSession = sessions.find(s => !s.checkOut);
-  const todaySessions = sessions.filter(s => new Date(s.checkIn).toISOString().slice(0, 10) === todayStr());
+  const activeSession = sessions.find((s) => !s.checkOut);
+  const todaySessions = sessions.filter(
+    (s) => new Date(s.checkIn).toISOString().slice(0, 10) === todayStr(),
+  );
   const todayDate = todayStr();
   const { net: todayNet } = computeDayMinutes(todaySessions, todayDate, schedule);
   void todayNet;
@@ -1019,15 +1253,21 @@ export default function PunchClock() {
   function getHistoryDates(fSessions: Session[], fAbsences: AbsenceEntry[]) {
     const dateSet = new Set<string>();
     for (const s of fSessions) dateSet.add(new Date(s.checkIn).toISOString().slice(0, 10));
-    for (const a of fAbsences) expandAbsenceDates(a).forEach(d => dateSet.add(d));
+    for (const a of fAbsences) expandAbsenceDates(a).forEach((d) => dateSet.add(d));
     return dateSet;
   }
 
   function handlePunch() {
     if (isIn && activeSession) {
       const elapsed = now() - activeSession.checkIn;
-      if (elapsed < SHORT_SESSION_THRESHOLD_MS) { setShortWarn(true); return; }
-      if (elapsed > lateThresholdMs(todayCfg)) { setLatePunchoutOpen(true); return; }
+      if (elapsed < SHORT_SESSION_THRESHOLD_MS) {
+        setShortWarn(true);
+        return;
+      }
+      if (elapsed > lateThresholdMs(todayCfg)) {
+        setLatePunchoutOpen(true);
+        return;
+      }
       doCheckOut();
     } else {
       doCheckIn();
@@ -1039,10 +1279,16 @@ export default function PunchClock() {
     if (!trackingStartDate) {
       setTrackingStartDate(new Date(checkInTime).toISOString().slice(0, 10));
     }
-    setSessions(prev => [...prev, {
-      id: crypto.randomUUID(), checkIn: checkInTime, checkOut: null,
-      manual: atMs !== undefined, ...(source ? { source } : {}),
-    }]);
+    setSessions((prev) => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        checkIn: checkInTime,
+        checkOut: null,
+        manual: atMs !== undefined,
+        ...(source ? { source } : {}),
+      },
+    ]);
   }
 
   // Execute a URL action (QR / NFC / WiFi / shortcut) schedule-aware:
@@ -1053,18 +1299,39 @@ export default function PunchClock() {
     const resolved: "in" | "out" = a.action === "toggle" ? (isIn ? "out" : "in") : a.action;
 
     if (resolved === "in") {
-      if (isIn) { showToast("Du är redan incheckad"); return; }
-      if (isDuplicateAction("in")) { showToast("Incheckning ignorerad — nyss utförd"); return; }
-      if (!todayCfg.active && !confirmed) { setConfirmAction(a); return; }
+      if (isIn) {
+        showToast("Du är redan incheckad");
+        return;
+      }
+      if (isDuplicateAction("in")) {
+        showToast("Incheckning ignorerad — nyss utförd");
+        return;
+      }
+      if (!todayCfg.active && !confirmed) {
+        setConfirmAction(a);
+        return;
+      }
       rememberAction("in");
       doCheckIn(a.source);
       showToast(`${meta.emoji} Incheckad ${fmtTime(now())} via ${meta.label}`);
     } else {
-      if (!activeSession) { showToast("Du är inte incheckad"); return; }
-      if (isDuplicateAction("out")) { showToast("Utcheckning ignorerad — nyss utförd"); return; }
+      if (!activeSession) {
+        showToast("Du är inte incheckad");
+        return;
+      }
+      if (isDuplicateAction("out")) {
+        showToast("Utcheckning ignorerad — nyss utförd");
+        return;
+      }
       const elapsed = now() - activeSession.checkIn;
-      if (elapsed < SHORT_SESSION_THRESHOLD_MS) { setShortWarn(true); return; }
-      if (elapsed > lateThresholdMs(todayCfg)) { setLatePunchoutOpen(true); return; }
+      if (elapsed < SHORT_SESSION_THRESHOLD_MS) {
+        setShortWarn(true);
+        return;
+      }
+      if (elapsed > lateThresholdMs(todayCfg)) {
+        setLatePunchoutOpen(true);
+        return;
+      }
       rememberAction("out");
       doCheckOut();
       showToast(`${meta.emoji} Utcheckad ${fmtTime(now())} via ${meta.label}`);
@@ -1073,32 +1340,42 @@ export default function PunchClock() {
 
   function handleLatePunchoutSave(endTime: number) {
     if (!activeSession) return;
-    setSessions(prev => prev.map(s => s.id === activeSession.id ? { ...s, checkOut: endTime } : s));
+    setSessions((prev) =>
+      prev.map((s) => (s.id === activeSession.id ? { ...s, checkOut: endTime } : s)),
+    );
     setLatePunchoutOpen(false);
   }
 
   function doCheckOut() {
     if (!activeSession) return;
-    setSessions(prev => prev.map(s => s.id === activeSession.id ? { ...s, checkOut: now() } : s));
+    setSessions((prev) =>
+      prev.map((s) => (s.id === activeSession.id ? { ...s, checkOut: now() } : s)),
+    );
     setShortWarn(false);
   }
 
   function doDiscardShort() {
     if (!activeSession) return;
-    setSessions(prev => prev.filter(s => s.id !== activeSession.id));
+    setSessions((prev) => prev.filter((s) => s.id !== activeSession.id));
     setShortWarn(false);
   }
 
-  function handleDeleteSession(id: string) { setSessions(prev => prev.filter(s => s.id !== id)); }
-  function handleEditSession(session: Session) { setEditSession(session); }
+  function handleDeleteSession(id: string) {
+    setSessions((prev) => prev.filter((s) => s.id !== id));
+  }
+  function handleEditSession(session: Session) {
+    setEditSession(session);
+  }
   function handleSaveEdit(updated: Session) {
-    setSessions(prev => prev.map(s => s.id === updated.id ? updated : s));
+    setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
     setEditSession(null);
   }
-  function handleDeleteAbsence(id: string) { setAbsences(prev => prev.filter(a => a.id !== id)); }
+  function handleDeleteAbsence(id: string) {
+    setAbsences((prev) => prev.filter((a) => a.id !== id));
+  }
 
   function handleSaveException(dateStr: string, exc: ScheduleException | null) {
-    setScheduleExceptions(prev => {
+    setScheduleExceptions((prev) => {
       const next = { ...prev };
       if (exc === null) delete next[dateStr];
       else next[dateStr] = exc;
@@ -1106,8 +1383,13 @@ export default function PunchClock() {
     });
     setExceptionModal(null);
   }
-  function handleSaveExpense(entry: ExpenseEntry) { setExpenses(prev => [...prev, entry]); setExpenseModal(false); }
-  function handleDeleteExpense(id: string) { setExpenses(prev => prev.filter(e => e.id !== id)); }
+  function handleSaveExpense(entry: ExpenseEntry) {
+    setExpenses((prev) => [...prev, entry]);
+    setExpenseModal(false);
+  }
+  function handleDeleteExpense(id: string) {
+    setExpenses((prev) => prev.filter((e) => e.id !== id));
+  }
   function handleOnboardingComplete(result: OnboardingResult) {
     if (result.syncToken) {
       localStorage.setItem(SYNC_TOKEN_KEY, result.syncToken);
@@ -1135,7 +1417,11 @@ export default function PunchClock() {
   function adoptRestoredState(
     s: SyncState,
     rev: number,
-    fallback?: { fallbackName?: string; fallbackSchedule?: WeekSchedule; fallbackDepartment?: string },
+    fallback?: {
+      fallbackName?: string;
+      fallbackSchedule?: WeekSchedule;
+      fallbackDepartment?: string;
+    },
   ) {
     hydratedRef.current = true;
     rememberRev(rev);
@@ -1172,7 +1458,11 @@ export default function PunchClock() {
     localStorage.setItem(SYNC_TOKEN_KEY, token);
     localStorage.setItem(SYNC_USERNAME_KEY, username);
     setSyncToken(token);
-    adoptRestoredState(state, rev, { fallbackName: name, fallbackSchedule: schedule, fallbackDepartment: department });
+    adoptRestoredState(state, rev, {
+      fallbackName: name,
+      fallbackSchedule: schedule,
+      fallbackDepartment: department,
+    });
     setSyncModal(false);
     showToast("Data hämtad från molnet.");
   }
@@ -1186,8 +1476,8 @@ export default function PunchClock() {
     localStorage.removeItem(SYNC_REV_KEY);
     localStorage.removeItem(SYNC_DIRTY_KEY);
     hydratedRef.current = false;
-    syncRevRef.current  = 0;
-    dirtyRef.current    = false;
+    syncRevRef.current = 0;
+    dirtyRef.current = false;
     setSyncToken(null);
     setSyncStatus("idle");
     clearSyncFailure();
@@ -1199,7 +1489,11 @@ export default function PunchClock() {
   async function handleDeleteSyncAccount() {
     const token = syncTokenRef.current;
     if (!token) return;
-    try { await syncDeleteAccount(token); } catch { /* ignore */ }
+    try {
+      await syncDeleteAccount(token);
+    } catch {
+      /* ignore */
+    }
     handleDisconnectSync();
     showToast("Synk-kontot raderat. Dina data finns kvar på den här enheten.");
   }
@@ -1218,7 +1512,10 @@ export default function PunchClock() {
       const { year, month } = exportMonth;
       const start = `${year}-${pad(month + 1)}-01`;
       const end = `${year}-${pad(month + 1)}-${pad(new Date(year, month + 1, 0).getDate())}`;
-      const raw = new Date(year, month).toLocaleDateString("sv-SE", { month: "long", year: "numeric" });
+      const raw = new Date(year, month).toLocaleDateString("sv-SE", {
+        month: "long",
+        year: "numeric",
+      });
       const label = raw.charAt(0).toUpperCase() + raw.slice(1);
       return { start, end, label, fileLabel: `${year}-${pad(month + 1)}` };
     }
@@ -1229,13 +1526,28 @@ export default function PunchClock() {
 
   function generateReport() {
     const { start, end, label } = reportPeriod();
-    setShareText(buildShareText(sessions, absences, expenses, name, schedule, start, end, label, scheduleExceptions));
+    setShareText(
+      buildShareText(
+        sessions,
+        absences,
+        expenses,
+        name,
+        schedule,
+        start,
+        end,
+        label,
+        scheduleExceptions,
+      ),
+    );
     setShared(false);
   }
 
   function downloadReportCsv() {
     const { start, end, fileLabel } = reportPeriod();
-    downloadCsv(buildCsvExport(sessions, absences, schedule, start, end, scheduleExceptions), `tidrapport-${fileLabel}.csv`);
+    downloadCsv(
+      buildCsvExport(sessions, absences, schedule, start, end, scheduleExceptions),
+      `tidrapport-${fileLabel}.csv`,
+    );
   }
 
   async function shareReportFile() {
@@ -1244,36 +1556,83 @@ export default function PunchClock() {
     const file = new File([csv], `tidrapport-${fileLabel}.csv`, { type: "text/csv" });
     const nav = navigator as Navigator & { canShare?: (d?: ShareData) => boolean };
     if (nav.canShare && nav.canShare({ files: [file] })) {
-      try { await navigator.share({ files: [file], title: "Tidrapport", text: shareText || undefined }); }
-      catch { /* user cancelled */ }
+      try {
+        await navigator.share({ files: [file], title: "Tidrapport", text: shareText || undefined });
+      } catch {
+        /* user cancelled */
+      }
     } else {
       downloadReportCsv();
     }
   }
 
   async function doCopy() {
-    try { await navigator.clipboard.writeText(shareText); setShared(true); } catch { /* ignore */ }
+    try {
+      await navigator.clipboard.writeText(shareText);
+      setShared(true);
+    } catch {
+      /* ignore */
+    }
   }
 
   async function doNativeShare() {
     if (navigator.share) {
-      try { await navigator.share({ title: "Tidrapport", text: shareText }); setShared(true); } catch { /* ignore */ }
-    } else { doCopy(); }
+      try {
+        await navigator.share({ title: "Tidrapport", text: shareText });
+        setShared(true);
+      } catch {
+        /* ignore */
+      }
+    } else {
+      doCopy();
+    }
   }
 
-  const monthStartStr   = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-01`;
-  const weekStartStr    = getWeekMonday(new Date()).toISOString().slice(0, 10);
-  const flexPastTotal   = computeFlexMinutes(sessions, absences, schedule, trackingStartDate, undefined, undefined, scheduleExceptions);
-  const flexPastMonth   = computeFlexMinutes(sessions, absences, schedule, trackingStartDate, monthStartStr, todayDate, scheduleExceptions);
-  const flexPastWeek    = computeFlexMinutes(sessions, absences, schedule, trackingStartDate, weekStartStr,  todayDate, scheduleExceptions);
-  const todayCommitted  = computeTodayContribution(sessions, absences, schedule, todayDate, trackingStartDate, scheduleExceptions);
-  const flexTotal       = flexBaseMinutes + flexPastTotal + todayCommitted;
-  const flexMonth       = flexPastMonth + todayCommitted;
-  const flexWeek        = flexPastWeek  + todayCommitted;
+  const monthStartStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-01`;
+  const weekStartStr = getWeekMonday(new Date()).toISOString().slice(0, 10);
+  const flexPastTotal = computeFlexMinutes(
+    sessions,
+    absences,
+    schedule,
+    trackingStartDate,
+    undefined,
+    undefined,
+    scheduleExceptions,
+  );
+  const flexPastMonth = computeFlexMinutes(
+    sessions,
+    absences,
+    schedule,
+    trackingStartDate,
+    monthStartStr,
+    todayDate,
+    scheduleExceptions,
+  );
+  const flexPastWeek = computeFlexMinutes(
+    sessions,
+    absences,
+    schedule,
+    trackingStartDate,
+    weekStartStr,
+    todayDate,
+    scheduleExceptions,
+  );
+  const todayCommitted = computeTodayContribution(
+    sessions,
+    absences,
+    schedule,
+    todayDate,
+    trackingStartDate,
+    scheduleExceptions,
+  );
+  const flexTotal = flexBaseMinutes + flexPastTotal + todayCommitted;
+  const flexMonth = flexPastMonth + todayCommitted;
+  const flexWeek = flexPastWeek + todayCommitted;
 
-  const liveMs = activeSession ? (now() - activeSession.checkIn) : 0;
+  const liveMs = activeSession ? now() - activeSession.checkIn : 0;
   const todayCfg = getEffectiveDayConfig(todayDate, schedule, scheduleExceptions);
-  const liveNetRaw = todaySessions.reduce((a, s) => a + ((s.checkOut ?? now()) - s.checkIn), 0) / 60000;
+  const liveNetRaw =
+    todaySessions.reduce((a, s) => a + ((s.checkOut ?? now()) - s.checkIn), 0) / 60000;
   const liveNet = Math.max(0, liveNetRaw - (todayCfg.active ? todayCfg.lunchMinutes : 0));
 
   // Live today delta — shown live in the "Idag" flex sub-stat, regardless of
@@ -1285,12 +1644,15 @@ export default function PunchClock() {
   // credit a full day's net target the user must be punched in for target + lunch
   // raw minutes. This stays consistent with `computeDayMinutes.net` and the flex
   // calculation — leaving when raw = net target would short-change you by `lunch`.
-  const showLeaveTime  = isIn && todayCfg.active;
-  const targetRawMin   = todayCfg.active ? netDayMin(todayCfg) + todayCfg.lunchMinutes : 0;
-  const todayWorkedRaw = todaySessions.reduce((sum, s) => sum + ((s.checkOut ?? now()) - s.checkIn) / 60000, 0);
+  const showLeaveTime = isIn && todayCfg.active;
+  const targetRawMin = todayCfg.active ? netDayMin(todayCfg) + todayCfg.lunchMinutes : 0;
+  const todayWorkedRaw = todaySessions.reduce(
+    (sum, s) => sum + ((s.checkOut ?? now()) - s.checkIn) / 60000,
+    0,
+  );
   const leaveRemaining = Math.max(0, targetRawMin - todayWorkedRaw);
-  const leaveAtMs      = now() + leaveRemaining * 60000;
-  const leaveReached   = todayWorkedRaw >= targetRawMin;
+  const leaveAtMs = now() + leaveRemaining * 60000;
+  const leaveReached = todayWorkedRaw >= targetRawMin;
   // Net minutes worked beyond today's target — drives the "+X över schemat" line.
   const overScheduleMin = leaveReached ? Math.round(todayWorkedRaw - targetRawMin) : 0;
 
@@ -1314,23 +1676,30 @@ export default function PunchClock() {
   // check in once the scheduled start has passed, and to check out after the
   // scheduled end. Dismissible per day; re-evaluated by the 10 s tick.
   const nowHM = new Date().toTimeString().slice(0, 5);
-  const showStartBanner = !isIn && todayCfg.active && todaySessions.length === 0
-    && nowHM >= todayCfg.startTime && nowHM < todayCfg.endTime
-    && !bannerDismissed.includes(`${todayDate}:start`);
+  const showStartBanner =
+    !isIn &&
+    todayCfg.active &&
+    todaySessions.length === 0 &&
+    nowHM >= todayCfg.startTime &&
+    nowHM < todayCfg.endTime &&
+    !bannerDismissed.includes(`${todayDate}:start`);
   // Sync failure banner: only when sync is actually set up, and only until the
   // user dismisses *this* failure (a newer one shows it again).
-  const showSyncErrorBanner = !!syncToken && syncStatus === "error" && !!syncFailure
-    && bannerHiddenFor !== syncFailure.at;
+  const showSyncErrorBanner =
+    !!syncToken && syncStatus === "error" && !!syncFailure && bannerHiddenFor !== syncFailure.at;
   const syncErrorInfo = explainSyncError(syncFailure);
 
-  const showEndBanner = isIn && todayCfg.active && nowHM >= todayCfg.endTime
-    && !bannerDismissed.includes(`${todayDate}:end`);
+  const showEndBanner =
+    isIn &&
+    todayCfg.active &&
+    nowHM >= todayCfg.endTime &&
+    !bannerDismissed.includes(`${todayDate}:end`);
 
   const FILTERS: { key: HistoryFilter; label: string }[] = [
-    { key: "week",     label: "Den här veckan" },
-    { key: "lastweek", label: "Förra veckan"   },
-    { key: "month",    label: "Denna månad"    },
-    { key: "all",      label: "Allt"           },
+    { key: "week", label: "Den här veckan" },
+    { key: "lastweek", label: "Förra veckan" },
+    { key: "month", label: "Denna månad" },
+    { key: "all", label: "Allt" },
   ];
 
   // ── Onboarding gate ─────────────────────────────────────────
@@ -1377,17 +1746,24 @@ export default function PunchClock() {
         <header className="shrink-0 px-5 pt-6 pb-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-pc-orange flex items-center justify-center shadow-[0_4px_14px_rgba(255,95,0,0.35)]">
-              <svg viewBox="0 0 24 24" className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
+              <svg
+                viewBox="0 0 24 24"
+                className="w-5 h-5 text-white"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 7v5l3 2" />
               </svg>
             </div>
             <div>
               <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-pc-muted">
                 Tidrapport{department ? ` · ${department}` : ""}
               </div>
-              <div className="text-[17px] font-bold leading-tight text-pc-ink">
-                {name || "—"}
-              </div>
+              <div className="text-[17px] font-bold leading-tight text-pc-ink">{name || "—"}</div>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -1411,17 +1787,21 @@ export default function PunchClock() {
           <div className="shrink-0 px-5 pb-3">
             <SyncErrorBanner
               headline={syncErrorInfo.headline}
-              detail={syncErrorInfo.networkBlocked
-                ? "Din tid sparas på enheten, men den når inte molnet."
-                : "Din tid sparas på enheten, men synken till molnet misslyckas."}
-              onReadMore={() => { setSyncHelpOpen(true); setSettingsModal(true); }}
+              detail={
+                syncErrorInfo.networkBlocked
+                  ? "Din tid sparas på enheten, men den når inte molnet."
+                  : "Din tid sparas på enheten, men synken till molnet misslyckas."
+              }
+              onReadMore={() => {
+                setSyncHelpOpen(true);
+                setSettingsModal(true);
+              }}
               onDismiss={() => setBannerHiddenFor(syncFailure?.at ?? Date.now())}
             />
           </div>
         )}
 
         <main className="flex-1 min-h-0 overflow-y-auto px-5">
-
           {/* ── CLOCK ── */}
           {view === "clock" && (
             <div className="pc-fade">
@@ -1429,7 +1809,14 @@ export default function PunchClock() {
                 <ScheduleBanner
                   emoji="🤔"
                   text={`Idag är du ledig enligt schemat. Vill du checka in ändå (via ${SOURCE_META[confirmAction.source].label})?`}
-                  primary={{ label: "Checka in", onClick: () => { const a = confirmAction; setConfirmAction(null); executeAction(a, true); } }}
+                  primary={{
+                    label: "Checka in",
+                    onClick: () => {
+                      const a = confirmAction;
+                      setConfirmAction(null);
+                      executeAction(a, true);
+                    },
+                  }}
                   onDismiss={() => setConfirmAction(null)}
                 />
               )}
@@ -1440,7 +1827,11 @@ export default function PunchClock() {
                   primary={{ label: "Checka in nu", onClick: () => doCheckIn() }}
                   secondary={{
                     label: `Från ${todayCfg.startTime}`,
-                    onClick: () => doCheckIn(undefined, new Date(`${todayDate}T${todayCfg.startTime}`).getTime()),
+                    onClick: () =>
+                      doCheckIn(
+                        undefined,
+                        new Date(`${todayDate}T${todayCfg.startTime}`).getTime(),
+                      ),
                   }}
                   onDismiss={() => dismissBanner("start")}
                 />
@@ -1471,30 +1862,52 @@ export default function PunchClock() {
                         : "0 18px 48px -12px rgba(81,43,43,0.45), inset 0 1px 0 rgba(255,255,255,0.1)",
                     }}
                   >
-                    <svg viewBox="0 0 24 24" className="w-9 h-9" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                      {isIn
-                        ? <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" />
-                        : <polygon points="6 4 20 12 6 20 6 4" fill="currentColor" />}
+                    <svg
+                      viewBox="0 0 24 24"
+                      className="w-9 h-9"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      {isIn ? (
+                        <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" />
+                      ) : (
+                        <polygon points="6 4 20 12 6 20 6 4" fill="currentColor" />
+                      )}
                     </svg>
-                    <span className="text-[19px] tracking-tight">{isIn ? "Checka ut" : "Checka in"}</span>
+                    <span className="text-[19px] tracking-tight">
+                      {isIn ? "Checka ut" : "Checka in"}
+                    </span>
                   </button>
                 </div>
                 {isIn && activeSession && (
                   <div className="mt-7 pc-pop">
-                    <div className="text-[34px] font-extrabold tabular-nums tracking-tight text-pc-ink">{fmtDur(liveMs / 60000)}</div>
-                    <div className="text-[13px] text-pc-muted font-medium mt-0.5">Sedan {fmtTime(activeSession.checkIn)}</div>
+                    <div className="text-[34px] font-extrabold tabular-nums tracking-tight text-pc-ink">
+                      {fmtDur(liveMs / 60000)}
+                    </div>
+                    <div className="text-[13px] text-pc-muted font-medium mt-0.5">
+                      Sedan {fmtTime(activeSession.checkIn)}
+                    </div>
                     {showLeaveTime && (
                       <>
                         {leaveReached ? (
                           <div className="text-[13px] mt-2 font-bold text-green-600">
                             Mål uppnått — du kan gå hem
                             {overScheduleMin > 2 && (
-                              <span className="text-pc-orange-deep"> · +{fmtDur(overScheduleMin)} över schemat</span>
+                              <span className="text-pc-orange-deep">
+                                {" "}
+                                · +{fmtDur(overScheduleMin)} över schemat
+                              </span>
                             )}
                           </div>
                         ) : (
                           <div className="text-[13px] mt-2 text-pc-muted font-semibold">
-                            Du kan gå hem kl. <span className="text-pc-ink font-extrabold tabular-nums">{fmtTime(leaveAtMs)}</span>
+                            Du kan gå hem kl.{" "}
+                            <span className="text-pc-ink font-extrabold tabular-nums">
+                              {fmtTime(leaveAtMs)}
+                            </span>
                           </div>
                         )}
                         {todayCfg.lunchMinutes > 0 && (
@@ -1532,9 +1945,15 @@ export default function PunchClock() {
 
               <section className="bg-white rounded-[24px] p-5 mb-3 shadow-[0_2px_12px_rgba(81,43,43,0.04)] border border-pc-line">
                 <div className="flex items-baseline justify-between mb-4">
-                  <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-pc-muted">Idag</div>
+                  <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-pc-muted">
+                    Idag
+                  </div>
                   <div className="text-[12px] font-semibold text-pc-muted capitalize">
-                    {new Date().toLocaleDateString("sv-SE", { weekday: "long", day: "numeric", month: "short" })}
+                    {new Date().toLocaleDateString("sv-SE", {
+                      weekday: "long",
+                      day: "numeric",
+                      month: "short",
+                    })}
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
@@ -1549,9 +1968,13 @@ export default function PunchClock() {
                 {todaySessions.length > 0 && (
                   <div className="mt-4 pt-4 border-t border-pc-line space-y-1">
                     {todaySessions.map((s, i) => (
-                      <SessionRow key={s.id} session={s} index={i}
+                      <SessionRow
+                        key={s.id}
+                        session={s}
+                        index={i}
                         onEdit={() => handleEditSession(s)}
-                        onDelete={() => handleDeleteSession(s.id)} />
+                        onDelete={() => handleDeleteSession(s.id)}
+                      />
                     ))}
                   </div>
                 )}
@@ -1563,17 +1986,26 @@ export default function PunchClock() {
                 className="pc-press w-full bg-white rounded-[24px] p-5 mb-3 shadow-[0_2px_12px_rgba(81,43,43,0.04)] border border-pc-line text-left"
               >
                 <div className="flex items-baseline justify-between mb-3">
-                  <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-pc-muted">Flexsaldo</div>
+                  <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-pc-muted">
+                    Flexsaldo
+                  </div>
                   <div className="text-[11px] font-semibold text-pc-muted">Visa veckor →</div>
                 </div>
-                <div className={`text-[34px] font-extrabold tabular-nums tracking-tight leading-none ${
-                  flexTotal > 0 ? "text-green-600" : flexTotal < 0 ? "text-red-500" : "text-pc-ink"
-                }`}>
-                  {flexTotal >= 0 ? "+" : "−"}{fmtMin(Math.abs(flexTotal))}
+                <div
+                  className={`text-[34px] font-extrabold tabular-nums tracking-tight leading-none ${
+                    flexTotal > 0
+                      ? "text-green-600"
+                      : flexTotal < 0
+                        ? "text-red-500"
+                        : "text-pc-ink"
+                  }`}
+                >
+                  {flexTotal >= 0 ? "+" : "−"}
+                  {fmtMin(Math.abs(flexTotal))}
                 </div>
                 <div className="grid grid-cols-3 gap-2 mt-4">
-                  <FlexSubStat label="Idag"    minutes={todayDelta} />
-                  <FlexSubStat label="Veckan"  minutes={flexWeek} />
+                  <FlexSubStat label="Idag" minutes={todayDelta} />
+                  <FlexSubStat label="Veckan" minutes={flexWeek} />
                   <FlexSubStat label="Månaden" minutes={flexMonth} />
                 </div>
               </button>
@@ -1590,7 +2022,10 @@ export default function PunchClock() {
                   onClick={() => setAbsenceModal(true)}
                   className="pc-press bg-white border border-pc-line rounded-[20px] py-4 font-bold text-[14px] text-pc-ink flex items-center justify-center gap-2"
                 >
-                  <span className="text-pc-muted"><IconCalendarX /></span> Avvikelse
+                  <span className="text-pc-muted">
+                    <IconCalendarX />
+                  </span>{" "}
+                  Avvikelse
                 </button>
               </div>
               <button
@@ -1603,7 +2038,6 @@ export default function PunchClock() {
               >
                 <IconCalendar /> Planera dagar
               </button>
-
             </div>
           )}
 
@@ -1636,306 +2070,416 @@ export default function PunchClock() {
                     schedule={schedule}
                     scheduleExceptions={scheduleExceptions}
                     selectedDate={calendarSelectedDate}
-                    onSelectDate={d => setCalendarSelectedDate(prev => prev === d ? null : d)}
+                    onSelectDate={(d) => setCalendarSelectedDate((prev) => (prev === d ? null : d))}
                   />
-                  {calendarSelectedDate && (() => {
-                    const daySessions = sessions.filter(s => new Date(s.checkIn).toISOString().slice(0, 10) === calendarSelectedDate);
-                    const dayAbsences = getAbsencesForDate(absences, calendarSelectedDate);
-                    const dayCfg = getEffectiveDayConfig(calendarSelectedDate, schedule, scheduleExceptions);
-                    const { net: dayNet } = computeDayMinutes(daySessions, calendarSelectedDate, schedule, scheduleExceptions);
-                    const scheduledMin = netDayMin(dayCfg);
-                    const diff = dayNet - scheduledMin;
-                    return (
-                      <div className="bg-white rounded-[22px] border border-pc-line shadow-[0_2px_14px_rgba(81,43,43,0.05)] overflow-hidden mb-4">
-                        <div className="px-4 pt-4 pb-3 flex items-start justify-between gap-3">
-                          <div>
-                            <div className="font-bold text-[18px] capitalize">{fmtDateLabel(calendarSelectedDate)}</div>
-                            {daySessions.length > 0 && (
-                              <div className="text-[26px] font-extrabold tabular-nums tracking-tight text-pc-orange-deep mt-0.5">{fmtDur(dayNet)}</div>
-                            )}
-                            {dayCfg.active && scheduledMin > 0 && (
-                              <div className="text-[12px] text-pc-muted font-medium mt-0.5">
-                                Schema: {dayCfg.startTime}–{dayCfg.endTime} · {fmtMin(scheduledMin)} netto
+                  {calendarSelectedDate &&
+                    (() => {
+                      const daySessions = sessions.filter(
+                        (s) =>
+                          new Date(s.checkIn).toISOString().slice(0, 10) === calendarSelectedDate,
+                      );
+                      const dayAbsences = getAbsencesForDate(absences, calendarSelectedDate);
+                      const dayCfg = getEffectiveDayConfig(
+                        calendarSelectedDate,
+                        schedule,
+                        scheduleExceptions,
+                      );
+                      const { net: dayNet } = computeDayMinutes(
+                        daySessions,
+                        calendarSelectedDate,
+                        schedule,
+                        scheduleExceptions,
+                      );
+                      const scheduledMin = netDayMin(dayCfg);
+                      const diff = dayNet - scheduledMin;
+                      return (
+                        <div className="bg-white rounded-[22px] border border-pc-line shadow-[0_2px_14px_rgba(81,43,43,0.05)] overflow-hidden mb-4">
+                          <div className="px-4 pt-4 pb-3 flex items-start justify-between gap-3">
+                            <div>
+                              <div className="font-bold text-[18px] capitalize">
+                                {fmtDateLabel(calendarSelectedDate)}
                               </div>
-                            )}
-                          </div>
-                          {daySessions.length > 0 && scheduledMin > 0 && (
-                            <div className={`shrink-0 mt-1 px-3 py-1.5 rounded-full text-[12px] font-extrabold flex items-center gap-1.5 ${
-                              diff >= 0 ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"
-                            }`}>
-                              <span className={`w-2 h-2 rounded-full ${diff >= 0 ? "bg-green-500" : "bg-red-400"}`} />
-                              {diff >= 0 ? `+${fmtMin(diff)}` : `−${fmtMin(Math.abs(diff))}`}
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="px-4 pb-4 pt-3 border-t border-pc-line space-y-2">
-                          {dayAbsences.map(a => (
-                            <div key={a.id} className="flex items-center gap-2">
-                              <div className="flex-1 min-w-0 bg-pc-peach text-pc-orange-deep rounded-[12px] px-3 py-2 flex items-center gap-2">
-                                <span className="text-[16px] leading-none shrink-0">{ABSENCE_META[a.category as AbsenceCategory].emoji}</span>
-                                <div className="min-w-0">
-                                  <div className="font-bold text-[13px] leading-tight">{ABSENCE_META[a.category as AbsenceCategory].label}</div>
-                                  <div className="text-[11px] opacity-75 font-medium">
-                                    {a.hours !== undefined ? `${a.hours}h` : "Hel dag"}
-                                    {a.startDate !== a.endDate && ` · ${absenceDateRangeLabel(a)}`}
-                                  </div>
-                                  {a.note && <div className="text-[11px] opacity-70 mt-0.5 truncate">{a.note}</div>}
+                              {daySessions.length > 0 && (
+                                <div className="text-[26px] font-extrabold tabular-nums tracking-tight text-pc-orange-deep mt-0.5">
+                                  {fmtDur(dayNet)}
                                 </div>
-                              </div>
-                              {a.startDate === calendarSelectedDate && (
-                                <button
-                                  onClick={() => handleDeleteAbsence(a.id)}
-                                  className="w-8 h-8 shrink-0 flex items-center justify-center rounded-xl text-pc-muted hover:text-red-500 hover:bg-red-50 transition-colors"
-                                  aria-label="Ta bort avvikelse"
-                                >
-                                  <IconTrash />
-                                </button>
+                              )}
+                              {dayCfg.active && scheduledMin > 0 && (
+                                <div className="text-[12px] text-pc-muted font-medium mt-0.5">
+                                  Schema: {dayCfg.startTime}–{dayCfg.endTime} ·{" "}
+                                  {fmtMin(scheduledMin)} netto
+                                </div>
                               )}
                             </div>
-                          ))}
-
-                          {daySessions.length > 0 && (
-                            <div className="space-y-0.5">
-                              {daySessions.map((s, i) => (
-                                <SessionRow key={s.id} session={s} index={i}
-                                  onEdit={() => handleEditSession(s)}
-                                  onDelete={() => handleDeleteSession(s.id)} />
-                              ))}
-                            </div>
-                          )}
-
-                          {daySessions.length === 0 && dayAbsences.length === 0 && (
-                            <div className="text-pc-muted text-[13px] text-center py-1">Inga registreringar denna dag.</div>
-                          )}
-
-                          <div className="grid grid-cols-2 gap-2">
-                            <button
-                              onClick={() => setAddForDate(calendarSelectedDate)}
-                              className="pc-press flex items-center justify-center gap-1.5 py-2.5 rounded-[12px] border border-dashed border-pc-line text-pc-muted text-[13px] font-semibold hover:border-pc-orange hover:text-pc-orange transition-colors"
-                            >
-                              <span className="text-[15px] leading-none">+</span> Tid
-                            </button>
-                            <button
-                              onClick={() => setAbsenceForDate(calendarSelectedDate)}
-                              className="pc-press flex items-center justify-center gap-1.5 py-2.5 rounded-[12px] border border-dashed border-pc-line text-pc-muted text-[13px] font-semibold hover:border-pc-orange hover:text-pc-orange transition-colors"
-                            >
-                              <span className="text-[15px] leading-none">+</span> Avvikelse
-                            </button>
-                          </div>
-                          {(() => {
-                            const calExc = scheduleExceptions[calendarSelectedDate];
-                            return (
-                              <button
-                                onClick={() => setExceptionModal(calendarSelectedDate)}
-                                className={`pc-press w-full flex items-center justify-center gap-2 py-2 rounded-[12px] text-[12px] font-semibold transition-colors ${
-                                  calExc ? "bg-blue-50 text-blue-600 border border-blue-200" : "border border-dashed border-pc-line text-pc-muted hover:border-pc-orange hover:text-pc-orange"
+                            {daySessions.length > 0 && scheduledMin > 0 && (
+                              <div
+                                className={`shrink-0 mt-1 px-3 py-1.5 rounded-full text-[12px] font-extrabold flex items-center gap-1.5 ${
+                                  diff >= 0
+                                    ? "bg-green-50 text-green-700"
+                                    : "bg-red-50 text-red-600"
                                 }`}
                               >
-                                <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                                  <circle cx="12" cy="12" r="3" />
-                                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                                </svg>
-                                {calExc ? `Förkortad dag · ${calExc.endTime}` : "Ändra schema för dag"}
+                                <span
+                                  className={`w-2 h-2 rounded-full ${diff >= 0 ? "bg-green-500" : "bg-red-400"}`}
+                                />
+                                {diff >= 0 ? `+${fmtMin(diff)}` : `−${fmtMin(Math.abs(diff))}`}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="px-4 pb-4 pt-3 border-t border-pc-line space-y-2">
+                            {dayAbsences.map((a) => (
+                              <div key={a.id} className="flex items-center gap-2">
+                                <div className="flex-1 min-w-0 bg-pc-peach text-pc-orange-deep rounded-[12px] px-3 py-2 flex items-center gap-2">
+                                  <span className="text-[16px] leading-none shrink-0">
+                                    {ABSENCE_META[a.category as AbsenceCategory].emoji}
+                                  </span>
+                                  <div className="min-w-0">
+                                    <div className="font-bold text-[13px] leading-tight">
+                                      {ABSENCE_META[a.category as AbsenceCategory].label}
+                                    </div>
+                                    <div className="text-[11px] opacity-75 font-medium">
+                                      {a.hours !== undefined ? `${a.hours}h` : "Hel dag"}
+                                      {a.startDate !== a.endDate &&
+                                        ` · ${absenceDateRangeLabel(a)}`}
+                                    </div>
+                                    {a.note && (
+                                      <div className="text-[11px] opacity-70 mt-0.5 truncate">
+                                        {a.note}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                                {a.startDate === calendarSelectedDate && (
+                                  <button
+                                    onClick={() => handleDeleteAbsence(a.id)}
+                                    className="w-8 h-8 shrink-0 flex items-center justify-center rounded-xl text-pc-muted hover:text-red-500 hover:bg-red-50 transition-colors"
+                                    aria-label="Ta bort avvikelse"
+                                  >
+                                    <IconTrash />
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+
+                            {daySessions.length > 0 && (
+                              <div className="space-y-0.5">
+                                {daySessions.map((s, i) => (
+                                  <SessionRow
+                                    key={s.id}
+                                    session={s}
+                                    index={i}
+                                    onEdit={() => handleEditSession(s)}
+                                    onDelete={() => handleDeleteSession(s.id)}
+                                  />
+                                ))}
+                              </div>
+                            )}
+
+                            {daySessions.length === 0 && dayAbsences.length === 0 && (
+                              <div className="text-pc-muted text-[13px] text-center py-1">
+                                Inga registreringar denna dag.
+                              </div>
+                            )}
+
+                            <div className="grid grid-cols-2 gap-2">
+                              <button
+                                onClick={() => setAddForDate(calendarSelectedDate)}
+                                className="pc-press flex items-center justify-center gap-1.5 py-2.5 rounded-[12px] border border-dashed border-pc-line text-pc-muted text-[13px] font-semibold hover:border-pc-orange hover:text-pc-orange transition-colors"
+                              >
+                                <span className="text-[15px] leading-none">+</span> Tid
                               </button>
-                            );
-                          })()}
+                              <button
+                                onClick={() => setAbsenceForDate(calendarSelectedDate)}
+                                className="pc-press flex items-center justify-center gap-1.5 py-2.5 rounded-[12px] border border-dashed border-pc-line text-pc-muted text-[13px] font-semibold hover:border-pc-orange hover:text-pc-orange transition-colors"
+                              >
+                                <span className="text-[15px] leading-none">+</span> Avvikelse
+                              </button>
+                            </div>
+                            {(() => {
+                              const calExc = scheduleExceptions[calendarSelectedDate];
+                              return (
+                                <button
+                                  onClick={() => setExceptionModal(calendarSelectedDate)}
+                                  className={`pc-press w-full flex items-center justify-center gap-2 py-2 rounded-[12px] text-[12px] font-semibold transition-colors ${
+                                    calExc
+                                      ? "bg-blue-50 text-blue-600 border border-blue-200"
+                                      : "border border-dashed border-pc-line text-pc-muted hover:border-pc-orange hover:text-pc-orange"
+                                  }`}
+                                >
+                                  <svg
+                                    viewBox="0 0 24 24"
+                                    className="w-3.5 h-3.5"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2.2"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  >
+                                    <circle cx="12" cy="12" r="3" />
+                                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                                  </svg>
+                                  {calExc
+                                    ? `Förkortad dag · ${calExc.endTime}`
+                                    : "Ändra schema för dag"}
+                                </button>
+                              );
+                            })()}
+                          </div>
                         </div>
+                      );
+                    })()}
+                </>
+              )}
+
+              {historyMode === "list" && (
+                <>
+                  <div className="grid grid-cols-2 gap-2 mb-5">
+                    {FILTERS.map(({ key, label }) => (
+                      <button
+                        key={key}
+                        onClick={() => setHistoryFilter(key)}
+                        className={`pc-press px-4 py-2 rounded-full text-[13px] font-bold transition-colors ${
+                          historyFilter === key
+                            ? "bg-pc-orange text-white shadow-[0_4px_12px_-4px_rgba(255,95,0,0.45)]"
+                            : "bg-white border border-pc-line text-pc-muted"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {(() => {
+                    const allDates = getHistoryDates(filteredSessions, filteredAbsences);
+                    if (allDates.size === 0) {
+                      return (
+                        <div className="text-center text-pc-muted py-20 text-[15px]">
+                          <div className="text-4xl mb-3 opacity-40">📋</div>
+                          Inga tider för vald period.
+                        </div>
+                      );
+                    }
+
+                    const weekMap: Record<string, string[]> = {};
+                    for (const d of allDates) {
+                      const wk = weekKey(new Date(d + "T12:00:00"));
+                      if (!weekMap[wk]) weekMap[wk] = [];
+                      weekMap[wk].push(d);
+                    }
+                    const byDate = groupByDate(filteredSessions);
+
+                    return (
+                      <div className="space-y-4">
+                        {Object.entries(weekMap)
+                          .sort((a, b) => b[0].localeCompare(a[0]))
+                          .map(([wMon, wDates]) => {
+                            const wSessions = wDates.flatMap((d) => byDate[d] ?? []);
+                            const wNet = computeWeekNet(wSessions, schedule, scheduleExceptions);
+                            const isCurrentWeek = wMon === currentWeekKey;
+                            const meetsNorm = wNet >= weeklyNorm;
+                            const diff = wNet - weeklyNorm;
+                            const sortedDates = [...wDates].sort((a, b) => b.localeCompare(a));
+
+                            return (
+                              <div
+                                key={wMon}
+                                className="bg-white rounded-[22px] border border-pc-line shadow-[0_2px_14px_rgba(81,43,43,0.05)] overflow-hidden"
+                              >
+                                <div className="px-4 pt-4 pb-3 flex items-start justify-between gap-3">
+                                  <div>
+                                    <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-pc-muted mb-1.5">
+                                      {weekRangeLabel(wMon)}
+                                    </div>
+                                    <div className="text-[24px] font-extrabold tabular-nums tracking-tight leading-none">
+                                      {fmtDur(wNet)}
+                                    </div>
+                                    <div className="text-[12px] text-pc-muted mt-0.5 font-medium">
+                                      av {fmtMin(weeklyNorm)} norm
+                                    </div>
+                                  </div>
+                                  <div
+                                    className={`shrink-0 mt-0.5 px-3 py-1.5 rounded-full text-[12px] font-extrabold flex items-center gap-1.5 ${
+                                      meetsNorm
+                                        ? "bg-green-50 text-green-700"
+                                        : isCurrentWeek
+                                          ? "bg-amber-50 text-amber-700"
+                                          : "bg-red-50 text-red-600"
+                                    }`}
+                                  >
+                                    <span
+                                      className={`w-2 h-2 rounded-full ${
+                                        meetsNorm
+                                          ? "bg-green-500"
+                                          : isCurrentWeek
+                                            ? "bg-amber-400"
+                                            : "bg-red-400"
+                                      }`}
+                                    />
+                                    {meetsNorm
+                                      ? `+${fmtMin(diff)}`
+                                      : isCurrentWeek
+                                        ? "Pågår"
+                                        : `−${fmtMin(Math.abs(diff))}`}
+                                  </div>
+                                </div>
+
+                                {sortedDates.map((date) => {
+                                  const daySessions = byDate[date] ?? [];
+                                  const dayAbsences = getAbsencesForDate(filteredAbsences, date);
+                                  const { net: dayNet } = computeDayMinutes(
+                                    daySessions,
+                                    date,
+                                    schedule,
+                                    scheduleExceptions,
+                                  );
+                                  const dayException = scheduleExceptions[date];
+
+                                  return (
+                                    <div key={date} className="px-4 py-3 border-t border-pc-line">
+                                      <div className="flex justify-between items-start mb-2 gap-2">
+                                        <div className="min-w-0">
+                                          <div className="font-bold text-[14px] capitalize">
+                                            {fmtDateLabel(date)}
+                                          </div>
+                                          {dayException && (
+                                            <div className="text-[11px] text-blue-600 font-semibold mt-0.5">
+                                              ⏰ Förkortad dag · slutar {dayException.endTime}
+                                              {dayException.note ? ` · ${dayException.note}` : ""}
+                                            </div>
+                                          )}
+                                        </div>
+                                        <div className="flex items-center gap-1 shrink-0">
+                                          {daySessions.length > 0 && (
+                                            <div className="font-bold text-pc-orange text-[14px] tabular-nums">
+                                              {fmtDur(dayNet)}
+                                            </div>
+                                          )}
+                                          <button
+                                            onClick={() => setExceptionModal(date)}
+                                            className={`w-7 h-7 flex items-center justify-center rounded-lg transition-colors ${dayException ? "text-blue-600 bg-blue-50 hover:bg-blue-100" : "text-pc-muted hover:text-pc-orange hover:bg-pc-peach"}`}
+                                            title="Anpassa schema för denna dag"
+                                            aria-label="Ändra schema för dag"
+                                          >
+                                            <svg
+                                              viewBox="0 0 24 24"
+                                              className="w-3.5 h-3.5"
+                                              fill="none"
+                                              stroke="currentColor"
+                                              strokeWidth="2.2"
+                                              strokeLinecap="round"
+                                              strokeLinejoin="round"
+                                            >
+                                              <circle cx="12" cy="12" r="3" />
+                                              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                                            </svg>
+                                          </button>
+                                        </div>
+                                      </div>
+
+                                      {dayAbsences.map((a) => (
+                                        <div key={a.id} className="flex items-center gap-2 mb-2">
+                                          <div className="flex-1 min-w-0 bg-pc-peach text-pc-orange-deep rounded-[12px] px-3 py-2 flex items-center gap-2">
+                                            <span className="text-[16px] leading-none shrink-0">
+                                              {ABSENCE_META[a.category as AbsenceCategory].emoji}
+                                            </span>
+                                            <div className="min-w-0">
+                                              <div className="font-bold text-[13px] leading-tight">
+                                                {ABSENCE_META[a.category as AbsenceCategory].label}
+                                              </div>
+                                              <div className="text-[11px] opacity-75 font-medium">
+                                                {a.hours !== undefined ? `${a.hours}h` : "Hel dag"}
+                                                {a.startDate !== a.endDate &&
+                                                  ` · ${absenceDateRangeLabel(a)}`}
+                                              </div>
+                                              {a.note && (
+                                                <div className="text-[11px] opacity-70 mt-0.5 truncate">
+                                                  {a.note}
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                          {a.startDate === date && (
+                                            <button
+                                              onClick={() => handleDeleteAbsence(a.id)}
+                                              className="w-8 h-8 shrink-0 flex items-center justify-center rounded-xl text-pc-muted hover:text-red-500 hover:bg-red-50 transition-colors"
+                                              aria-label="Ta bort avvikelse"
+                                            >
+                                              <IconTrash />
+                                            </button>
+                                          )}
+                                        </div>
+                                      ))}
+
+                                      {daySessions.length > 0 && (
+                                        <div className="space-y-0.5">
+                                          {daySessions.map((s, i) => (
+                                            <SessionRow
+                                              key={s.id}
+                                              session={s}
+                                              index={i}
+                                              onEdit={() => handleEditSession(s)}
+                                              onDelete={() => handleDeleteSession(s.id)}
+                                            />
+                                          ))}
+                                        </div>
+                                      )}
+
+                                      <div className="mt-2 grid grid-cols-2 gap-2">
+                                        <button
+                                          onClick={() => setAddForDate(date)}
+                                          className="pc-press flex items-center justify-center gap-1.5 py-2 rounded-[12px] border border-dashed border-pc-line text-pc-muted text-[12px] font-semibold hover:border-pc-orange hover:text-pc-orange transition-colors"
+                                        >
+                                          <span className="text-[14px] leading-none">+</span> Tid
+                                        </button>
+                                        <button
+                                          onClick={() => setAbsenceForDate(date)}
+                                          className="pc-press flex items-center justify-center gap-1.5 py-2 rounded-[12px] border border-dashed border-pc-line text-pc-muted text-[12px] font-semibold hover:border-pc-orange hover:text-pc-orange transition-colors"
+                                        >
+                                          <span className="text-[14px] leading-none">+</span>{" "}
+                                          Avvikelse
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })}
                       </div>
                     );
                   })()}
                 </>
               )}
-
-              {historyMode === "list" && (<>
-              <div className="grid grid-cols-2 gap-2 mb-5">
-                {FILTERS.map(({ key, label }) => (
-                  <button
-                    key={key}
-                    onClick={() => setHistoryFilter(key)}
-                    className={`pc-press px-4 py-2 rounded-full text-[13px] font-bold transition-colors ${
-                      historyFilter === key
-                        ? "bg-pc-orange text-white shadow-[0_4px_12px_-4px_rgba(255,95,0,0.45)]"
-                        : "bg-white border border-pc-line text-pc-muted"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-
-              {(() => {
-                const allDates = getHistoryDates(filteredSessions, filteredAbsences);
-                if (allDates.size === 0) {
-                  return (
-                    <div className="text-center text-pc-muted py-20 text-[15px]">
-                      <div className="text-4xl mb-3 opacity-40">📋</div>
-                      Inga tider för vald period.
-                    </div>
-                  );
-                }
-
-                const weekMap: Record<string, string[]> = {};
-                for (const d of allDates) {
-                  const wk = weekKey(new Date(d + "T12:00:00"));
-                  if (!weekMap[wk]) weekMap[wk] = [];
-                  weekMap[wk].push(d);
-                }
-                const byDate = groupByDate(filteredSessions);
-
-                return (
-                  <div className="space-y-4">
-                    {Object.entries(weekMap)
-                      .sort((a, b) => b[0].localeCompare(a[0]))
-                      .map(([wMon, wDates]) => {
-                        const wSessions = wDates.flatMap(d => byDate[d] ?? []);
-                        const wNet = computeWeekNet(wSessions, schedule, scheduleExceptions);
-                        const isCurrentWeek = wMon === currentWeekKey;
-                        const meetsNorm = wNet >= weeklyNorm;
-                        const diff = wNet - weeklyNorm;
-                        const sortedDates = [...wDates].sort((a, b) => b.localeCompare(a));
-
-                        return (
-                          <div key={wMon} className="bg-white rounded-[22px] border border-pc-line shadow-[0_2px_14px_rgba(81,43,43,0.05)] overflow-hidden">
-                            <div className="px-4 pt-4 pb-3 flex items-start justify-between gap-3">
-                              <div>
-                                <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-pc-muted mb-1.5">
-                                  {weekRangeLabel(wMon)}
-                                </div>
-                                <div className="text-[24px] font-extrabold tabular-nums tracking-tight leading-none">
-                                  {fmtDur(wNet)}
-                                </div>
-                                <div className="text-[12px] text-pc-muted mt-0.5 font-medium">
-                                  av {fmtMin(weeklyNorm)} norm
-                                </div>
-                              </div>
-                              <div className={`shrink-0 mt-0.5 px-3 py-1.5 rounded-full text-[12px] font-extrabold flex items-center gap-1.5 ${
-                                meetsNorm ? "bg-green-50 text-green-700"
-                                  : isCurrentWeek ? "bg-amber-50 text-amber-700"
-                                  : "bg-red-50 text-red-600"
-                              }`}>
-                                <span className={`w-2 h-2 rounded-full ${
-                                  meetsNorm ? "bg-green-500" : isCurrentWeek ? "bg-amber-400" : "bg-red-400"
-                                }`} />
-                                {meetsNorm
-                                  ? `+${fmtMin(diff)}`
-                                  : isCurrentWeek ? "Pågår"
-                                  : `−${fmtMin(Math.abs(diff))}`}
-                              </div>
-                            </div>
-
-                            {sortedDates.map(date => {
-                              const daySessions = byDate[date] ?? [];
-                              const dayAbsences = getAbsencesForDate(filteredAbsences, date);
-                              const { net: dayNet } = computeDayMinutes(daySessions, date, schedule, scheduleExceptions);
-                              const dayException = scheduleExceptions[date];
-
-                              return (
-                                <div key={date} className="px-4 py-3 border-t border-pc-line">
-                                  <div className="flex justify-between items-start mb-2 gap-2">
-                                    <div className="min-w-0">
-                                      <div className="font-bold text-[14px] capitalize">{fmtDateLabel(date)}</div>
-                                      {dayException && (
-                                        <div className="text-[11px] text-blue-600 font-semibold mt-0.5">
-                                          ⏰ Förkortad dag · slutar {dayException.endTime}{dayException.note ? ` · ${dayException.note}` : ""}
-                                        </div>
-                                      )}
-                                    </div>
-                                    <div className="flex items-center gap-1 shrink-0">
-                                      {daySessions.length > 0 && (
-                                        <div className="font-bold text-pc-orange text-[14px] tabular-nums">{fmtDur(dayNet)}</div>
-                                      )}
-                                      <button
-                                        onClick={() => setExceptionModal(date)}
-                                        className={`w-7 h-7 flex items-center justify-center rounded-lg transition-colors ${dayException ? "text-blue-600 bg-blue-50 hover:bg-blue-100" : "text-pc-muted hover:text-pc-orange hover:bg-pc-peach"}`}
-                                        title="Anpassa schema för denna dag"
-                                        aria-label="Ändra schema för dag"
-                                      >
-                                        <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                                          <circle cx="12" cy="12" r="3" />
-                                          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                                        </svg>
-                                      </button>
-                                    </div>
-                                  </div>
-
-                                  {dayAbsences.map(a => (
-                                    <div key={a.id} className="flex items-center gap-2 mb-2">
-                                      <div className="flex-1 min-w-0 bg-pc-peach text-pc-orange-deep rounded-[12px] px-3 py-2 flex items-center gap-2">
-                                        <span className="text-[16px] leading-none shrink-0">{ABSENCE_META[a.category as AbsenceCategory].emoji}</span>
-                                        <div className="min-w-0">
-                                          <div className="font-bold text-[13px] leading-tight">{ABSENCE_META[a.category as AbsenceCategory].label}</div>
-                                          <div className="text-[11px] opacity-75 font-medium">
-                                            {a.hours !== undefined ? `${a.hours}h` : "Hel dag"}
-                                            {a.startDate !== a.endDate && ` · ${absenceDateRangeLabel(a)}`}
-                                          </div>
-                                          {a.note && <div className="text-[11px] opacity-70 mt-0.5 truncate">{a.note}</div>}
-                                        </div>
-                                      </div>
-                                      {a.startDate === date && (
-                                        <button
-                                          onClick={() => handleDeleteAbsence(a.id)}
-                                          className="w-8 h-8 shrink-0 flex items-center justify-center rounded-xl text-pc-muted hover:text-red-500 hover:bg-red-50 transition-colors"
-                                          aria-label="Ta bort avvikelse"
-                                        >
-                                          <IconTrash />
-                                        </button>
-                                      )}
-                                    </div>
-                                  ))}
-
-                                  {daySessions.length > 0 && (
-                                    <div className="space-y-0.5">
-                                      {daySessions.map((s, i) => (
-                                        <SessionRow key={s.id} session={s} index={i}
-                                          onEdit={() => handleEditSession(s)}
-                                          onDelete={() => handleDeleteSession(s.id)} />
-                                      ))}
-                                    </div>
-                                  )}
-
-                                  <div className="mt-2 grid grid-cols-2 gap-2">
-                                    <button
-                                      onClick={() => setAddForDate(date)}
-                                      className="pc-press flex items-center justify-center gap-1.5 py-2 rounded-[12px] border border-dashed border-pc-line text-pc-muted text-[12px] font-semibold hover:border-pc-orange hover:text-pc-orange transition-colors"
-                                    >
-                                      <span className="text-[14px] leading-none">+</span> Tid
-                                    </button>
-                                    <button
-                                      onClick={() => setAbsenceForDate(date)}
-                                      className="pc-press flex items-center justify-center gap-1.5 py-2 rounded-[12px] border border-dashed border-pc-line text-pc-muted text-[12px] font-semibold hover:border-pc-orange hover:text-pc-orange transition-colors"
-                                    >
-                                      <span className="text-[14px] leading-none">+</span> Avvikelse
-                                    </button>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        );
-                      })}
-                  </div>
-                );
-              })()}
-            </>)}
             </div>
           )}
 
           {/* ── SHARE ── */}
           {view === "share" && (
             <div className="pc-fade pt-2">
-              <button onClick={() => setView("clock")} className="text-pc-orange font-semibold text-[15px] mb-3 flex items-center gap-1">
+              <button
+                onClick={() => setView("clock")}
+                className="text-pc-orange font-semibold text-[15px] mb-3 flex items-center gap-1"
+              >
                 ← Tillbaka
               </button>
               <h1 className="text-[28px] font-extrabold tracking-tight mb-1">Skapa rapport</h1>
-              <p className="text-[14px] text-pc-muted mb-5">Välj period — månad eller datumintervall. Rapporten kan delas som text eller laddas ner som Excel/CSV.</p>
+              <p className="text-[14px] text-pc-muted mb-5">
+                Välj period — månad eller datumintervall. Rapporten kan delas som text eller laddas
+                ner som Excel/CSV.
+              </p>
 
               {/* Period type */}
-              <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-pc-muted mb-2">Period</div>
+              <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-pc-muted mb-2">
+                Period
+              </div>
               <div className="flex gap-2 mb-4">
                 <button
                   type="button"
-                  onClick={() => { setReportType("month"); setShareText(""); }}
+                  onClick={() => {
+                    setReportType("month");
+                    setShareText("");
+                  }}
                   className={`flex-1 py-2.5 rounded-[14px] text-[13px] font-bold border transition-colors ${
                     reportType === "month"
                       ? "bg-pc-orange text-white border-pc-orange shadow-[0_4px_12px_-4px_rgba(255,95,0,0.45)]"
@@ -1946,7 +2490,10 @@ export default function PunchClock() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setReportType("range"); setShareText(""); }}
+                  onClick={() => {
+                    setReportType("range");
+                    setShareText("");
+                  }}
                   className={`flex-1 py-2.5 rounded-[14px] text-[13px] font-bold border transition-colors ${
                     reportType === "range"
                       ? "bg-pc-orange text-white border-pc-orange shadow-[0_4px_12px_-4px_rgba(255,95,0,0.45)]"
@@ -1959,27 +2506,46 @@ export default function PunchClock() {
 
               {reportType === "month" ? (
                 <div className="mb-5">
-                  <MonthPicker value={exportMonth} onChange={m => { setExportMonth(m); setShareText(""); }} />
+                  <MonthPicker
+                    value={exportMonth}
+                    onChange={(m) => {
+                      setExportMonth(m);
+                      setShareText("");
+                    }}
+                  />
                 </div>
               ) : (
                 <div className="flex flex-col gap-3 mb-5">
                   <div>
-                    <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-2">Från</div>
+                    <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-2">
+                      Från
+                    </div>
                     <input
                       type="date"
                       value={reportFrom}
-                      onChange={e => { setReportFrom(e.target.value); if (e.target.value > reportTo) setReportTo(e.target.value); setShareText(""); }}
-                      className="pc-input" style={{ marginBottom: 0 }}
+                      onChange={(e) => {
+                        setReportFrom(e.target.value);
+                        if (e.target.value > reportTo) setReportTo(e.target.value);
+                        setShareText("");
+                      }}
+                      className="pc-input"
+                      style={{ marginBottom: 0 }}
                     />
                   </div>
                   <div>
-                    <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-2">Till</div>
+                    <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-2">
+                      Till
+                    </div>
                     <input
                       type="date"
                       value={reportTo}
                       min={reportFrom}
-                      onChange={e => { setReportTo(e.target.value); setShareText(""); }}
-                      className="pc-input" style={{ marginBottom: 0 }}
+                      onChange={(e) => {
+                        setReportTo(e.target.value);
+                        setShareText("");
+                      }}
+                      className="pc-input"
+                      style={{ marginBottom: 0 }}
                     />
                   </div>
                 </div>
@@ -1992,169 +2558,229 @@ export default function PunchClock() {
                 Skapa rapport
               </button>
 
-              {shareText && (() => {
-                const { start: pStart, end: pEnd } = reportPeriod();
-                const receiptExpenses = expenses
-                  .filter(e => e.hasReceipt && e.date >= pStart && e.date <= pEnd)
-                  .sort((a, b) => a.date.localeCompare(b.date));
-                return (
-                  <div className="mt-5 pt-5 border-t border-pc-line">
-                    <textarea
-                      readOnly value={shareText}
-                      className="w-full min-h-[260px] border border-pc-line rounded-[18px] p-4 text-[13px] leading-[1.7] bg-white text-pc-ink resize-none outline-none"
-                      style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}
-                    />
-                    <div className="grid grid-cols-2 gap-3 mt-4">
-                      <button onClick={doCopy} className="pc-press py-4 rounded-[18px] bg-white border border-pc-line text-pc-ink font-bold text-[15px]">
-                        {shared ? "✓ Kopierat!" : "Kopiera text"}
-                      </button>
-                      <button onClick={doNativeShare} className="pc-press py-4 rounded-[18px] bg-pc-orange text-white font-bold text-[15px] shadow-[0_8px_20px_-8px_rgba(255,95,0,0.6)]">
-                        Dela text
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3 mt-3">
-                      <button onClick={downloadReportCsv} className="pc-press py-4 rounded-[18px] bg-white border border-pc-line text-pc-ink font-bold text-[15px] flex items-center justify-center gap-2">
-                        <svg viewBox="0 0 24 24" className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                          <polyline points="14 2 14 8 20 8" />
-                          <line x1="12" y1="11" x2="12" y2="17" />
-                          <polyline points="9 14 12 17 15 14" />
-                        </svg>
-                        Ladda ner CSV
-                      </button>
-                      <button onClick={shareReportFile} className="pc-press py-4 rounded-[18px] bg-white border border-pc-line text-pc-ink font-bold text-[15px]">
-                        Dela fil
-                      </button>
-                    </div>
+              {shareText &&
+                (() => {
+                  const { start: pStart, end: pEnd } = reportPeriod();
+                  const receiptExpenses = expenses
+                    .filter((e) => e.hasReceipt && e.date >= pStart && e.date <= pEnd)
+                    .sort((a, b) => a.date.localeCompare(b.date));
+                  return (
+                    <div className="mt-5 pt-5 border-t border-pc-line">
+                      <textarea
+                        readOnly
+                        value={shareText}
+                        className="w-full min-h-[260px] border border-pc-line rounded-[18px] p-4 text-[13px] leading-[1.7] bg-white text-pc-ink resize-none outline-none"
+                        style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}
+                      />
+                      <div className="grid grid-cols-2 gap-3 mt-4">
+                        <button
+                          onClick={doCopy}
+                          className="pc-press py-4 rounded-[18px] bg-white border border-pc-line text-pc-ink font-bold text-[15px]"
+                        >
+                          {shared ? "✓ Kopierat!" : "Kopiera text"}
+                        </button>
+                        <button
+                          onClick={doNativeShare}
+                          className="pc-press py-4 rounded-[18px] bg-pc-orange text-white font-bold text-[15px] shadow-[0_8px_20px_-8px_rgba(255,95,0,0.6)]"
+                        >
+                          Dela text
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 mt-3">
+                        <button
+                          onClick={downloadReportCsv}
+                          className="pc-press py-4 rounded-[18px] bg-white border border-pc-line text-pc-ink font-bold text-[15px] flex items-center justify-center gap-2"
+                        >
+                          <svg
+                            viewBox="0 0 24 24"
+                            className="w-5 h-5 text-green-600"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <polyline points="14 2 14 8 20 8" />
+                            <line x1="12" y1="11" x2="12" y2="17" />
+                            <polyline points="9 14 12 17 15 14" />
+                          </svg>
+                          Ladda ner CSV
+                        </button>
+                        <button
+                          onClick={shareReportFile}
+                          className="pc-press py-4 rounded-[18px] bg-white border border-pc-line text-pc-ink font-bold text-[15px]"
+                        >
+                          Dela fil
+                        </button>
+                      </div>
 
-                    {receiptExpenses.length > 0 && (
-                      <div className="mt-4 bg-amber-50 border border-amber-200 rounded-[18px] p-4">
-                        <div className="font-bold text-[14px] text-amber-800 mb-2">⚠️ Kvitton att bifoga</div>
-                        <div className="space-y-1">
-                          {receiptExpenses.map(e => {
-                            const parts: string[] = [];
-                            if (e.km != null) parts.push(`${e.km} km`);
-                            if (e.amount != null) parts.push(`${e.amount} kr`);
-                            const detail = parts.length ? ` — ${parts.join(" · ")}` : "";
+                      {receiptExpenses.length > 0 && (
+                        <div className="mt-4 bg-amber-50 border border-amber-200 rounded-[18px] p-4">
+                          <div className="font-bold text-[14px] text-amber-800 mb-2">
+                            ⚠️ Kvitton att bifoga
+                          </div>
+                          <div className="space-y-1">
+                            {receiptExpenses.map((e) => {
+                              const parts: string[] = [];
+                              if (e.km != null) parts.push(`${e.km} km`);
+                              if (e.amount != null) parts.push(`${e.amount} kr`);
+                              const detail = parts.length ? ` — ${parts.join(" · ")}` : "";
+                              return (
+                                <div key={e.id} className="text-[13px] text-amber-700 font-medium">
+                                  • {EXPENSE_META[e.category as ExpenseCategory].emoji}{" "}
+                                  {EXPENSE_META[e.category as ExpenseCategory].label} — {e.date}
+                                  {detail}
+                                  {e.note && <span className="opacity-70"> ({e.note})</span>}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+            </div>
+          )}
+          {/* ── EXPENSES ── */}
+          {view === "expenses" &&
+            (() => {
+              const pad = (n: number) => String(n).padStart(2, "0");
+              const monthStart = `${expenseMonth.year}-${pad(expenseMonth.month + 1)}-01`;
+              const monthEnd = `${expenseMonth.year}-${pad(expenseMonth.month + 1)}-${pad(new Date(expenseMonth.year, expenseMonth.month + 1, 0).getDate())}`;
+              const visible = expenses
+                .filter((e) => e.date >= monthStart && e.date <= monthEnd)
+                .sort((a, b) => b.date.localeCompare(a.date));
+              const total = visible.reduce((s, e) => s + (e.amount ?? 0), 0);
+
+              // Group by date
+              const byDate: Record<string, ExpenseEntry[]> = {};
+              for (const e of visible) {
+                if (!byDate[e.date]) byDate[e.date] = [];
+                byDate[e.date].push(e);
+              }
+              const sortedDates = Object.keys(byDate).sort((a, b) => b.localeCompare(a));
+
+              return (
+                <div className="pc-fade pt-2">
+                  <h1 className="text-[28px] font-extrabold tracking-tight mb-4">Utlägg</h1>
+
+                  {/* Month filter */}
+                  <div className="mb-4">
+                    <MonthPicker value={expenseMonth} onChange={setExpenseMonth} />
+                  </div>
+
+                  {/* Summary card */}
+                  {visible.length > 0 && (
+                    <div className="bg-white rounded-[22px] border border-pc-line shadow-[0_2px_12px_rgba(81,43,43,0.04)] p-5 mb-4">
+                      <div className="flex items-baseline justify-between">
+                        <div>
+                          <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-pc-muted mb-1">
+                            {new Date(expenseMonth.year, expenseMonth.month).toLocaleDateString(
+                              "sv-SE",
+                              { month: "long", year: "numeric" },
+                            )}
+                          </div>
+                          <div className="text-[28px] font-extrabold tabular-nums tracking-tight">
+                            {total} <span className="text-[18px] font-bold text-pc-muted">kr</span>
+                          </div>
+                        </div>
+                        <div className="text-[13px] text-pc-muted font-semibold">
+                          {visible.length} utlägg
+                        </div>
+                      </div>
+                      {visible.some((e) => e.hasReceipt) && (
+                        <div className="mt-3 pt-3 border-t border-pc-line text-[12px] text-amber-700 font-semibold">
+                          🧾 {visible.filter((e) => e.hasReceipt).length} kräver kvitto
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Expense list */}
+                  {sortedDates.length === 0 ? (
+                    <div className="text-center text-pc-muted py-16 text-[15px]">
+                      <div className="text-4xl mb-3 opacity-40">🧾</div>
+                      Inga utlägg denna månad.
+                    </div>
+                  ) : (
+                    <div className="space-y-3 mb-4">
+                      {sortedDates.map((date) => (
+                        <div
+                          key={date}
+                          className="bg-white rounded-[20px] border border-pc-line shadow-[0_2px_12px_rgba(81,43,43,0.04)] overflow-hidden"
+                        >
+                          <div className="px-4 pt-3 pb-1">
+                            <div className="text-[12px] font-bold text-pc-muted capitalize">
+                              {fmtDateLabel(date)}
+                            </div>
+                          </div>
+                          {byDate[date].map((e) => {
+                            const meta = EXPENSE_META[e.category as ExpenseCategory];
                             return (
-                              <div key={e.id} className="text-[13px] text-amber-700 font-medium">
-                                • {EXPENSE_META[e.category as ExpenseCategory].emoji} {EXPENSE_META[e.category as ExpenseCategory].label} — {e.date}{detail}
-                                {e.note && <span className="opacity-70"> ({e.note})</span>}
+                              <div
+                                key={e.id}
+                                className="px-4 py-3 border-t border-pc-line flex items-center gap-3"
+                              >
+                                <span className="text-[22px] leading-none shrink-0">
+                                  {meta.emoji}
+                                </span>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-bold text-[14px]">{meta.label}</span>
+                                    {e.hasReceipt && (
+                                      <span
+                                        className="text-[12px] leading-none"
+                                        title="Kvitto finns"
+                                      >
+                                        🧾
+                                      </span>
+                                    )}
+                                  </div>
+                                  {e.note && (
+                                    <div className="text-[12px] text-pc-muted font-medium mt-0.5 truncate">
+                                      {e.note}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="shrink-0 font-extrabold tabular-nums text-[15px] text-pc-ink">
+                                  {[
+                                    e.km != null ? `${e.km} km` : null,
+                                    e.amount != null ? `${e.amount} kr` : null,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(" · ") || "—"}
+                                </div>
+                                <button
+                                  onClick={() => handleDeleteExpense(e.id)}
+                                  className="w-8 h-8 shrink-0 flex items-center justify-center rounded-xl text-pc-muted hover:text-red-500 hover:bg-red-50 transition-colors"
+                                  aria-label="Ta bort utlägg"
+                                >
+                                  <IconTrash />
+                                </button>
                               </div>
                             );
                           })}
                         </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-            </div>
-          )}
-          {/* ── EXPENSES ── */}
-          {view === "expenses" && (() => {
-            const pad = (n: number) => String(n).padStart(2, "0");
-            const monthStart = `${expenseMonth.year}-${pad(expenseMonth.month + 1)}-01`;
-            const monthEnd = `${expenseMonth.year}-${pad(expenseMonth.month + 1)}-${pad(new Date(expenseMonth.year, expenseMonth.month + 1, 0).getDate())}`;
-            const visible = expenses
-              .filter(e => e.date >= monthStart && e.date <= monthEnd)
-              .sort((a, b) => b.date.localeCompare(a.date));
-            const total = visible.reduce((s, e) => s + (e.amount ?? 0), 0);
-
-            // Group by date
-            const byDate: Record<string, ExpenseEntry[]> = {};
-            for (const e of visible) {
-              if (!byDate[e.date]) byDate[e.date] = [];
-              byDate[e.date].push(e);
-            }
-            const sortedDates = Object.keys(byDate).sort((a, b) => b.localeCompare(a));
-
-            return (
-              <div className="pc-fade pt-2">
-                <h1 className="text-[28px] font-extrabold tracking-tight mb-4">Utlägg</h1>
-
-                {/* Month filter */}
-                <div className="mb-4">
-                  <MonthPicker value={expenseMonth} onChange={setExpenseMonth} />
-                </div>
-
-                {/* Summary card */}
-                {visible.length > 0 && (
-                  <div className="bg-white rounded-[22px] border border-pc-line shadow-[0_2px_12px_rgba(81,43,43,0.04)] p-5 mb-4">
-                    <div className="flex items-baseline justify-between">
-                      <div>
-                        <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-pc-muted mb-1">
-                          {new Date(expenseMonth.year, expenseMonth.month).toLocaleDateString("sv-SE", { month: "long", year: "numeric" })}
-                        </div>
-                        <div className="text-[28px] font-extrabold tabular-nums tracking-tight">{total} <span className="text-[18px] font-bold text-pc-muted">kr</span></div>
-                      </div>
-                      <div className="text-[13px] text-pc-muted font-semibold">{visible.length} utlägg</div>
+                      ))}
                     </div>
-                    {visible.some(e => e.hasReceipt) && (
-                      <div className="mt-3 pt-3 border-t border-pc-line text-[12px] text-amber-700 font-semibold">
-                        🧾 {visible.filter(e => e.hasReceipt).length} kräver kvitto
-                      </div>
-                    )}
-                  </div>
-                )}
+                  )}
 
-                {/* Expense list */}
-                {sortedDates.length === 0 ? (
-                  <div className="text-center text-pc-muted py-16 text-[15px]">
-                    <div className="text-4xl mb-3 opacity-40">🧾</div>
-                    Inga utlägg denna månad.
-                  </div>
-                ) : (
-                  <div className="space-y-3 mb-4">
-                    {sortedDates.map(date => (
-                      <div key={date} className="bg-white rounded-[20px] border border-pc-line shadow-[0_2px_12px_rgba(81,43,43,0.04)] overflow-hidden">
-                        <div className="px-4 pt-3 pb-1">
-                          <div className="text-[12px] font-bold text-pc-muted capitalize">{fmtDateLabel(date)}</div>
-                        </div>
-                        {byDate[date].map(e => {
-                          const meta = EXPENSE_META[e.category as ExpenseCategory];
-                          return (
-                            <div key={e.id} className="px-4 py-3 border-t border-pc-line flex items-center gap-3">
-                              <span className="text-[22px] leading-none shrink-0">{meta.emoji}</span>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-bold text-[14px]">{meta.label}</span>
-                                  {e.hasReceipt && <span className="text-[12px] leading-none" title="Kvitto finns">🧾</span>}
-                                </div>
-                                {e.note && <div className="text-[12px] text-pc-muted font-medium mt-0.5 truncate">{e.note}</div>}
-                              </div>
-                              <div className="shrink-0 font-extrabold tabular-nums text-[15px] text-pc-ink">
-                                {[e.km != null ? `${e.km} km` : null, e.amount != null ? `${e.amount} kr` : null].filter(Boolean).join(" · ") || "—"}
-                              </div>
-                              <button
-                                onClick={() => handleDeleteExpense(e.id)}
-                                className="w-8 h-8 shrink-0 flex items-center justify-center rounded-xl text-pc-muted hover:text-red-500 hover:bg-red-50 transition-colors"
-                                aria-label="Ta bort utlägg"
-                              >
-                                <IconTrash />
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Add expense button */}
-                <button
-                  onClick={() => setExpenseModal(true)}
-                  className="pc-press w-full rounded-[20px] py-4 font-bold text-[15px] text-white flex items-center justify-center gap-2"
-                  style={{
-                    background: "linear-gradient(135deg, #ff5f00 0%, #e04d00 100%)",
-                    boxShadow: "0 6px 20px -6px rgba(255,95,0,0.5)",
-                  }}
-                >
-                  <span className="text-xl leading-none">+</span> Lägg till utlägg
-                </button>
-              </div>
-            );
-          })()}
+                  {/* Add expense button */}
+                  <button
+                    onClick={() => setExpenseModal(true)}
+                    className="pc-press w-full rounded-[20px] py-4 font-bold text-[15px] text-white flex items-center justify-center gap-2"
+                    style={{
+                      background: "linear-gradient(135deg, #ff5f00 0%, #e04d00 100%)",
+                      boxShadow: "0 6px 20px -6px rgba(255,95,0,0.5)",
+                    }}
+                  >
+                    <span className="text-xl leading-none">+</span> Lägg till utlägg
+                  </button>
+                </div>
+              );
+            })()}
         </main>
 
         {/* Bottom nav */}
@@ -2163,18 +2789,85 @@ export default function PunchClock() {
           style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 6px)" }}
         >
           <div className="grid grid-cols-4 gap-1 pt-2">
-            <NavItem active={view === "clock"} onClick={() => setView("clock")} label="Klocka" icon={
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
-            } />
-            <NavItem active={view === "history"} onClick={() => setView("history")} label="Historik" icon={
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /><path d="M12 7v5l3 2" /></svg>
-            } />
-            <NavItem active={view === "expenses"} onClick={() => setView("expenses")} label="Utlägg" icon={
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" /><rect x="9" y="3" width="6" height="4" rx="1" /><path d="M9 12h6M9 16h4" /></svg>
-            } />
-            <NavItem active={view === "share"} onClick={handleShare} label="Dela" icon={
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6"><path d="M12 3v13" /><path d="m7 8 5-5 5 5" /><path d="M5 21h14" /></svg>
-            } />
+            <NavItem
+              active={view === "clock"}
+              onClick={() => setView("clock")}
+              label="Klocka"
+              icon={
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="w-6 h-6"
+                >
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 7v5l3 2" />
+                </svg>
+              }
+            />
+            <NavItem
+              active={view === "history"}
+              onClick={() => setView("history")}
+              label="Historik"
+              icon={
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="w-6 h-6"
+                >
+                  <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+                  <path d="M3 3v5h5" />
+                  <path d="M12 7v5l3 2" />
+                </svg>
+              }
+            />
+            <NavItem
+              active={view === "expenses"}
+              onClick={() => setView("expenses")}
+              label="Utlägg"
+              icon={
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="w-6 h-6"
+                >
+                  <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
+                  <rect x="9" y="3" width="6" height="4" rx="1" />
+                  <path d="M9 12h6M9 16h4" />
+                </svg>
+              }
+            />
+            <NavItem
+              active={view === "share"}
+              onClick={handleShare}
+              label="Dela"
+              icon={
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="w-6 h-6"
+                >
+                  <path d="M12 3v13" />
+                  <path d="m7 8 5-5 5 5" />
+                  <path d="M5 21h14" />
+                </svg>
+              }
+            />
           </div>
         </nav>
       </div>
@@ -2188,31 +2881,57 @@ export default function PunchClock() {
       )}
 
       {addModal && (
-        <SessionModal schedule={schedule} existingSessions={sessions} onClose={() => setAddModal(false)}
-          onSave={s => { setSessions(prev => [...prev, s]); setAddModal(false); }}
-          onSaveMany={list => { setSessions(prev => [...prev, ...list]); setAddModal(false); }} />
+        <SessionModal
+          schedule={schedule}
+          existingSessions={sessions}
+          onClose={() => setAddModal(false)}
+          onSave={(s) => {
+            setSessions((prev) => [...prev, s]);
+            setAddModal(false);
+          }}
+          onSaveMany={(list) => {
+            setSessions((prev) => [...prev, ...list]);
+            setAddModal(false);
+          }}
+        />
       )}
 
       {addForDate && (
-        <SessionModal schedule={schedule} defaultDate={addForDate} existingSessions={sessions}
+        <SessionModal
+          schedule={schedule}
+          defaultDate={addForDate}
+          existingSessions={sessions}
           onClose={() => setAddForDate(null)}
-          onSave={s => { setSessions(prev => [...prev, s]); setAddForDate(null); }}
-          onSaveMany={list => { setSessions(prev => [...prev, ...list]); setAddForDate(null); }} />
+          onSave={(s) => {
+            setSessions((prev) => [...prev, s]);
+            setAddForDate(null);
+          }}
+          onSaveMany={(list) => {
+            setSessions((prev) => [...prev, ...list]);
+            setAddForDate(null);
+          }}
+        />
       )}
 
       {editSession && (
-        <SessionModal schedule={schedule} session={editSession}
+        <SessionModal
+          schedule={schedule}
+          session={editSession}
           onClose={() => setEditSession(null)}
-          onSave={handleSaveEdit} />
+          onSave={handleSaveEdit}
+        />
       )}
 
       <AbsenceModal
         open={absenceModal || absenceForDate !== null}
         initialDate={absenceForDate ?? undefined}
         schedule={schedule}
-        onClose={() => { setAbsenceModal(false); setAbsenceForDate(null); }}
+        onClose={() => {
+          setAbsenceModal(false);
+          setAbsenceForDate(null);
+        }}
         onSave={(entry) => {
-          setAbsences(prev => [...prev, entry]);
+          setAbsences((prev) => [...prev, entry]);
           setAbsenceModal(false);
           setAbsenceForDate(null);
         }}
@@ -2228,7 +2947,10 @@ export default function PunchClock() {
         open={scheduleModal}
         schedule={schedule}
         onClose={() => setScheduleModal(false)}
-        onSave={s => { setSchedule(s); setScheduleModal(false); }}
+        onSave={(s) => {
+          setSchedule(s);
+          setScheduleModal(false);
+        }}
       />
 
       <SettingsModal
@@ -2242,13 +2964,24 @@ export default function PunchClock() {
         syncErrorLog={syncErrorLog}
         openSyncHelp={syncHelpOpen}
         dirty={dirtyRef.current}
-        onClose={() => { setSettingsModal(false); setSyncHelpOpen(false); }}
+        onClose={() => {
+          setSettingsModal(false);
+          setSyncHelpOpen(false);
+        }}
         onSave={handleSettingsSave}
-        onSetupSync={() => { setSettingsModal(false); setSyncModal(true); }}
-        onPullNow={() => { void pullNow({ manual: true }); }}
+        onSetupSync={() => {
+          setSettingsModal(false);
+          setSyncModal(true);
+        }}
+        onPullNow={() => {
+          void pullNow({ manual: true });
+        }}
         onDisconnectSync={handleDisconnectSync}
         onDeleteSyncAccount={handleDeleteSyncAccount}
-        onOpenAutomation={() => { setSettingsModal(false); setAutomationModal(true); }}
+        onOpenAutomation={() => {
+          setSettingsModal(false);
+          setAutomationModal(true);
+        }}
       />
 
       <SyncModal
@@ -2262,7 +2995,15 @@ export default function PunchClock() {
         open={flexBreakdownOpen}
         onClose={() => setFlexBreakdownOpen(false)}
         trackingStartDate={trackingStartDate}
-        weeks={computeWeeklyFlexBreakdown(sessions, absences, schedule, trackingStartDate, 12, todayCommitted, scheduleExceptions)}
+        weeks={computeWeeklyFlexBreakdown(
+          sessions,
+          absences,
+          schedule,
+          trackingStartDate,
+          12,
+          todayCommitted,
+          scheduleExceptions,
+        )}
         total={flexTotal}
       />
 
@@ -2284,13 +3025,15 @@ export default function PunchClock() {
           schedule={schedule}
           current={scheduleExceptions[exceptionModal] ?? null}
           onClose={() => setExceptionModal(null)}
-          onSave={exc => handleSaveException(exceptionModal, exc)}
+          onSave={(exc) => handleSaveException(exceptionModal, exc)}
         />
       )}
 
       {toast && (
-        <div className="fixed left-1/2 -translate-x-1/2 z-[60] pointer-events-none pc-pop"
-          style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 84px)" }}>
+        <div
+          className="fixed left-1/2 -translate-x-1/2 z-[60] pointer-events-none pc-pop"
+          style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 84px)" }}
+        >
           <div className="bg-pc-ink text-white text-[13px] font-bold px-4 py-3 rounded-2xl shadow-[0_8px_28px_rgba(45,23,23,0.4)] whitespace-nowrap">
             {toast}
           </div>
@@ -2304,7 +3047,12 @@ export default function PunchClock() {
 // Inline nudge card on the clock view, driven by today's schedule.
 // Red, unmissable, and on every tab: a sync that silently stopped working is the
 // one failure the user cannot discover on their own.
-function SyncErrorBanner({ headline, detail, onReadMore, onDismiss }: {
+function SyncErrorBanner({
+  headline,
+  detail,
+  onReadMore,
+  onDismiss,
+}: {
   headline: string;
   detail: string;
   onReadMore: () => void;
@@ -2314,7 +3062,11 @@ function SyncErrorBanner({ headline, detail, onReadMore, onDismiss }: {
     <div
       role="alert"
       className="rounded-[18px] px-4 py-3 pc-pop"
-      style={{ background: "#fef2f2", border: "1.5px solid #fca5a5", boxShadow: "0 4px 16px rgba(220,38,38,0.10)" }}
+      style={{
+        background: "#fef2f2",
+        border: "1.5px solid #fca5a5",
+        boxShadow: "0 4px 16px rgba(220,38,38,0.10)",
+      }}
     >
       <div className="flex items-start gap-3">
         <span className="text-[18px] leading-none mt-0.5 shrink-0">⚠️</span>
@@ -2322,7 +3074,9 @@ function SyncErrorBanner({ headline, detail, onReadMore, onDismiss }: {
           <div className="text-[13px] font-extrabold leading-tight" style={{ color: "#b91c1c" }}>
             {headline}
           </div>
-          <div className="text-[12px] leading-snug mt-0.5" style={{ color: "#9f1239" }}>{detail}</div>
+          <div className="text-[12px] leading-snug mt-0.5" style={{ color: "#9f1239" }}>
+            {detail}
+          </div>
           <button
             onClick={onReadMore}
             className="mt-2 text-[12px] font-extrabold underline"
@@ -2337,14 +3091,29 @@ function SyncErrorBanner({ headline, detail, onReadMore, onDismiss }: {
           style={{ color: "#b91c1c" }}
           aria-label="Dölj"
         >
-          <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+          <svg
+            viewBox="0 0 24 24"
+            className="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+          >
+            <path d="M18 6 6 18M6 6l12 12" />
+          </svg>
         </button>
       </div>
     </div>
   );
 }
 
-function ScheduleBanner({ emoji, text, primary, secondary, onDismiss }: {
+function ScheduleBanner({
+  emoji,
+  text,
+  primary,
+  secondary,
+  onDismiss,
+}: {
   emoji: string;
   text: string;
   primary: { label: string; onClick: () => void };
@@ -2356,8 +3125,21 @@ function ScheduleBanner({ emoji, text, primary, secondary, onDismiss }: {
       <div className="flex items-start gap-3">
         <span className="text-[20px] leading-none mt-0.5">{emoji}</span>
         <div className="flex-1 text-[13px] font-semibold text-pc-ink leading-snug">{text}</div>
-        <button onClick={onDismiss} className="shrink-0 w-6 h-6 flex items-center justify-center rounded-lg text-pc-muted hover:bg-pc-peach" aria-label="Stäng">
-          <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+        <button
+          onClick={onDismiss}
+          className="shrink-0 w-6 h-6 flex items-center justify-center rounded-lg text-pc-muted hover:bg-pc-peach"
+          aria-label="Stäng"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            className="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+          >
+            <path d="M18 6 6 18M6 6l12 12" />
+          </svg>
         </button>
       </div>
       <div className={`grid gap-2 mt-3 ${secondary ? "grid-cols-2" : "grid-cols-1"}`}>
@@ -2385,7 +3167,10 @@ function ScheduleBanner({ emoji, text, primary, secondary, onDismiss }: {
 // Two quick choices (this/last month, labelled with the month names) plus
 // "Annan…" which reveals a native <select> with the last 24 months. Replaces
 // the horizontally-scrolling pill row, which worked poorly on desktop.
-function MonthPicker({ value, onChange }: {
+function MonthPicker({
+  value,
+  onChange,
+}: {
   value: { year: number; month: number };
   onChange: (m: { year: number; month: number }) => void;
 }) {
@@ -2412,10 +3197,24 @@ function MonthPicker({ value, onChange }: {
   return (
     <div>
       <div className="grid grid-cols-3 gap-2">
-        <button type="button" className={pill(!showOther && isCur)} onClick={() => { setShowOther(false); onChange(cur); }}>
+        <button
+          type="button"
+          className={pill(!showOther && isCur)}
+          onClick={() => {
+            setShowOther(false);
+            onChange(cur);
+          }}
+        >
           {monthName(cur.year, cur.month, { month: "long" })}
         </button>
-        <button type="button" className={pill(!showOther && isPrev)} onClick={() => { setShowOther(false); onChange(prev); }}>
+        <button
+          type="button"
+          className={pill(!showOther && isPrev)}
+          onClick={() => {
+            setShowOther(false);
+            onChange(prev);
+          }}
+        >
           {monthName(prev.year, prev.month, { month: "long" })}
         </button>
         <button type="button" className={pill(showOther)} onClick={() => setShowOther(true)}>
@@ -2427,7 +3226,7 @@ function MonthPicker({ value, onChange }: {
       {showOther && (
         <select
           value={`${value.year}-${value.month}`}
-          onChange={e => {
+          onChange={(e) => {
             const [y, m] = e.target.value.split("-").map(Number);
             onChange({ year: y, month: m });
           }}
@@ -2449,8 +3248,16 @@ function MonthPicker({ value, onChange }: {
 }
 
 // ─── Session Row ───────────────────────────────────────────────
-function SessionRow({ session, index, onEdit, onDelete }: {
-  session: Session; index: number; onEdit: () => void; onDelete: () => void;
+function SessionRow({
+  session,
+  index,
+  onEdit,
+  onDelete,
+}: {
+  session: Session;
+  index: number;
+  onEdit: () => void;
+  onDelete: () => void;
 }) {
   const dur = fmtDur(((session.checkOut ?? now()) - session.checkIn) / 60000);
   const timeRange = session.checkOut
@@ -2471,19 +3278,33 @@ function SessionRow({ session, index, onEdit, onDelete }: {
         </div>
         <div className="flex items-center gap-2 mt-0.5">
           <span className="text-[13px] text-pc-muted tabular-nums font-medium">{timeRange}</span>
-          {session.checkOut && <span className="text-[12px] text-pc-orange-deep font-semibold tabular-nums">{dur}</span>}
+          {session.checkOut && (
+            <span className="text-[12px] text-pc-orange-deep font-semibold tabular-nums">
+              {dur}
+            </span>
+          )}
         </div>
         {session.note && (
-          <div className="text-[11px] text-pc-muted font-medium mt-0.5 leading-snug">{session.note}</div>
+          <div className="text-[11px] text-pc-muted font-medium mt-0.5 leading-snug">
+            {session.note}
+          </div>
         )}
       </div>
       <div className="flex items-center gap-1 shrink-0">
         {session.checkOut && (
-          <button onClick={onEdit} className="w-8 h-8 flex items-center justify-center rounded-xl text-pc-muted hover:text-pc-orange hover:bg-pc-peach transition-colors" aria-label="Redigera pass">
+          <button
+            onClick={onEdit}
+            className="w-8 h-8 flex items-center justify-center rounded-xl text-pc-muted hover:text-pc-orange hover:bg-pc-peach transition-colors"
+            aria-label="Redigera pass"
+          >
             <IconEdit />
           </button>
         )}
-        <button onClick={onDelete} className="w-8 h-8 flex items-center justify-center rounded-xl text-pc-muted hover:text-red-500 hover:bg-red-50 transition-colors" aria-label="Ta bort pass">
+        <button
+          onClick={onDelete}
+          className="w-8 h-8 flex items-center justify-center rounded-xl text-pc-muted hover:text-red-500 hover:bg-red-50 transition-colors"
+          aria-label="Ta bort pass"
+        >
           <IconTrash />
         </button>
       </div>
@@ -2492,30 +3313,65 @@ function SessionRow({ session, index, onEdit, onDelete }: {
 }
 
 // ─── Short Session Warning ─────────────────────────────────────
-function ShortSessionWarning({ elapsed, onStop, onCancel }: {
-  elapsed: number; onStop: () => void; onCancel: () => void;
+function ShortSessionWarning({
+  elapsed,
+  onStop,
+  onCancel,
+}: {
+  elapsed: number;
+  onStop: () => void;
+  onCancel: () => void;
 }) {
   const secs = Math.floor(elapsed / 1000);
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center pc-overlay" style={{ background: "rgba(45,23,23,0.55)" }} onClick={onCancel}>
-      <div className="pc-sheet bg-white w-full max-w-[480px] rounded-t-[28px] px-6 pt-6" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)" }} onClick={e => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center pc-overlay"
+      style={{ background: "rgba(45,23,23,0.55)" }}
+      onClick={onCancel}
+    >
+      <div
+        className="pc-sheet bg-white w-full max-w-[480px] rounded-t-[28px] px-6 pt-6"
+        style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)" }}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="w-10 h-1 bg-pc-line rounded-full mx-auto mb-5" />
         <div className="w-14 h-14 rounded-2xl bg-amber-100 flex items-center justify-center mb-4 mx-auto">
-          <svg viewBox="0 0 24 24" className="w-7 h-7 text-amber-600" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <svg
+            viewBox="0 0 24 24"
+            className="w-7 h-7 text-amber-600"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-            <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
           </svg>
         </div>
         <div className="text-center mb-2">
-          <div className="font-extrabold text-[20px] tracking-tight mb-2">Ingen tid registreras</div>
+          <div className="font-extrabold text-[20px] tracking-tight mb-2">
+            Ingen tid registreras
+          </div>
           <div className="text-[14px] text-pc-muted leading-relaxed">
-            Du har bara stämplat in i <span className="font-bold text-pc-ink">{secs} sekunder</span>.
-            Pass kortare än 1 minut sparas inte.
+            Du har bara stämplat in i <span className="font-bold text-pc-ink">{secs} sekunder</span>
+            . Pass kortare än 1 minut sparas inte.
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3 mt-6">
-          <button onClick={onCancel} className="pc-press py-4 rounded-[16px] bg-pc-bg border border-pc-line font-bold text-[15px] text-pc-ink">Avbryt</button>
-          <button onClick={onStop} className="pc-press py-4 rounded-[16px] bg-pc-orange text-white font-bold text-[15px] shadow-[0_8px_20px_-8px_rgba(255,95,0,0.6)]">Stoppa klockan</button>
+          <button
+            onClick={onCancel}
+            className="pc-press py-4 rounded-[16px] bg-pc-bg border border-pc-line font-bold text-[15px] text-pc-ink"
+          >
+            Avbryt
+          </button>
+          <button
+            onClick={onStop}
+            className="pc-press py-4 rounded-[16px] bg-pc-orange text-white font-bold text-[15px] shadow-[0_8px_20px_-8px_rgba(255,95,0,0.6)]"
+          >
+            Stoppa klockan
+          </button>
         </div>
       </div>
     </div>
@@ -2526,29 +3382,51 @@ function ShortSessionWarning({ elapsed, onStop, onCancel }: {
 function Stat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
     <div className="bg-pc-apricot rounded-2xl px-4 py-3">
-      <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-1">{label}</div>
-      <div className={`text-[22px] font-extrabold tabular-nums tracking-tight ${accent ? "text-pc-orange-deep" : "text-pc-ink"}`}>{value}</div>
+      <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-1">
+        {label}
+      </div>
+      <div
+        className={`text-[22px] font-extrabold tabular-nums tracking-tight ${accent ? "text-pc-orange-deep" : "text-pc-ink"}`}
+      >
+        {value}
+      </div>
     </div>
   );
 }
 
 function FlexSubStat({ label, minutes }: { label: string; minutes: number }) {
   const color = minutes > 0 ? "text-green-600" : minutes < 0 ? "text-red-500" : "text-pc-muted";
-  const sign  = minutes >= 0 ? "+" : "−";
+  const sign = minutes >= 0 ? "+" : "−";
   return (
     <div className="bg-pc-apricot rounded-2xl px-3 py-3 min-w-0">
-      <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-1 truncate">{label}</div>
+      <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-1 truncate">
+        {label}
+      </div>
       <div className={`text-[15px] font-extrabold tabular-nums tracking-tight ${color} truncate`}>
-        {sign}{fmtMin(Math.abs(minutes))}
+        {sign}
+        {fmtMin(Math.abs(minutes))}
       </div>
     </div>
   );
 }
 
 // ─── Nav Item ─────────────────────────────────────────────────
-function NavItem({ active, onClick, label, icon }: { active: boolean; onClick: () => void; label: string; icon: React.ReactNode }) {
+function NavItem({
+  active,
+  onClick,
+  label,
+  icon,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  icon: React.ReactNode;
+}) {
   return (
-    <button onClick={onClick} className={`flex flex-col items-center gap-0.5 py-1.5 rounded-xl transition-colors ${active ? "text-pc-orange" : "text-pc-muted"}`}>
+    <button
+      onClick={onClick}
+      className={`flex flex-col items-center gap-0.5 py-1.5 rounded-xl transition-colors ${active ? "text-pc-orange" : "text-pc-muted"}`}
+    >
       {icon}
       <span className="text-[10px] font-bold tracking-wide">{label}</span>
     </button>
@@ -2558,26 +3436,46 @@ function NavItem({ active, onClick, label, icon }: { active: boolean; onClick: (
 // ─── Session Modal ─────────────────────────────────────────────
 const MULTI_DAY_MAX_SPAN = 120; // days — guardrail against fat-finger ranges
 
-function SessionModal({ session, defaultDate, schedule, existingSessions, onClose, onSave, onSaveMany }: {
-  session?: Session; defaultDate?: string; schedule: WeekSchedule;
+function SessionModal({
+  session,
+  defaultDate,
+  schedule,
+  existingSessions,
+  onClose,
+  onSave,
+  onSaveMany,
+}: {
+  session?: Session;
+  defaultDate?: string;
+  schedule: WeekSchedule;
   existingSessions?: Session[];
   onClose: () => void;
   onSave: (s: Session) => void;
   onSaveMany?: (s: Session[]) => void;
 }) {
   const isEdit = !!session;
-  const initDate = session
-    ? ymdLocal(new Date(session.checkIn))
-    : (defaultDate ?? todayStr());
+  const initDate = session ? ymdLocal(new Date(session.checkIn)) : (defaultDate ?? todayStr());
   const initCfg = schedule[dayKeyOf(new Date(initDate + "T12:00:00"))];
 
   // Pre-fill times from schedule when adding a new session
   const initStart = session
-    ? new Date(session.checkIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })
-    : (initCfg.active ? initCfg.startTime : "");
+    ? new Date(session.checkIn).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      })
+    : initCfg.active
+      ? initCfg.startTime
+      : "";
   const initEnd = session?.checkOut
-    ? new Date(session.checkOut).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })
-    : (initCfg.active ? initCfg.endTime : "");
+    ? new Date(session.checkOut).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      })
+    : initCfg.active
+      ? initCfg.endTime
+      : "";
 
   const [multiDay, setMultiDay] = useState(false);
   const [date, setDate] = useState(initDate);
@@ -2612,14 +3510,20 @@ function SessionModal({ session, defaultDate, schedule, existingSessions, onClos
     if (span > MULTI_DAY_MAX_SPAN) {
       return { days, skippedInactive, skippedExisting, totalNet: 0, tooLong: true };
     }
-    const existDates = new Set((existingSessions ?? []).map(s => ymdLocal(new Date(s.checkIn))));
+    const existDates = new Set((existingSessions ?? []).map((s) => ymdLocal(new Date(s.checkIn))));
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
       const dateStr = ymdLocal(d);
       const cfg = schedule[dayKeyOf(d)];
       const netSched = netDayMin(cfg);
-      if (!cfg.active || netSched <= 0) { skippedInactive++; continue; }
-      if (existDates.has(dateStr)) { skippedExisting++; continue; }
-      const netMin = Math.round(netSched * pct / 100);
+      if (!cfg.active || netSched <= 0) {
+        skippedInactive++;
+        continue;
+      }
+      if (existDates.has(dateStr)) {
+        skippedExisting++;
+        continue;
+      }
+      const netMin = Math.round((netSched * pct) / 100);
       const rawMin = netMin + cfg.lunchMinutes;
       days.push({ dateStr, netMin, rawMin, cfg });
     }
@@ -2628,19 +3532,43 @@ function SessionModal({ session, defaultDate, schedule, existingSessions, onClos
   }
 
   function handleSave() {
-    if (!startTime) { setErr("Ange starttid."); return; }
+    if (!startTime) {
+      setErr("Ange starttid.");
+      return;
+    }
     const checkIn = new Date(`${date}T${startTime}`).getTime();
     const checkOut = endTime ? new Date(`${date}T${endTime}`).getTime() : null;
-    if (checkOut && checkOut <= checkIn) { setErr("Sluttid måste vara efter starttid."); return; }
-    onSave({ id: session?.id ?? crypto.randomUUID(), checkIn, checkOut, manual: true, note: note.trim() || undefined });
+    if (checkOut && checkOut <= checkIn) {
+      setErr("Sluttid måste vara efter starttid.");
+      return;
+    }
+    onSave({
+      id: session?.id ?? crypto.randomUUID(),
+      checkIn,
+      checkOut,
+      manual: true,
+      note: note.trim() || undefined,
+    });
   }
 
   function handleSaveMulti() {
-    if (!fromDate || !toDate) { setErr("Ange period."); return; }
-    if (toDate < fromDate) { setErr("Slutdatum måste vara samma som eller efter startdatum."); return; }
+    if (!fromDate || !toDate) {
+      setErr("Ange period.");
+      return;
+    }
+    if (toDate < fromDate) {
+      setErr("Slutdatum måste vara samma som eller efter startdatum.");
+      return;
+    }
     const plan = buildMultiDayPlan();
-    if (plan.tooLong) { setErr("Perioden är för lång (max ca 4 månader)."); return; }
-    if (plan.days.length === 0) { setErr("Inga schemalagda dagar att fylla i perioden."); return; }
+    if (plan.tooLong) {
+      setErr("Perioden är för lång (max ca 4 månader).");
+      return;
+    }
+    if (plan.days.length === 0) {
+      setErr("Inga schemalagda dagar att fylla i perioden.");
+      return;
+    }
     const sessions: Session[] = plan.days.map(({ dateStr, rawMin, cfg }) => {
       const checkIn = new Date(`${dateStr}T${cfg.startTime}`).getTime();
       return {
@@ -2654,18 +3582,32 @@ function SessionModal({ session, defaultDate, schedule, existingSessions, onClos
     (onSaveMany ?? ((list: Session[]) => list.forEach(onSave)))(sessions);
   }
 
-  const previewMs = startTime && endTime
-    ? new Date(`${date}T${endTime}`).getTime() - new Date(`${date}T${startTime}`).getTime()
-    : null;
+  const previewMs =
+    startTime && endTime
+      ? new Date(`${date}T${endTime}`).getTime() - new Date(`${date}T${startTime}`).getTime()
+      : null;
   const previewMin = previewMs !== null && previewMs > 0 ? previewMs / 60000 : null;
 
   const plan = multiDay ? buildMultiDayPlan() : null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center pc-overlay" style={{ background: "rgba(45,23,23,0.55)" }} onClick={onClose}>
-      <div className="pc-sheet bg-white w-full max-w-[480px] rounded-t-[28px] px-6 pt-6 overflow-y-auto" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)", maxHeight: "92dvh" }} onClick={e => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center pc-overlay"
+      style={{ background: "rgba(45,23,23,0.55)" }}
+      onClick={onClose}
+    >
+      <div
+        className="pc-sheet bg-white w-full max-w-[480px] rounded-t-[28px] px-6 pt-6 overflow-y-auto"
+        style={{
+          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)",
+          maxHeight: "92dvh",
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="w-10 h-1 bg-pc-line rounded-full mx-auto mb-5" />
-        <div className="font-extrabold text-[22px] tracking-tight mb-1">{isEdit ? "Redigera pass" : "Lägg till tid"}</div>
+        <div className="font-extrabold text-[22px] tracking-tight mb-1">
+          {isEdit ? "Redigera pass" : "Lägg till tid"}
+        </div>
         <div className="text-[13px] text-pc-muted mb-5">
           {multiDay
             ? "Fyll flera dagar på en gång med en andel av schemat."
@@ -2679,7 +3621,10 @@ function SessionModal({ session, defaultDate, schedule, existingSessions, onClos
           <div className="flex gap-2 mb-5">
             <button
               type="button"
-              onClick={() => { setMultiDay(false); setErr(""); }}
+              onClick={() => {
+                setMultiDay(false);
+                setErr("");
+              }}
               className={`flex-1 py-2.5 rounded-[14px] text-[13px] font-bold border transition-colors ${
                 !multiDay
                   ? "bg-pc-orange text-white border-pc-orange shadow-[0_4px_12px_-4px_rgba(255,95,0,0.45)]"
@@ -2690,7 +3635,10 @@ function SessionModal({ session, defaultDate, schedule, existingSessions, onClos
             </button>
             <button
               type="button"
-              onClick={() => { setMultiDay(true); setErr(""); }}
+              onClick={() => {
+                setMultiDay(true);
+                setErr("");
+              }}
               className={`flex-1 py-2.5 rounded-[14px] text-[13px] font-bold border transition-colors ${
                 multiDay
                   ? "bg-pc-orange text-white border-pc-orange shadow-[0_4px_12px_-4px_rgba(255,95,0,0.45)]"
@@ -2705,14 +3653,29 @@ function SessionModal({ session, defaultDate, schedule, existingSessions, onClos
         {!multiDay ? (
           <>
             <Label>Datum</Label>
-            <input type="date" value={date} onChange={e => setDate(e.target.value)} className="pc-input" />
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="pc-input"
+            />
             <Label>Starttid</Label>
-            <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className="pc-input" />
-            <Label>Sluttid <span className="normal-case font-medium tracking-normal">(valfri — lämna tom om pågående)</span></Label>
+            <input
+              type="time"
+              value={startTime}
+              onChange={(e) => setStartTime(e.target.value)}
+              className="pc-input"
+            />
+            <Label>
+              Sluttid{" "}
+              <span className="normal-case font-medium tracking-normal">
+                (valfri — lämna tom om pågående)
+              </span>
+            </Label>
             <input
               type="time"
               value={endTime}
-              onChange={e => setEndTime(e.target.value)}
+              onChange={(e) => setEndTime(e.target.value)}
               className="pc-input"
               style={{ marginBottom: endTime ? "8px" : "16px" }}
             />
@@ -2733,7 +3696,10 @@ function SessionModal({ session, defaultDate, schedule, existingSessions, onClos
             <input
               type="date"
               value={fromDate}
-              onChange={e => { setFromDate(e.target.value); if (e.target.value > toDate) setToDate(e.target.value); }}
+              onChange={(e) => {
+                setFromDate(e.target.value);
+                if (e.target.value > toDate) setToDate(e.target.value);
+              }}
               className="pc-input"
             />
             <Label>Till</Label>
@@ -2741,13 +3707,18 @@ function SessionModal({ session, defaultDate, schedule, existingSessions, onClos
               type="date"
               value={toDate}
               min={fromDate}
-              onChange={e => setToDate(e.target.value)}
+              onChange={(e) => setToDate(e.target.value)}
               className="pc-input"
             />
 
-            <Label>Hur mycket jobbade du? <span className="normal-case font-medium tracking-normal">(andel av schemat per dag)</span></Label>
+            <Label>
+              Hur mycket jobbade du?{" "}
+              <span className="normal-case font-medium tracking-normal">
+                (andel av schemat per dag)
+              </span>
+            </Label>
             <div className="grid grid-cols-4 gap-2 mb-4">
-              {presetPcts.map(p => (
+              {presetPcts.map((p) => (
                 <button
                   key={p}
                   type="button"
@@ -2765,25 +3736,48 @@ function SessionModal({ session, defaultDate, schedule, existingSessions, onClos
           </>
         )}
 
-        <Label>Anteckning <span className="normal-case font-medium tracking-normal">(valfri)</span></Label>
+        <Label>
+          Anteckning <span className="normal-case font-medium tracking-normal">(valfri)</span>
+        </Label>
         <textarea
           rows={2}
-          placeholder={multiDay ? "t.ex. VAB 50 %, delad omsorg" : "t.ex. Startade tidigt, jobbade ikapp på kvällen…"}
+          placeholder={
+            multiDay
+              ? "t.ex. VAB 50 %, delad omsorg"
+              : "t.ex. Startade tidigt, jobbade ikapp på kvällen…"
+          }
           value={note}
-          onChange={e => setNote(e.target.value)}
+          onChange={(e) => setNote(e.target.value)}
           style={{
-            width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: "14px",
-            border: "1px solid #ece6df", fontSize: "15px", outline: "none",
-            background: "#fdf6ee", fontWeight: 500, color: "#2d1717",
-            resize: "none", marginBottom: "16px", fontFamily: "inherit",
+            width: "100%",
+            boxSizing: "border-box",
+            padding: "12px 14px",
+            borderRadius: "14px",
+            border: "1px solid #ece6df",
+            fontSize: "15px",
+            outline: "none",
+            background: "#fdf6ee",
+            fontWeight: 500,
+            color: "#2d1717",
+            resize: "none",
+            marginBottom: "16px",
+            fontFamily: "inherit",
           }}
-          onFocus={e => { e.currentTarget.style.borderColor = "#ff5f00"; e.currentTarget.style.background = "#fff"; }}
-          onBlur={e => { e.currentTarget.style.borderColor = "#ece6df"; e.currentTarget.style.background = "#fdf6ee"; }}
+          onFocus={(e) => {
+            e.currentTarget.style.borderColor = "#ff5f00";
+            e.currentTarget.style.background = "#fff";
+          }}
+          onBlur={(e) => {
+            e.currentTarget.style.borderColor = "#ece6df";
+            e.currentTarget.style.background = "#fdf6ee";
+          }}
         />
 
         {!multiDay && previewMin !== null && previewMin > 0 && (
           <div className="bg-pc-peach rounded-2xl px-4 py-3 mb-4">
-            <div className="font-extrabold text-pc-orange-deep text-[17px]">{fmtDur(previewMin)}</div>
+            <div className="font-extrabold text-pc-orange-deep text-[17px]">
+              {fmtDur(previewMin)}
+            </div>
             {scheduledMins > 0 && (
               <div className="text-[12px] text-pc-muted mt-0.5">
                 {previewMin >= scheduledMins
@@ -2799,7 +3793,8 @@ function SessionModal({ session, defaultDate, schedule, existingSessions, onClos
             {plan.days.length > 0 ? (
               <>
                 <div className="font-extrabold text-pc-orange-deep text-[17px]">
-                  {plan.days.length} {plan.days.length === 1 ? "dag" : "dagar"} · {fmtDur(plan.totalNet)} totalt
+                  {plan.days.length} {plan.days.length === 1 ? "dag" : "dagar"} ·{" "}
+                  {fmtDur(plan.totalNet)} totalt
                 </div>
                 <div className="text-[12px] text-pc-muted mt-0.5">
                   {pct}% av schemat per dag
@@ -2810,7 +3805,8 @@ function SessionModal({ session, defaultDate, schedule, existingSessions, onClos
             ) : (
               <div className="text-[13px] text-pc-muted">
                 Inga schemalagda dagar i perioden.
-                {plan.skippedExisting > 0 && ` ${plan.skippedExisting} dag(ar) är redan registrerade.`}
+                {plan.skippedExisting > 0 &&
+                  ` ${plan.skippedExisting} dag(ar) är redan registrerade.`}
               </div>
             )}
           </div>
@@ -2819,9 +3815,21 @@ function SessionModal({ session, defaultDate, schedule, existingSessions, onClos
         {err && <div className="text-red-600 text-[13px] mb-3">{err}</div>}
 
         <div className="grid grid-cols-2 gap-3 mt-2">
-          <button onClick={onClose} className="pc-press py-4 rounded-[16px] bg-pc-bg border border-pc-line font-bold text-[15px] text-pc-ink">Avbryt</button>
-          <button onClick={multiDay ? handleSaveMulti : handleSave} className="pc-press py-4 rounded-[16px] bg-pc-orange text-white font-bold text-[15px] shadow-[0_8px_20px_-8px_rgba(255,95,0,0.6)]">
-            {isEdit ? "Spara ändringar" : multiDay ? `Spara ${plan?.days.length ?? 0} dagar` : "Spara"}
+          <button
+            onClick={onClose}
+            className="pc-press py-4 rounded-[16px] bg-pc-bg border border-pc-line font-bold text-[15px] text-pc-ink"
+          >
+            Avbryt
+          </button>
+          <button
+            onClick={multiDay ? handleSaveMulti : handleSave}
+            className="pc-press py-4 rounded-[16px] bg-pc-orange text-white font-bold text-[15px] shadow-[0_8px_20px_-8px_rgba(255,95,0,0.6)]"
+          >
+            {isEdit
+              ? "Spara ändringar"
+              : multiDay
+                ? `Spara ${plan?.days.length ?? 0} dagar`
+                : "Spara"}
           </button>
         </div>
       </div>
@@ -2830,11 +3838,20 @@ function SessionModal({ session, defaultDate, schedule, existingSessions, onClos
 }
 
 function Label({ children }: { children: React.ReactNode }) {
-  return <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-2">{children}</div>;
+  return (
+    <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-2">
+      {children}
+    </div>
+  );
 }
 
 // ─── Schedule Editor Modal ─────────────────────────────────────
-function ScheduleEditorModal({ open, schedule, onClose, onSave }: {
+function ScheduleEditorModal({
+  open,
+  schedule,
+  onClose,
+  onSave,
+}: {
   open: boolean;
   schedule: WeekSchedule;
   onClose: () => void;
@@ -2859,14 +3876,17 @@ function ScheduleEditorModal({ open, schedule, onClose, onSave }: {
     >
       <div
         className="pc-sheet bg-white w-full max-w-[480px] rounded-t-[28px] px-5 pt-6 overflow-y-auto"
-        style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)", maxHeight: "92dvh" }}
-        onClick={e => e.stopPropagation()}
+        style={{
+          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)",
+          maxHeight: "92dvh",
+        }}
+        onClick={(e) => e.stopPropagation()}
       >
         <div className="w-10 h-1 bg-pc-line rounded-full mx-auto mb-5" />
         <div className="font-extrabold text-[22px] tracking-tight mb-1">Planera dagar</div>
         <div className="text-[13px] text-pc-muted mb-6">
-          Ange arbetstider och lunch per dag.
-          Norm/vecka: <span className="font-bold text-pc-orange-deep">{fmtMin(weeklyNetMin(draft))}</span>
+          Ange arbetstider och lunch per dag. Norm/vecka:{" "}
+          <span className="font-bold text-pc-orange-deep">{fmtMin(weeklyNetMin(draft))}</span>
         </div>
 
         <WeekScheduleEditor schedule={draft} onChange={setDraft} />
@@ -2874,13 +3894,29 @@ function ScheduleEditorModal({ open, schedule, onClose, onSave }: {
         <div className="grid grid-cols-2 gap-3 mt-6">
           <button
             onClick={onClose}
-            style={{ padding: "15px", borderRadius: "16px", background: "#fdf6ee", border: "1.5px solid #ece6df", fontWeight: 700, fontSize: "15px", color: "#2d1717" }}
+            style={{
+              padding: "15px",
+              borderRadius: "16px",
+              background: "#fdf6ee",
+              border: "1.5px solid #ece6df",
+              fontWeight: 700,
+              fontSize: "15px",
+              color: "#2d1717",
+            }}
           >
             Avbryt
           </button>
           <button
             onClick={() => onSave(draft)}
-            style={{ padding: "15px", borderRadius: "16px", background: "#ff5f00", color: "white", fontWeight: 700, fontSize: "15px", boxShadow: "0 8px 20px -8px rgba(255,95,0,0.6)" }}
+            style={{
+              padding: "15px",
+              borderRadius: "16px",
+              background: "#ff5f00",
+              color: "white",
+              fontWeight: 700,
+              fontSize: "15px",
+              boxShadow: "0 8px 20px -8px rgba(255,95,0,0.6)",
+            }}
           >
             Spara
           </button>
@@ -2891,7 +3927,14 @@ function ScheduleEditorModal({ open, schedule, onClose, onSave }: {
 }
 
 // ─── Calendar View ────────────────────────────────────────────
-function CalendarView({ sessions, absences, schedule, scheduleExceptions, selectedDate, onSelectDate }: {
+function CalendarView({
+  sessions,
+  absences,
+  schedule,
+  scheduleExceptions,
+  selectedDate,
+  onSelectDate,
+}: {
   sessions: Session[];
   absences: AbsenceEntry[];
   schedule: WeekSchedule;
@@ -2900,7 +3943,8 @@ function CalendarView({ sessions, absences, schedule, scheduleExceptions, select
   onSelectDate?: (date: string) => void;
 }) {
   const [viewYM, setViewYM] = useState(() => {
-    const n = new Date(); return { year: n.getFullYear(), month: n.getMonth() };
+    const n = new Date();
+    return { year: n.getFullYear(), month: n.getMonth() };
   });
   const { year, month } = viewYM;
 
@@ -2916,9 +3960,12 @@ function CalendarView({ sessions, absences, schedule, scheduleExceptions, select
     cells.push(new Date(cur));
     cur.setDate(cur.getDate() + 1);
   } while (cells.length < 35 || cur.getMonth() === month);
-  while (cells.length % 7 !== 0) { cells.push(new Date(cur)); cur.setDate(cur.getDate() + 1); }
+  while (cells.length % 7 !== 0) {
+    cells.push(new Date(cur));
+    cur.setDate(cur.getDate() + 1);
+  }
 
-  const byDate = groupByDate(sessions.filter(s => s.checkOut !== null));
+  const byDate = groupByDate(sessions.filter((s) => s.checkOut !== null));
   const todayS = todayStr();
 
   return (
@@ -2926,30 +3973,46 @@ function CalendarView({ sessions, absences, schedule, scheduleExceptions, select
       {/* Month navigation */}
       <div className="flex items-center justify-between mb-3">
         <button
-          onClick={() => setViewYM(({ year, month }) => { const d = new Date(year, month - 1); return { year: d.getFullYear(), month: d.getMonth() }; })}
+          onClick={() =>
+            setViewYM(({ year, month }) => {
+              const d = new Date(year, month - 1);
+              return { year: d.getFullYear(), month: d.getMonth() };
+            })
+          }
           className="w-9 h-9 flex items-center justify-center rounded-xl text-pc-muted hover:text-pc-ink hover:bg-pc-peach transition-colors text-[22px] font-bold leading-none"
           aria-label="Föregående månad"
-        >‹</button>
+        >
+          ‹
+        </button>
         <div className="font-extrabold text-[16px] capitalize">
           {new Date(year, month).toLocaleDateString("sv-SE", { month: "long", year: "numeric" })}
         </div>
         <button
-          onClick={() => setViewYM(({ year, month }) => { const d = new Date(year, month + 1); return { year: d.getFullYear(), month: d.getMonth() }; })}
+          onClick={() =>
+            setViewYM(({ year, month }) => {
+              const d = new Date(year, month + 1);
+              return { year: d.getFullYear(), month: d.getMonth() };
+            })
+          }
           className="w-9 h-9 flex items-center justify-center rounded-xl text-pc-muted hover:text-pc-ink hover:bg-pc-peach transition-colors text-[22px] font-bold leading-none"
           aria-label="Nästa månad"
-        >›</button>
+        >
+          ›
+        </button>
       </div>
 
       {/* Day-of-week headers */}
       <div className="grid grid-cols-7 mb-1">
         {["M", "T", "O", "T", "F", "L", "S"].map((d, i) => (
-          <div key={i} className="text-center text-[10px] font-bold text-pc-muted py-1">{d}</div>
+          <div key={i} className="text-center text-[10px] font-bold text-pc-muted py-1">
+            {d}
+          </div>
         ))}
       </div>
 
       {/* Calendar grid */}
       <div className="grid grid-cols-7 gap-1">
-        {cells.map(day => {
+        {cells.map((day) => {
           const dateStr = ymdLocal(day);
           const inMonth = day.getMonth() === month;
           const isToday = dateStr === todayS;
@@ -2958,13 +4021,20 @@ function CalendarView({ sessions, absences, schedule, scheduleExceptions, select
           const dayAbsences = getAbsencesForDate(absences, dateStr);
           const dayCfg = getEffectiveDayConfig(dateStr, schedule, scheduleExceptions);
           const scheduledMin = netDayMin(dayCfg);
-          const { net } = daySessions.length > 0 ? computeDayMinutes(daySessions, dateStr, schedule, scheduleExceptions) : { net: 0 };
+          const { net } =
+            daySessions.length > 0
+              ? computeDayMinutes(daySessions, dateStr, schedule, scheduleExceptions)
+              : { net: 0 };
           const hasData = daySessions.length > 0 || dayAbsences.length > 0;
 
           let dotColor = "";
           if (isPast && inMonth && dayCfg.active) {
-            if (daySessions.length > 0) dotColor = net >= scheduledMin ? "bg-green-500" : "bg-amber-400";
-            else if (dayAbsences.length > 0) dotColor = dayAbsences.some(a => a.category === "flex") ? "bg-pc-orange" : "bg-blue-400";
+            if (daySessions.length > 0)
+              dotColor = net >= scheduledMin ? "bg-green-500" : "bg-amber-400";
+            else if (dayAbsences.length > 0)
+              dotColor = dayAbsences.some((a) => a.category === "flex")
+                ? "bg-pc-orange"
+                : "bg-blue-400";
             else dotColor = "bg-red-300";
           }
 
@@ -2982,12 +4052,22 @@ function CalendarView({ sessions, absences, schedule, scheduleExceptions, select
             >
               <span
                 className="text-[12px] leading-none font-semibold"
-                style={{ fontWeight: isToday ? 800 : 600, color: isToday ? "var(--color-pc-orange, #ff5f00)" : !inMonth ? "#9c7c5c" : "#2d1717" }}
+                style={{
+                  fontWeight: isToday ? 800 : 600,
+                  color: isToday
+                    ? "var(--color-pc-orange, #ff5f00)"
+                    : !inMonth
+                      ? "#9c7c5c"
+                      : "#2d1717",
+                }}
               >
                 {day.getDate()}
               </span>
               {net > 0 && inMonth && (
-                <span className="text-pc-muted font-medium leading-none mt-0.5" style={{ fontSize: "9px" }}>
+                <span
+                  className="text-pc-muted font-medium leading-none mt-0.5"
+                  style={{ fontSize: "9px" }}
+                >
                   {Math.floor(net / 60)}h{net % 60 >= 30 ? "30" : ""}
                 </span>
               )}
@@ -3015,7 +4095,9 @@ function CalendarView({ sessions, absences, schedule, scheduleExceptions, select
         ].map(({ color, label }) => (
           <div key={label} className="flex items-center gap-1.5">
             <span className={`w-2 h-2 rounded-full shrink-0 ${color}`} />
-            <span className="text-pc-muted font-semibold" style={{ fontSize: "10px" }}>{label}</span>
+            <span className="text-pc-muted font-semibold" style={{ fontSize: "10px" }}>
+              {label}
+            </span>
           </div>
         ))}
       </div>
@@ -3028,7 +4110,13 @@ function CalendarView({ sessions, absences, schedule, scheduleExceptions, select
 // Used for company-wide shortened workdays (e.g. "everyone leaves at 13:00").
 // Public holidays (röda dagar) where no work was done are handled separately via
 // the "Helgdag" absence category.
-function DayExceptionModal({ dateStr, schedule, current, onClose, onSave }: {
+function DayExceptionModal({
+  dateStr,
+  schedule,
+  current,
+  onClose,
+  onSave,
+}: {
   dateStr: string;
   schedule: WeekSchedule;
   current: ScheduleException | null;
@@ -3038,23 +4126,36 @@ function DayExceptionModal({ dateStr, schedule, current, onClose, onSave }: {
   const baseCfg = schedule[dayKeyOf(new Date(dateStr + "T12:00:00"))];
   const [endTime, setEndTime] = useState(current?.endTime ?? baseCfg.endTime);
   const [lunchMinutes, setLunchMinutes] = useState(
-    current?.lunchMinutes !== undefined ? String(current.lunchMinutes) : String(baseCfg.lunchMinutes)
+    current?.lunchMinutes !== undefined
+      ? String(current.lunchMinutes)
+      : String(baseCfg.lunchMinutes),
   );
   const [note, setNote] = useState(current?.note ?? "");
   const [err, setErr] = useState("");
 
   const baseStart = baseCfg.startTime;
   const dateLabel = new Date(dateStr + "T12:00:00").toLocaleDateString("sv-SE", {
-    weekday: "long", day: "numeric", month: "long",
+    weekday: "long",
+    day: "numeric",
+    month: "long",
   });
 
   function handleSave() {
-    if (!endTime) { setErr("Ange sluttid."); return; }
+    if (!endTime) {
+      setErr("Ange sluttid.");
+      return;
+    }
     const [sh, sm] = baseStart.split(":").map(Number);
     const [eh, em] = endTime.split(":").map(Number);
-    if (eh * 60 + em <= sh * 60 + sm) { setErr("Sluttid måste vara efter starttid."); return; }
+    if (eh * 60 + em <= sh * 60 + sm) {
+      setErr("Sluttid måste vara efter starttid.");
+      return;
+    }
     const lunch = parseInt(lunchMinutes, 10);
-    if (isNaN(lunch) || lunch < 0) { setErr("Ange giltigt antal minuter för lunch."); return; }
+    if (isNaN(lunch) || lunch < 0) {
+      setErr("Ange giltigt antal minuter för lunch.");
+      return;
+    }
     onSave({ type: "override", endTime, lunchMinutes: lunch, note: note.trim() || undefined });
   }
 
@@ -3071,7 +4172,7 @@ function DayExceptionModal({ dateStr, schedule, current, onClose, onSave }: {
           animation: "pcSheet 0.32s cubic-bezier(0.32,0.72,0,1)",
           maxHeight: "90dvh",
         }}
-        onClick={e => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
       >
         <div className="w-10 h-1 bg-[#ece6df] rounded-full mx-auto mb-5" />
 
@@ -3084,16 +4185,22 @@ function DayExceptionModal({ dateStr, schedule, current, onClose, onSave }: {
           Ange en kortare sluttid för att justera flexsaldot för denna dag.
         </div>
 
-        <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-2">Ny sluttid</div>
+        <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-2">
+          Ny sluttid
+        </div>
         <input
           type="time"
           value={endTime}
-          onChange={e => { setEndTime(e.target.value); setErr(""); }}
+          onChange={(e) => {
+            setEndTime(e.target.value);
+            setErr("");
+          }}
           className="pc-input"
         />
 
         <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-2">
-          Lunch <span className="normal-case font-medium tracking-normal text-pc-muted">(minuter)</span>
+          Lunch{" "}
+          <span className="normal-case font-medium tracking-normal text-pc-muted">(minuter)</span>
         </div>
         <input
           type="number"
@@ -3101,27 +4208,45 @@ function DayExceptionModal({ dateStr, schedule, current, onClose, onSave }: {
           max={120}
           step={15}
           value={lunchMinutes}
-          onChange={e => { setLunchMinutes(e.target.value); setErr(""); }}
+          onChange={(e) => {
+            setLunchMinutes(e.target.value);
+            setErr("");
+          }}
           className="pc-input"
         />
 
         <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-2">
-          Anteckning <span className="normal-case font-medium tracking-normal text-pc-muted">(valfri)</span>
+          Anteckning{" "}
+          <span className="normal-case font-medium tracking-normal text-pc-muted">(valfri)</span>
         </div>
         <textarea
           rows={2}
           placeholder="t.ex. Kontoret stängde tidigt"
           value={note}
-          onChange={e => setNote(e.target.value)}
+          onChange={(e) => setNote(e.target.value)}
           style={{
-            width: "100%", padding: "12px 14px", borderRadius: "14px",
-            border: "1.5px solid #ece6df", fontSize: "15px", outline: "none",
-            background: "#fdf6ee", fontWeight: 500, color: "#2d1717",
-            resize: "none", marginBottom: "16px", fontFamily: "inherit",
+            width: "100%",
+            padding: "12px 14px",
+            borderRadius: "14px",
+            border: "1.5px solid #ece6df",
+            fontSize: "15px",
+            outline: "none",
+            background: "#fdf6ee",
+            fontWeight: 500,
+            color: "#2d1717",
+            resize: "none",
+            marginBottom: "16px",
+            fontFamily: "inherit",
             boxSizing: "border-box",
           }}
-          onFocus={e => { e.currentTarget.style.borderColor = "#ff5f00"; e.currentTarget.style.background = "#fff"; }}
-          onBlur={e => { e.currentTarget.style.borderColor = "#ece6df"; e.currentTarget.style.background = "#fdf6ee"; }}
+          onFocus={(e) => {
+            e.currentTarget.style.borderColor = "#ff5f00";
+            e.currentTarget.style.background = "#fff";
+          }}
+          onBlur={(e) => {
+            e.currentTarget.style.borderColor = "#ece6df";
+            e.currentTarget.style.background = "#fdf6ee";
+          }}
         />
 
         {err && <div className="text-red-600 text-[13px] mb-3 font-semibold">{err}</div>}
@@ -3138,13 +4263,29 @@ function DayExceptionModal({ dateStr, schedule, current, onClose, onSave }: {
         <div className="grid grid-cols-2 gap-3">
           <button
             onClick={onClose}
-            style={{ padding: "16px", borderRadius: "16px", background: "#fdf6ee", border: "1.5px solid #ece6df", fontWeight: 700, fontSize: "15px", color: "#2d1717" }}
+            style={{
+              padding: "16px",
+              borderRadius: "16px",
+              background: "#fdf6ee",
+              border: "1.5px solid #ece6df",
+              fontWeight: 700,
+              fontSize: "15px",
+              color: "#2d1717",
+            }}
           >
             Avbryt
           </button>
           <button
             onClick={handleSave}
-            style={{ padding: "16px", borderRadius: "16px", background: "#ff5f00", color: "white", fontWeight: 700, fontSize: "15px", boxShadow: "0 8px 20px -8px rgba(255,95,0,0.6)" }}
+            style={{
+              padding: "16px",
+              borderRadius: "16px",
+              background: "#ff5f00",
+              color: "white",
+              fontWeight: 700,
+              fontSize: "15px",
+              boxShadow: "0 8px 20px -8px rgba(255,95,0,0.6)",
+            }}
           >
             Spara
           </button>

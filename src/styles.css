@@ -71,7 +71,8 @@
   --color-pc-muted: #9a8a82;
   --color-pc-line: #ece6df;
   --color-pc-bg: #faf6f1;
-  --font-display: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
+  --font-display:
+    "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
 }
 
 :root {

@@ -38,7 +38,11 @@ export function consumeActionFromUrl(): ParsedAction | null {
   const rawSource = params.get("source");
   params.delete("source");
   const rest = params.toString();
-  window.history.replaceState(null, "", window.location.pathname + (rest ? `?${rest}` : "") + window.location.hash);
+  window.history.replaceState(
+    null,
+    "",
+    window.location.pathname + (rest ? `?${rest}` : "") + window.location.hash,
+  );
 
   if (!ACTIONS.includes(rawAction as PunchAction)) return null;
   const source = SOURCES.includes(rawSource as ActionSource) ? (rawSource as ActionSource) : "link";

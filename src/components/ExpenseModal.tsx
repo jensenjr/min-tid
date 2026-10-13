@@ -12,9 +12,9 @@ export type ExpenseCategory =
 export type ExpenseEntry = {
   id: string;
   category: ExpenseCategory;
-  date: string;        // "YYYY-MM-DD"
-  amount?: number;     // SEK — optional for milersättning (km-only entries)
-  km?: number;         // only for milersattning
+  date: string; // "YYYY-MM-DD"
+  amount?: number; // SEK — optional for milersättning (km-only entries)
+  km?: number; // only for milersattning
   hasReceipt: boolean;
   note?: string;
   manual: true;
@@ -22,17 +22,22 @@ export type ExpenseEntry = {
 
 export const EXPENSE_META: Record<ExpenseCategory, { emoji: string; label: string }> = {
   milersattning: { emoji: "🚗", label: "Milersättning" },
-  traktamente:   { emoji: "🏨", label: "Traktamente" },
-  resetimmar:    { emoji: "⏱️", label: "Resetimmar" },
-  parkering:     { emoji: "🅿️", label: "Parkering" },
-  kost:          { emoji: "🍽️", label: "Kost" },
-  representation:{ emoji: "🤝", label: "Representation" },
-  ovrigt:        { emoji: "📋", label: "Övrigt" },
+  traktamente: { emoji: "🏨", label: "Traktamente" },
+  resetimmar: { emoji: "⏱️", label: "Resetimmar" },
+  parkering: { emoji: "🅿️", label: "Parkering" },
+  kost: { emoji: "🍽️", label: "Kost" },
+  representation: { emoji: "🤝", label: "Representation" },
+  ovrigt: { emoji: "📋", label: "Övrigt" },
 };
 
-const CATEGORIES = Object.entries(EXPENSE_META) as [ExpenseCategory, { emoji: string; label: string }][];
+const CATEGORIES = Object.entries(EXPENSE_META) as [
+  ExpenseCategory,
+  { emoji: string; label: string },
+][];
 
-function todayStr() { return new Date().toISOString().slice(0, 10); }
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
 
 export default function ExpenseModal({
   open,
@@ -66,12 +71,18 @@ export default function ExpenseModal({
   if (!open) return null;
 
   function handleSave() {
-    if (!date) { setErr("Ange datum."); return; }
+    if (!date) {
+      setErr("Ange datum.");
+      return;
+    }
     const isMileage = category === "milersattning";
     let parsedAmount: number | undefined;
     if (!isMileage) {
       const v = parseFloat(amount.replace(",", "."));
-      if (isNaN(v) || v <= 0) { setErr("Ange ett giltigt belopp."); return; }
+      if (isNaN(v) || v <= 0) {
+        setErr("Ange ett giltigt belopp.");
+        return;
+      }
       parsedAmount = v;
     } else if (amount.trim()) {
       // Allow optional amount for milersättning if the user wants to record one
@@ -81,7 +92,10 @@ export default function ExpenseModal({
     let parsedKm: number | undefined;
     if (isMileage) {
       parsedKm = parseFloat(km.replace(",", "."));
-      if (isNaN(parsedKm) || parsedKm <= 0) { setErr("Ange antal km."); return; }
+      if (isNaN(parsedKm) || parsedKm <= 0) {
+        setErr("Ange antal km.");
+        return;
+      }
     }
     onSave({
       id: crypto.randomUUID(),
@@ -108,17 +122,17 @@ export default function ExpenseModal({
           animation: "pcSheet 0.32s cubic-bezier(0.32,0.72,0,1)",
           maxHeight: "92dvh",
         }}
-        onClick={e => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
       >
         <div className="w-10 h-1 bg-[#ece6df] rounded-full mx-auto mb-5" />
 
         <div className="font-extrabold text-[22px] tracking-tight mb-1">Lägg till utlägg</div>
-        <div className="text-[13px] text-[#9c7c5c] mb-6">
-          Välj typ, datum och belopp.
-        </div>
+        <div className="text-[13px] text-[#9c7c5c] mb-6">Välj typ, datum och belopp.</div>
 
         {/* Category grid */}
-        <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-3">Typ</div>
+        <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-3">
+          Typ
+        </div>
         <div className="grid grid-cols-3 gap-2 mb-5">
           {CATEGORIES.map(([key, meta]) => (
             <button
@@ -137,16 +151,25 @@ export default function ExpenseModal({
         </div>
 
         {/* Date */}
-        <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-2">Datum</div>
+        <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-2">
+          Datum
+        </div>
         <input
           type="date"
           value={date}
-          onChange={e => setDate(e.target.value)}
+          onChange={(e) => setDate(e.target.value)}
           style={{
-            width: "100%", boxSizing: "border-box", WebkitAppearance: "none",
-            padding: "12px 14px", borderRadius: "14px",
-            border: "1.5px solid #ece6df", fontSize: "16px", outline: "none",
-            background: "#fdf6ee", fontWeight: 600, color: "#2d1717",
+            width: "100%",
+            boxSizing: "border-box",
+            WebkitAppearance: "none",
+            padding: "12px 14px",
+            borderRadius: "14px",
+            border: "1.5px solid #ece6df",
+            fontSize: "16px",
+            outline: "none",
+            background: "#fdf6ee",
+            fontWeight: 600,
+            color: "#2d1717",
             marginBottom: "16px",
           }}
         />
@@ -154,7 +177,9 @@ export default function ExpenseModal({
         {/* km — only for milersattning */}
         {category === "milersattning" && (
           <>
-            <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-2">Antal km</div>
+            <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-2">
+              Antal km
+            </div>
             <div className="relative mb-4">
               <input
                 type="number"
@@ -163,15 +188,27 @@ export default function ExpenseModal({
                 min={0}
                 step={1}
                 value={km}
-                onChange={e => setKm(e.target.value)}
+                onChange={(e) => setKm(e.target.value)}
                 style={{
-                  width: "100%", boxSizing: "border-box",
-                  padding: "12px 48px 12px 14px", borderRadius: "14px",
-                  border: "1.5px solid #ece6df", fontSize: "16px", outline: "none",
-                  background: "#fdf6ee", fontWeight: 600, color: "#2d1717",
+                  width: "100%",
+                  boxSizing: "border-box",
+                  padding: "12px 48px 12px 14px",
+                  borderRadius: "14px",
+                  border: "1.5px solid #ece6df",
+                  fontSize: "16px",
+                  outline: "none",
+                  background: "#fdf6ee",
+                  fontWeight: 600,
+                  color: "#2d1717",
                 }}
-                onFocus={e => { e.currentTarget.style.borderColor = "#ff5f00"; e.currentTarget.style.background = "#fff"; }}
-                onBlur={e => { e.currentTarget.style.borderColor = "#ece6df"; e.currentTarget.style.background = "#fdf6ee"; }}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = "#ff5f00";
+                  e.currentTarget.style.background = "#fff";
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = "#ece6df";
+                  e.currentTarget.style.background = "#fdf6ee";
+                }}
               />
               <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[14px] font-bold text-[#9c7c5c] pointer-events-none">
                 km
@@ -184,7 +221,10 @@ export default function ExpenseModal({
         <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-2">
           Belopp
           {category === "milersattning" && (
-            <span className="normal-case font-medium tracking-normal text-[#9c7c5c]"> (valfri — räcker med km)</span>
+            <span className="normal-case font-medium tracking-normal text-[#9c7c5c]">
+              {" "}
+              (valfri — räcker med km)
+            </span>
           )}
         </div>
         <div className="relative mb-4">
@@ -195,15 +235,27 @@ export default function ExpenseModal({
             min={0}
             step={1}
             value={amount}
-            onChange={e => setAmount(e.target.value)}
+            onChange={(e) => setAmount(e.target.value)}
             style={{
-              width: "100%", boxSizing: "border-box",
-              padding: "12px 48px 12px 14px", borderRadius: "14px",
-              border: "1.5px solid #ece6df", fontSize: "16px", outline: "none",
-              background: "#fdf6ee", fontWeight: 600, color: "#2d1717",
+              width: "100%",
+              boxSizing: "border-box",
+              padding: "12px 48px 12px 14px",
+              borderRadius: "14px",
+              border: "1.5px solid #ece6df",
+              fontSize: "16px",
+              outline: "none",
+              background: "#fdf6ee",
+              fontWeight: 600,
+              color: "#2d1717",
             }}
-            onFocus={e => { e.currentTarget.style.borderColor = "#ff5f00"; e.currentTarget.style.background = "#fff"; }}
-            onBlur={e => { e.currentTarget.style.borderColor = "#ece6df"; e.currentTarget.style.background = "#fdf6ee"; }}
+            onFocus={(e) => {
+              e.currentTarget.style.borderColor = "#ff5f00";
+              e.currentTarget.style.background = "#fff";
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.borderColor = "#ece6df";
+              e.currentTarget.style.background = "#fdf6ee";
+            }}
           />
           <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[14px] font-bold text-[#9c7c5c] pointer-events-none">
             kr
@@ -211,7 +263,9 @@ export default function ExpenseModal({
         </div>
 
         {/* Receipt toggle */}
-        <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-2">Kvitto</div>
+        <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-2">
+          Kvitto
+        </div>
         <div className="flex gap-2 mb-2">
           <button
             type="button"
@@ -245,21 +299,37 @@ export default function ExpenseModal({
 
         {/* Note */}
         <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-2">
-          Anteckning <span className="normal-case font-medium tracking-normal text-[#9c7c5c]">(valfri)</span>
+          Anteckning{" "}
+          <span className="normal-case font-medium tracking-normal text-[#9c7c5c]">(valfri)</span>
         </div>
         <textarea
           rows={2}
           placeholder="t.ex. Resa till kundmöte i Göteborg"
           value={note}
-          onChange={e => setNote(e.target.value)}
+          onChange={(e) => setNote(e.target.value)}
           style={{
-            width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: "14px",
-            border: "1.5px solid #ece6df", fontSize: "15px", outline: "none",
-            background: "#fdf6ee", fontWeight: 500, color: "#2d1717",
-            resize: "none", marginBottom: "16px", fontFamily: "inherit",
+            width: "100%",
+            boxSizing: "border-box",
+            padding: "12px 14px",
+            borderRadius: "14px",
+            border: "1.5px solid #ece6df",
+            fontSize: "15px",
+            outline: "none",
+            background: "#fdf6ee",
+            fontWeight: 500,
+            color: "#2d1717",
+            resize: "none",
+            marginBottom: "16px",
+            fontFamily: "inherit",
           }}
-          onFocus={e => { e.currentTarget.style.borderColor = "#ff5f00"; e.currentTarget.style.background = "#fff"; }}
-          onBlur={e => { e.currentTarget.style.borderColor = "#ece6df"; e.currentTarget.style.background = "#fdf6ee"; }}
+          onFocus={(e) => {
+            e.currentTarget.style.borderColor = "#ff5f00";
+            e.currentTarget.style.background = "#fff";
+          }}
+          onBlur={(e) => {
+            e.currentTarget.style.borderColor = "#ece6df";
+            e.currentTarget.style.background = "#fdf6ee";
+          }}
         />
 
         {err && <div className="text-red-600 text-[13px] mb-3 font-semibold">{err}</div>}
@@ -268,8 +338,13 @@ export default function ExpenseModal({
           <button
             onClick={onClose}
             style={{
-              padding: "16px", borderRadius: "16px", background: "#fdf6ee",
-              border: "1.5px solid #ece6df", fontWeight: 700, fontSize: "15px", color: "#2d1717",
+              padding: "16px",
+              borderRadius: "16px",
+              background: "#fdf6ee",
+              border: "1.5px solid #ece6df",
+              fontWeight: 700,
+              fontSize: "15px",
+              color: "#2d1717",
             }}
           >
             Avbryt
@@ -277,8 +352,12 @@ export default function ExpenseModal({
           <button
             onClick={handleSave}
             style={{
-              padding: "16px", borderRadius: "16px", background: "#ff5f00",
-              color: "white", fontWeight: 700, fontSize: "15px",
+              padding: "16px",
+              borderRadius: "16px",
+              background: "#ff5f00",
+              color: "white",
+              fontWeight: 700,
+              fontSize: "15px",
               boxShadow: "0 8px 20px -8px rgba(255,95,0,0.6)",
             }}
           >
