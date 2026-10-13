@@ -11,7 +11,10 @@ All notable changes to **min-tid** are recorded here. Format loosely follows [Ke
 
 ## [Unreleased]
 
-_Nothing yet._
+### Internt — kärnlogik utbruten (PR 1)
+
+- Tids- och flexberäkningarna ligger nu i egna, testade moduler under `src/lib/` (`dates`, `days`, `flex`, `schedule`, `types`) i stället för inuti `PunchClock.tsx`. Ingen förändring i hur appen beter sig eller ser ut.
+- Tester pinnar nuvarande beteende, inklusive fyra kända fel som dokumenteras som förväntade fel och rättas i ett senare steg.
 
 ## [1.0.0-beta.12] — 2026-08-26
 
