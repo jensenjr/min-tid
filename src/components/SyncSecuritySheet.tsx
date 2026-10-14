@@ -19,6 +19,7 @@ export default function SyncSecuritySheet({
   onPullNow,
   onSetupSync,
   onOpenAccount,
+  demo = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -29,13 +30,15 @@ export default function SyncSecuritySheet({
   onPullNow: () => void;
   onSetupSync: () => void;
   onOpenAccount: () => void;
+  /** Demo mode: sync is off, the sync keys are never read and the sheet says so. */
+  demo?: boolean;
 }) {
   const [explain, setExplain] = useState(false);
   if (!open) return null;
 
   let username: string | null = null;
   try {
-    username = localStorage.getItem("sync_username");
+    if (!demo) username = localStorage.getItem("sync_username");
   } catch {
     /* ignore */
   }
@@ -93,7 +96,15 @@ export default function SyncSecuritySheet({
         )}
       </div>
 
-      {syncToken ? (
+      {demo ? (
+        <div className="bg-pc-apricot border border-pc-line rounded-[16px] px-4 py-3 mb-3 text-[13px] leading-snug">
+          <div className="font-bold mb-0.5">Synk är avstängd i demoläget</div>
+          <div className="text-pc-muted font-medium">
+            Demon pratar aldrig med någon server och rör inte dina riktiga data. Avsluta demon för
+            att slå på krypterad synk.
+          </div>
+        </div>
+      ) : syncToken ? (
         <div className="bg-pc-apricot border border-pc-line rounded-[16px] px-4 py-3 mb-3">
           <div className="flex items-center gap-3">
             <span className="text-[20px] leading-none shrink-0">
@@ -132,7 +143,7 @@ export default function SyncSecuritySheet({
       )}
 
       <div className="space-y-2">
-        {!syncToken && (
+        {!demo && !syncToken && (
           <button
             onClick={onSetupSync}
             className="pc-press w-full py-3.5 rounded-[16px] bg-pc-orange text-white font-bold text-[14px]"
@@ -140,14 +151,16 @@ export default function SyncSecuritySheet({
             Aktivera synkronisering
           </button>
         )}
-        <button
-          onClick={onOpenAccount}
-          className="pc-press w-full py-3.5 rounded-[16px] bg-pc-bg border border-pc-line font-bold text-[14px] text-pc-ink"
-        >
-          {syncToken
-            ? "Hantera konto, synk-kod och felsökning"
-            : "Profil, synk-konto och inställningar"}
-        </button>
+        {!demo && (
+          <button
+            onClick={onOpenAccount}
+            className="pc-press w-full py-3.5 rounded-[16px] bg-pc-bg border border-pc-line font-bold text-[14px] text-pc-ink"
+          >
+            {syncToken
+              ? "Hantera konto, synk-kod och felsökning"
+              : "Profil, synk-konto och inställningar"}
+          </button>
+        )}
         {syncToken && syncStatus === "error" && (
           <button
             onClick={onSetupSync}
