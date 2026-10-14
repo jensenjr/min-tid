@@ -31,10 +31,12 @@ export const EXPENSE_META: Record<ExpenseCategory, { emoji: string; label: strin
   ovrigt: { emoji: "📋", label: "Övrigt" },
 };
 
-const CATEGORIES = Object.entries(EXPENSE_META) as [
-  ExpenseCategory,
-  { emoji: string; label: string },
-][];
+// "resetimmar" is no longer offered: travel time lives in Restid (TravelTimeEditor). The
+// category stays in the type and EXPENSE_META so an old expense that could not be migrated
+// to a travel entry still renders.
+const CATEGORIES = (
+  Object.entries(EXPENSE_META) as [ExpenseCategory, { emoji: string; label: string }][]
+).filter(([key]) => key !== "resetimmar");
 
 function todayStr() {
   return todayLocal();
