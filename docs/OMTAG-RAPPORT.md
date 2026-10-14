@@ -20,6 +20,7 @@ warnings), 541 tests.
 | 8   | Travel time                                      | merged | [#12](https://github.com/jensenjr/min-tid/pull/12) | 524 (+60)               |
 | 9   | Demo and 1.0                                     | merged | [#15](https://github.com/jensenjr/min-tid/pull/15) | 540 (+16)               |
 | —   | fix: report ignores days before the flex start   | merged | [#16](https://github.com/jensenjr/min-tid/pull/16) | 541 (+1)                |
+| —   | fix: copy vendor dir before npm ci (Dockerfile)  | merged | [#17](https://github.com/jensenjr/min-tid/pull/17) | 541                     |
 
 Nothing is open or blocked. No STOP rule fired.
 
@@ -39,8 +40,12 @@ Nothing is open or blocked. No STOP rule fired.
   resulting `omtag/v1` tree was compared byte-for-byte with that commit.
 - **PR 4** was briefly closed by GitHub when a command chain deleted its head branch after a
   failed merge; the branch was re-pushed, the PR reopened and merged normally. Nothing was lost.
-- **Two fixes outside the plan**: #10 (the user saw "Idag −7 h 15 min" in red before punching
-  in) and #16 (found in the final walk-through).
+- **Three fixes outside the plan**: #10 (the user saw "Idag −7 h 15 min" in red before punching
+  in), #16 (found in the final walk-through) and #17 — opened by the Railway app when the user's
+  deploy of `omtag/v1` failed: PR 6's `file:vendor/xlsx-0.20.3.tgz` dependency was missing at the
+  Dockerfile's `npm ci` step. Verified by simulating that step with an empty npm cache (ENOENT
+  without `vendor/`, success with it) before merging; Docker itself was not running locally, so
+  the image was not built here.
 - **`stage` branch** was created on request and removed again on request; the user hosts
   `omtag/v1` directly for testing.
 - Several agents were interrupted by network drops and usage limits and resumed from their
