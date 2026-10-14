@@ -213,6 +213,15 @@ Pure balance logic; settings live in `AppState.vacation?: VacationSettings` (`da
 - **API:** `vacationBalance(state, today)`, `vacationLine`, `balanceWarning`, `vacationWarning(state, newAbsence)` (AbsenceModal shows it live, never blocking save), `vacationDaysOn/Between`, `vacationYearOf`, `parseVacation`, `resolveVacation`, `fmtDays`.
 - **UI:** `<VacationCard state today onChange compact? />`; `compact` renders only the line + warning (`reportSlots.vacation`); `bare` drops the card chrome (inside the Mer → "Semester" sheet, `moreSlots.vacation`).
 
+### Travel time (Restid)
+
+Pure rules in `src/lib/travel.ts`; UI in `TravelTimeEditor.tsx` (a day's trips) and `TravelRulesEditor.tsx` (rules), both controlled and standalone.
+
+- Data: `AppState.travel?: TravelEntry[]` (`{ id, date, from?, to?, durationMin?, destination?, note?, imported? }`; UI entries always have from/to, imported ones only `durationMin`) and `travelRules?: TravelRules` (`outside: 'payroll'|'flex'|'none'` default payroll, `factor` 1, `maxPerDayMin?`, `excludeNight` false). Both persist via `load()`/`save()`, sync (`SyncState`) and the dirty merge (`mergeTravelState`: union by id, local wins; rules local).
+- `splitTravel(entry, dayConfig, rules)` / `splitTravelDay(entries, cfg, rules)` → `{ inScheduleMin, outsideMin, payrollMin, flexMin }`. Inside the effective schedule window = worked time (no factor). Outside = `outsideMin` (after night exclusion), credited as `round(outside × factor)`, then capped by `maxPerDayMin` (cap is per day and AFTER the factor), routed by `rules.outside` ('none' → 0/0). Times are wall-clock minutes (DST not corrected); a trip across midnight is outside after 24:00; a non-scheduled day is all outside; a duration-only entry counts entirely as outside. Overlap with punched sessions is not removed.
+- `makeTravelFor(travel, rules)` builds evaluateDay's `ctx.travelFor` hook (PunchClock's `flexCtx`). **It only fills `evaluateDay().travel`; `flexDelta` ignores travel until days.ts gets a rule for it.**
+- Migration (`migrateTravelState`, in `load()` and `applyRemoteState`): `resetimmar` expenses (the old form only had a kr "Belopp" field, so the amount is read as hours, 0 < h ≤ 24) become `imp-<expenseId>` entries with `durationMin`, `imported: true` and the original amount in the note; anything else stays an expense. Idempotent. `ExpenseModal` no longer offers the category but the type and `EXPENSE_META` keep it so unmigrated legacy rows still render.
+
 ### Components
 
 | File                                                               | Responsibility                                                                                                                                                                                                                                                                                   |

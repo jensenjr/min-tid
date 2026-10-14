@@ -103,6 +103,18 @@ All notable changes to **min-tid** are recorded here. Format loosely follows [Ke
 - **Ingående saldo.** Under ”Ändra” kan du ange dagar kvar och sparade dagar per ett visst datum; bara semester efter det datumet dras därefter.
 - Inställningarna följer med i synken och äldre data läses in oförändrat.
 
+### Restid (PR 8)
+
+- **Restid som egen post.** En resa har från- och tilltid (i femminutersteg), valfri destination och anteckning. Resor kan korsa midnatt. Redigeraren (lägg till, ändra, ta bort) kopplas in på dagen i nästa steg av navigeringen.
+- **Restidsregler.** Restid inom schemalagd arbetstid räknas alltid som arbetad tid. För restid utanför arbetstid väljer du: till lön (standard), till flex eller räknas inte. Du kan också ange en faktor (till exempel 0,5), en maxgräns per dag och att natten (22:00–06:00) inte ska räknas.
+- **Resetimmar flyttas.** Utlägg av typen Resetimmar finns inte längre att välja. Gamla resetimmar flyttas automatiskt till restid, märkta ”importerad”, med din anteckning kvar. Eftersom de saknar klockslag räknas de som restid utanför arbetstid. Ett gammalt utlägg vars belopp inte kan vara timmar (till exempel 350) lämnas orört som utlägg – inget försvinner.
+- Restid sparas och synkas mellan enheterna.
+- Restiden påverkar ännu inte flexsaldot: det kräver en ändring i beräkningen (dag-status) som görs separat.
+
+#### Internt
+
+- Ny `src/lib/travel.ts` (`splitTravel`, `splitTravelDay`, `makeTravelFor`, `migrateTravelState`) med tester. `evaluateDay` får restiden genom `travelFor`-kroken men reglerna i `days.ts` är oförändrade.
+
 ## [1.0.0-beta.12] — 2026-08-26
 
 ### Added
