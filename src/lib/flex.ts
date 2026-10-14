@@ -1,15 +1,91 @@
-import { type ScheduleSource, type DayConfig, netDayMin, getEffectiveDayConfig } from "./schedule";
-import { getWeekMonday, todayLocal } from "./dates";
-import { computeDayMinutes, getAbsencesForDate } from "./days";
+// ─── Flex bank ────────────────────────────────────────────────
+// The bank is a fold over evaluateDay (days.ts): the sum of each day's flexDelta from
+// trackingStartDate up to and including today. Today only counts once evaluateDay calls
+// it settled; future days never count. Missing (punch mode) and unconfirmed (schedule
+// mode) days are listed so the UI can ask the user to fill them in.
+import {
+  type DayConfig,
+  type ScheduleSource,
+  addDaysStr,
+  mondayOfStr,
+  netDayMin,
+} from "./schedule";
+import { isYmd, todayLocal } from "./dates";
+import {
+  DEFAULT_AUTO_LUNCH_THRESHOLD_MIN,
+  type DayContext,
+  evaluateDay,
+  validThreshold,
+  workedFromSessions,
+} from "./days";
 import type { AbsenceEntry, ScheduleException, Session } from "./types";
 
-// ─── Flex bank ────────────────────────────────────────────────
-// Day-by-day accrual over completed (past) days only. For every day strictly
-// before today between `trackingStartDate` and the range end, flex += (actual − norm).
-// Non-flex absences (VAB, semester, etc.) excuse the day — they reduce the norm but
-// don't drain flex. Flex absences deduct their minutes from the bank as intended.
-// **Today never contributes to flex.** A day's contribution rolls in the morning after
-// it ends — that way an unworked or partly-worked today doesn't show as red flex.
+export type FlexRange = { from?: string; to?: string }; // inclusive local day keys
+export type FlexResult = { minutes: number; missingDays: string[]; unconfirmedDays: string[] };
+
+/** Flex over a range (default: everything since trackingStartDate), clamped to today. */
+export function computeFlex(ctx: DayContext, range: FlexRange = {}): FlexResult {
+  const out: FlexResult = { minutes: 0, missingDays: [], unconfirmedDays: [] };
+  const start = ctx.trackingStartDate;
+  if (!isYmd(start)) return out;
+  const today = ctx.today ?? todayLocal();
+  // Freeze "today" and "now" so every day of the fold sees the same clock.
+  const c: DayContext = { ...ctx, today, now: ctx.now ?? Date.now() };
+  const from = isYmd(range.from) && range.from > start ? range.from : start;
+  const to = isYmd(range.to) && range.to < today ? range.to : today;
+  for (let d = from; d <= to; d = addDaysStr(d, 1)) {
+    const ev = evaluateDay(d, c, { explain: false });
+    out.minutes += ev.flexDelta;
+    if (ev.status === "missing") out.missingDays.push(d);
+    else if (ev.status === "unconfirmed") out.unconfirmedDays.push(d);
+  }
+  return out;
+}
+
+export type WeekFlex = FlexResult & { mondayStr: string };
+
+/** The last `weeks` weeks (newest first, local Mondays), stopping before trackingStartDate. */
+export function computeWeeklyFlex(ctx: DayContext, weeks: number): WeekFlex[] {
+  const start = ctx.trackingStartDate;
+  if (!isYmd(start)) return [];
+  const today = ctx.today ?? todayLocal();
+  const c: DayContext = { ...ctx, today, now: ctx.now ?? Date.now() };
+  const thisMonday = mondayOfStr(today);
+  const rows: WeekFlex[] = [];
+  for (let i = 0; i < weeks; i++) {
+    const mon = addDaysStr(thisMonday, -7 * i);
+    const sun = addDaysStr(mon, 6);
+    if (sun < start) break;
+    rows.push({ mondayStr: mon, ...computeFlex(c, { from: mon, to: sun }) });
+  }
+  return rows;
+}
+
+// ─── Old API — thin wrappers kept for existing callers ────────
+// They evaluate in punch mode with no confirmations/adjustments. Reporting mode never
+// changes flex minutes (missing and unconfirmed days both leave flex untouched), only
+// which list a day lands in.
+function legacyCtx(
+  sessions: Session[],
+  absences: AbsenceEntry[],
+  schedule: ScheduleSource,
+  trackingStartDate: string | undefined,
+  exceptions: Record<string, ScheduleException>,
+  today = todayLocal(),
+): DayContext {
+  return {
+    sessions,
+    absences,
+    schedule,
+    exceptions,
+    reportingMode: "punch",
+    trackingStartDate,
+    today,
+    now: Date.now(),
+  };
+}
+
+/** Flex for completed past days only (date < today) in [rangeStart, rangeEnd]. */
 export function computeFlexMinutes(
   sessions: Session[],
   absences: AbsenceEntry[],
@@ -20,61 +96,13 @@ export function computeFlexMinutes(
   exceptions: Record<string, ScheduleException> = {},
 ): number {
   if (!trackingStartDate) return 0;
-  const today = todayLocal();
-  const start = rangeStart && rangeStart > trackingStartDate ? rangeStart : trackingStartDate;
-  const end = rangeEnd && rangeEnd < today ? rangeEnd : today;
-  if (start > end) return 0;
-
-  // Group completed sessions by date for the iteration window
-  const byDate: Record<string, Session[]> = {};
-  for (const s of sessions) {
-    if (s.checkOut === null) continue;
-    const d = new Date(s.checkIn).toISOString().slice(0, 10);
-    if (d < start || d >= today) continue;
-    (byDate[d] ??= []).push(s);
-  }
-
-  let flex = 0;
-  const cur = new Date(start + "T12:00:00");
-  const endDate = new Date(end + "T12:00:00");
-
-  while (cur <= endDate) {
-    const dateStr = cur.toISOString().slice(0, 10);
-    // Skip today and any future date — only past, completed days contribute.
-    if (dateStr >= today) break;
-
-    const dayCfg = getEffectiveDayConfig(dateStr, schedule, exceptions);
-    const dayAbsences = getAbsencesForDate(absences, dateStr);
-    const daySessions = byDate[dateStr] ?? [];
-
-    let flexAbsMin = 0;
-    let nonFlexAbsMin = 0;
-    for (const a of dayAbsences) {
-      const min = a.hours !== undefined ? Math.round(a.hours * 60) : netDayMin(dayCfg);
-      if (a.category === "flex") flexAbsMin += min;
-      else nonFlexAbsMin += min;
-    }
-
-    const scheduledNorm = dayCfg.active ? netDayMin(dayCfg) : 0;
-    const norm = Math.max(0, scheduledNorm - nonFlexAbsMin);
-    const actual =
-      daySessions.length > 0
-        ? computeDayMinutes(daySessions, dateStr, schedule, exceptions).net
-        : 0;
-
-    flex += actual - norm;
-    flex -= flexAbsMin;
-
-    cur.setDate(cur.getDate() + 1);
-  }
-
-  return flex;
+  const ctx = legacyCtx(sessions, absences, schedule, trackingStartDate, exceptions);
+  const yesterday = addDaysStr(ctx.today as string, -1);
+  const to = rangeEnd && rangeEnd < yesterday ? rangeEnd : yesterday;
+  return computeFlex(ctx, { from: rangeStart, to }).minutes;
 }
 
-// Today's contribution to the flex bank — added once today's shift looks settled.
-// "Settled" = no active session AND at least one completed session today (or a flex
-// absence on today). During an active session, today contributes 0 — the live
-// running timer and the "Idag" sub-stat are the in-progress signals.
+/** Today's flexDelta once evaluateDay calls today settled, else 0. */
 export function computeTodayContribution(
   sessions: Session[],
   absences: AbsenceEntry[],
@@ -84,55 +112,22 @@ export function computeTodayContribution(
   exceptions: Record<string, ScheduleException> = {},
 ): number {
   if (!trackingStartDate || today < trackingStartDate) return 0;
-
-  const todaySessions = sessions.filter(
-    (s) => new Date(s.checkIn).toISOString().slice(0, 10) === today,
-  );
-  const hasActive = todaySessions.some((s) => s.checkOut === null);
-  if (hasActive) return 0;
-  const completedToday = todaySessions.filter((s) => s.checkOut !== null);
-
-  const dayCfg = getEffectiveDayConfig(today, schedule, exceptions);
-  const dayAbsences = getAbsencesForDate(absences, today);
-
-  let flexAbsMin = 0;
-  let nonFlexAbsMin = 0;
-  for (const a of dayAbsences) {
-    const min = a.hours !== undefined ? Math.round(a.hours * 60) : netDayMin(dayCfg);
-    if (a.category === "flex") flexAbsMin += min;
-    else nonFlexAbsMin += min;
-  }
-
-  // Don't commit anything until the user has actually interacted with today
-  // (punched in/out at least once or has a flex absence).
-  if (completedToday.length === 0 && flexAbsMin === 0) return 0;
-
-  const scheduledNorm = dayCfg.active ? netDayMin(dayCfg) : 0;
-  const norm = Math.max(0, scheduledNorm - nonFlexAbsMin);
-  const actual =
-    completedToday.length > 0
-      ? computeDayMinutes(completedToday, today, schedule, exceptions).net
-      : 0;
-
-  return actual - norm - flexAbsMin;
+  const ctx = legacyCtx(sessions, absences, schedule, trackingStartDate, exceptions, today);
+  return evaluateDay(today, ctx, { explain: false }).flexDelta;
 }
 
-// Live per-day flex shown on the dashboard. Unlike `computeTodayContribution`,
-// this updates continuously while you're punched in so you can see "how today is
-// going" in real time — even mid-shift.
-export function computeTodayDelta(todaySessions: Session[], todayCfg: DayConfig): number {
-  let raw = 0;
-  for (const s of todaySessions) {
-    const end = s.checkOut ?? Date.now();
-    raw += (end - s.checkIn) / 60000;
-  }
-  const lunch = todayCfg.active ? todayCfg.lunchMinutes : 0;
-  const liveNet = Math.max(0, raw - lunch);
-  const target = todayCfg.active ? netDayMin(todayCfg) : 0;
-  return liveNet - target;
+/** Live worked − norm for today's sessions (display only), with the same break rule. */
+export function computeTodayDelta(
+  todaySessions: Session[],
+  todayCfg: DayConfig,
+  autoLunchThresholdMin = DEFAULT_AUTO_LUNCH_THRESHOLD_MIN,
+): number {
+  const threshold = validThreshold(autoLunchThresholdMin) ?? DEFAULT_AUTO_LUNCH_THRESHOLD_MIN;
+  const { workedMin } = workedFromSessions(todaySessions, todayCfg, threshold, Date.now());
+  return workedMin - (todayCfg.active ? netDayMin(todayCfg) : 0);
 }
 
-// Week-by-week flex breakdown for the last N weeks (newest first).
+/** Past-day flex per week (newest first); the current week adds `todayContribution`. */
 export function computeWeeklyFlexBreakdown(
   sessions: Session[],
   absences: AbsenceEntry[],
@@ -144,26 +139,22 @@ export function computeWeeklyFlexBreakdown(
 ): { mondayStr: string; minutes: number }[] {
   if (!trackingStartDate) return [];
   const out: { mondayStr: string; minutes: number }[] = [];
-  const thisMonday = getWeekMonday(new Date());
+  const thisMonday = mondayOfStr(todayLocal());
   for (let i = 0; i < weeks; i++) {
-    const mon = new Date(thisMonday);
-    mon.setDate(mon.getDate() - i * 7);
-    const sun = new Date(mon);
-    sun.setDate(sun.getDate() + 6);
-    const monStr = mon.toISOString().slice(0, 10);
-    const sunStr = sun.toISOString().slice(0, 10);
-    if (sunStr < trackingStartDate) break;
+    const mon = addDaysStr(thisMonday, -7 * i);
+    const sun = addDaysStr(mon, 6);
+    if (sun < trackingStartDate) break;
     let minutes = computeFlexMinutes(
       sessions,
       absences,
       schedule,
       trackingStartDate,
-      monStr,
-      sunStr,
+      mon,
+      sun,
       exceptions,
     );
     if (i === 0) minutes += todayContribution; // current week picks up today's committed flex
-    out.push({ mondayStr: monStr, minutes });
+    out.push({ mondayStr: mon, minutes });
   }
   return out;
 }

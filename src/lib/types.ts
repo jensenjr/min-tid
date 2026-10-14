@@ -20,6 +20,7 @@ export type Session = {
   manual: boolean;
   note?: string;
   source?: ActionSource; // set when the punch came from a QR/NFC/WiFi/shortcut trigger
+  breakMinutes?: number; // registered break; when set (on any session of a day) it replaces the auto lunch
 };
 
 // An override for a single calendar date — used when the effective work schedule
@@ -37,6 +38,23 @@ export type ScheduleException = {
 // "punch" = the user clocks in/out (Stämpla). Undefined = not chosen yet.
 export type ReportingMode = "schedule" | "punch";
 
+// "Justera dag": what the user says the day was. Missing start/end fall back to the
+// schedule; a missing breakMin follows the auto-lunch rule (see evaluateDay).
+export type DayAdjustment = {
+  date: string; // YYYY-MM-DD (local)
+  start?: string; // "HH:MM"
+  end?: string; // "HH:MM"
+  breakMin?: number;
+  note?: string;
+};
+
+// A confirmed ("attesterad") month. Locked days cannot be edited (isDayLocked) and an
+// unregistered day in a locked month reads as reported per schedule.
+export type LockedMonth = { at: number; by: string };
+
+export type AuditAction = "confirm" | "unlock";
+export type AuditEntry = { at: number; action: AuditAction; month: string }; // month: YYYY-MM
+
 // Shape persisted in localStorage under `punchclock_v2`.
 export type AppState = {
   name: string;
@@ -51,4 +69,10 @@ export type AppState = {
   flexBaseMinutes: number;
   trackingStartDate?: string; // YYYY-MM-DD — flex accrues from this day forward
   scheduleExceptions: Record<string, ScheduleException>; // YYYY-MM-DD → override
+  // Day status (PR 3). All optional so old data loads; load() fills the defaults.
+  autoLunchThresholdMin?: number; // default 300: one session longer than this gets the schedule lunch
+  confirmedDays?: Record<string, true>; // YYYY-MM-DD → "Enligt schema" confirmed
+  lockedMonths?: Record<string, LockedMonth>; // YYYY-MM → lock
+  dayAdjustments?: Record<string, DayAdjustment>; // YYYY-MM-DD → adjustment
+  auditLog?: AuditEntry[]; // confirm/unlock history, sorted by at
 };

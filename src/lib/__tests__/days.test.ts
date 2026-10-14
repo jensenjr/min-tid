@@ -44,24 +44,46 @@ describe("computeDayMinutes", () => {
     expect(r.net).toBe(480);
   });
 
-  it("sums several sessions", () => {
+  it("sums several sessions (no lunch: the user punched out for it)", () => {
     const r = computeDayMinutes(
       [session(WED, "08:00", "12:00"), session(WED, "13:00", "17:00")],
       WED,
       DEFAULT_SCHEDULE,
     );
     expect(r.raw).toBe(480);
+    expect(r.net).toBe(480);
+    expect(r.breakMin).toBe(0);
   });
 
   it("uses now() for an open session", () => {
     const r = computeDayMinutes([session(WED, "08:00", null)], WED, DEFAULT_SCHEDULE);
     expect(r.raw).toBe(120);
-    expect(r.net).toBe(60);
+    // PR 1 pinned 60 (lunch deducted after two hours). Under 5 h nothing is deducted.
+    expect(r.net).toBe(120);
+  });
+
+  it("deducts the lunch only from a single session longer than the threshold", () => {
+    expect(computeDayMinutes([session(WED, "08:00", "13:00")], WED, DEFAULT_SCHEDULE).net).toBe(
+      300,
+    );
+    expect(computeDayMinutes([session(WED, "08:00", "13:01")], WED, DEFAULT_SCHEDULE).net).toBe(
+      241,
+    );
+    expect(
+      computeDayMinutes([session(WED, "08:00", "12:30")], WED, DEFAULT_SCHEDULE, {}, 240).net,
+    ).toBe(210);
+  });
+
+  it("uses registered breakMinutes when present", () => {
+    const s = [session(WED, "08:00", "17:00", WED, { breakMinutes: 30 })];
+    expect(computeDayMinutes(s, WED, DEFAULT_SCHEDULE)).toMatchObject({ net: 510, breakMin: 30 });
   });
 
   it("never goes negative", () => {
-    const r = computeDayMinutes([session(WED, "08:00", "08:30")], WED, DEFAULT_SCHEDULE);
-    expect(r.net).toBe(0);
+    // PR 1 relied on the 60 min lunch exceeding a 30 min session; with the new rule that
+    // only happens with a registered break.
+    const s = [session(WED, "08:00", "08:30", WED, { breakMinutes: 45 })];
+    expect(computeDayMinutes(s, WED, DEFAULT_SCHEDULE).net).toBe(0);
   });
 
   it("respects schedule exceptions", () => {
@@ -71,13 +93,14 @@ describe("computeDayMinutes", () => {
     expect(r.net).toBe(300);
   });
 
-  it("uses the lunch of an inactive day too (weekend work)", () => {
+  it("uses the lunch of an inactive day too (weekend work over the threshold)", () => {
     const schedule: WeekSchedule = {
       ...DEFAULT_SCHEDULE,
       sat: { ...DEFAULT_SCHEDULE.sat, lunchMinutes: 30 },
     };
-    const r = computeDayMinutes([session(SAT, "10:00", "12:00")], SAT, schedule);
-    expect(r.net).toBe(90);
+    // PR 1 used 10:00–12:00 (→ 90). A 2 h session no longer gets any lunch.
+    expect(computeDayMinutes([session(SAT, "10:00", "12:00")], SAT, schedule).net).toBe(120);
+    expect(computeDayMinutes([session(SAT, "09:00", "15:00")], SAT, schedule).net).toBe(330);
   });
 });
 

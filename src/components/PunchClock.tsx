@@ -66,17 +66,23 @@ import {
   isoWeekNumber,
   weekKey,
 } from "../lib/dates";
-import { computeDayMinutes, getAbsencesForDate } from "../lib/days";
 import {
-  computeFlexMinutes,
-  computeTodayContribution,
-  computeTodayDelta,
-  computeWeeklyFlexBreakdown,
-} from "../lib/flex";
+  computeDayMinutes,
+  getAbsencesForDate,
+  evaluateDay,
+  liveDayDelta,
+  resolveReportingMode,
+  type DayContext,
+} from "../lib/days";
+import { computeFlex, computeWeeklyFlex } from "../lib/flex";
+import { migrateDayStatusState, mergeDayStatusState } from "../lib/confirm";
 import type {
   Session,
   ScheduleException,
   ReportingMode,
+  AuditEntry,
+  DayAdjustment,
+  LockedMonth,
   AppState as StorageShape,
 } from "../lib/types";
 
@@ -126,7 +132,7 @@ function weekRangeLabel(mondayStr: string): string {
 function groupByDate(sessions: Session[]) {
   const map: Record<string, Session[]> = {};
   for (const s of sessions) {
-    const d = new Date(s.checkIn).toISOString().slice(0, 10);
+    const d = ymdLocal(new Date(s.checkIn));
     if (!map[d]) map[d] = [];
     map[d].push(s);
   }
@@ -160,7 +166,7 @@ function expandAbsenceDates(absence: AbsenceEntry): string[] {
   const cur = new Date(absence.startDate + "T12:00:00");
   const end = new Date(absence.endDate + "T12:00:00");
   while (cur <= end) {
-    dates.push(cur.toISOString().slice(0, 10));
+    dates.push(ymdLocal(cur));
     cur.setDate(cur.getDate() + 1);
   }
   return dates;
@@ -212,10 +218,10 @@ function filterAbsences(absences: AbsenceEntry[], filter: HistoryFilter): Absenc
   const ref = new Date();
   if (filter === "all") return absences;
   if (filter === "week") {
-    const mon = getWeekMonday(ref).toISOString().slice(0, 10);
+    const mon = ymdLocal(getWeekMonday(ref));
     const sun = new Date(getWeekMonday(ref));
     sun.setDate(sun.getDate() + 6);
-    const sunStr = sun.toISOString().slice(0, 10);
+    const sunStr = ymdLocal(sun);
     return absences.filter((a) => a.startDate <= sunStr && a.endDate >= mon);
   }
   if (filter === "lastweek") {
@@ -224,12 +230,12 @@ function filterAbsences(absences: AbsenceEntry[], filter: HistoryFilter): Absenc
     lastMon.setDate(lastMon.getDate() - 7);
     const lastSun = new Date(thisMon);
     lastSun.setDate(lastSun.getDate() - 1);
-    const lmStr = lastMon.toISOString().slice(0, 10);
-    const lsStr = lastSun.toISOString().slice(0, 10);
+    const lmStr = ymdLocal(lastMon);
+    const lsStr = ymdLocal(lastSun);
     return absences.filter((a) => a.startDate <= lsStr && a.endDate >= lmStr);
   }
   if (filter === "month") {
-    const start = new Date(ref.getFullYear(), ref.getMonth(), 1).toISOString().slice(0, 10);
+    const start = ymdLocal(new Date(ref.getFullYear(), ref.getMonth(), 1));
     return absences.filter((a) => a.endDate >= start);
   }
   return absences;
@@ -252,7 +258,7 @@ function buildShareText(
 
   const dateSet = new Set<string>();
   for (const s of completed) {
-    const d = new Date(s.checkIn).toISOString().slice(0, 10);
+    const d = ymdLocal(new Date(s.checkIn));
     if (inRange(d)) dateSet.add(d);
   }
   for (const a of absences)
@@ -373,7 +379,7 @@ function buildCsvExport(
 
   for (const s of sessions) {
     if (!s.checkOut) continue;
-    const d = new Date(s.checkIn).toISOString().slice(0, 10);
+    const d = ymdLocal(new Date(s.checkIn));
     if (d < monthStart || d > monthEnd) continue;
     const { net } = computeDayMinutes([s], d, schedule, exceptions);
     dataRows.push([
@@ -429,10 +435,6 @@ function downloadCsv(content: string, filename: string) {
 }
 
 // ─── Storage ──────────────────────────────────────────────────
-function isReportingMode(v: unknown): v is ReportingMode {
-  return v === "schedule" || v === "punch";
-}
-
 function load(): StorageShape {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -441,9 +443,7 @@ function load(): StorageShape {
     // use the earliest session date, so historic flex isn't blown up by missing days.
     let trackingStartDate: string | undefined = p.trackingStartDate;
     if (!trackingStartDate && Array.isArray(p.sessions) && p.sessions.length > 0) {
-      const dates = (p.sessions as Session[])
-        .map((s) => new Date(s.checkIn).toISOString().slice(0, 10))
-        .sort();
+      const dates = (p.sessions as Session[]).map((s) => ymdLocal(new Date(s.checkIn))).sort();
       trackingStartDate = dates[0];
     }
     // `schedules` is the source of truth. An older state with only `schedule` (or the
@@ -458,7 +458,6 @@ function load(): StorageShape {
       name: p.name ?? "",
       schedule: legacyScheduleOf(schedules, ymdLocal(new Date())),
       schedules,
-      reportingMode: isReportingMode(p.reportingMode) ? p.reportingMode : undefined,
       department: p.department,
       onboardingDone: p.onboardingDone ?? false,
       sessions: p.sessions ?? [],
@@ -472,6 +471,9 @@ function load(): StorageShape {
         !Array.isArray(p.scheduleExceptions)
           ? (p.scheduleExceptions as Record<string, ScheduleException>)
           : {},
+      // Day status: reportingMode resolved once (stored wins, else "punch" for users with
+      // sessions, else "schedule") and persisted by save(); the rest defaults to empty.
+      ...migrateDayStatusState(p),
     };
   } catch {
     return {
@@ -484,6 +486,7 @@ function load(): StorageShape {
       expenses: [],
       flexBaseMinutes: 0,
       scheduleExceptions: {},
+      ...migrateDayStatusState({}),
     };
   }
 }
@@ -542,6 +545,9 @@ function mergeSyncState(server: SyncState, local: SyncState): SyncState {
       ...((server.scheduleExceptions as Record<string, ScheduleException>) ?? {}),
       ...((local.scheduleExceptions as Record<string, ScheduleException>) ?? {}),
     },
+    // confirmedDays/lockedMonths: union; dayAdjustments: union by date, local wins;
+    // auditLog: union by at+action, sorted; autoLunchThresholdMin: local wins.
+    ...mergeDayStatusState(server, local),
   };
 }
 
@@ -651,6 +657,18 @@ export default function PunchClock() {
   const [name, setName] = useState(boot.name);
   const [schedules, setSchedules] = useState<SchedulePeriod[]>(boot.schedules);
   const [reportingMode, setReportingMode] = useState<ReportingMode | undefined>(boot.reportingMode);
+  // Day status (PR 3). No UI edits these yet (PR 5); they load, save and sync.
+  const [autoLunchThresholdMin, setAutoLunchThresholdMin] = useState(boot.autoLunchThresholdMin);
+  const [confirmedDays, setConfirmedDays] = useState<Record<string, true>>(
+    boot.confirmedDays ?? {},
+  );
+  const [lockedMonths, setLockedMonths] = useState<Record<string, LockedMonth>>(
+    boot.lockedMonths ?? {},
+  );
+  const [dayAdjustments, setDayAdjustments] = useState<Record<string, DayAdjustment>>(
+    boot.dayAdjustments ?? {},
+  );
+  const [auditLog, setAuditLog] = useState<AuditEntry[]>(boot.auditLog ?? []);
   const [department, setDepartment] = useState<string | undefined>(boot.department);
   const [onboardingDone, setOnboardingDone] = useState(boot.onboardingDone);
   const [sessions, setSessions] = useState<Session[]>(boot.sessions);
@@ -838,7 +856,15 @@ export default function PunchClock() {
         trackingStartDate: s.trackingStartDate,
       }),
     );
-    setReportingMode(isReportingMode(s.reportingMode) ? s.reportingMode : undefined);
+    // A payload without the day-status fields (older build) gets the same defaults as
+    // load(): its own stored mode, else "punch" when it has sessions.
+    const ds = migrateDayStatusState(s);
+    setReportingMode(ds.reportingMode);
+    setAutoLunchThresholdMin(ds.autoLunchThresholdMin);
+    setConfirmedDays(ds.confirmedDays);
+    setLockedMonths(ds.lockedMonths);
+    setDayAdjustments(ds.dayAdjustments);
+    setAuditLog(ds.auditLog);
     setSessions((s.sessions ?? []) as Session[]);
     setAbsences((s.absences ?? []) as AbsenceEntry[]);
     setExpenses((s.expenses ?? []) as ExpenseEntry[]);
@@ -958,6 +984,11 @@ export default function PunchClock() {
       flexBaseMinutes,
       trackingStartDate,
       scheduleExceptions,
+      autoLunchThresholdMin,
+      confirmedDays,
+      lockedMonths,
+      dayAdjustments,
+      auditLog,
     });
     stateRef.current = {
       name,
@@ -971,6 +1002,11 @@ export default function PunchClock() {
       flexBaseMinutes,
       trackingStartDate,
       scheduleExceptions,
+      autoLunchThresholdMin,
+      confirmedDays,
+      lockedMonths,
+      dayAdjustments,
+      auditLog,
     };
     if (!syncToken) return;
     if (suppressPushRef.current) {
@@ -991,6 +1027,11 @@ export default function PunchClock() {
     flexBaseMinutes,
     trackingStartDate,
     scheduleExceptions,
+    autoLunchThresholdMin,
+    confirmedDays,
+    lockedMonths,
+    dayAdjustments,
+    auditLog,
     syncToken,
   ]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1022,9 +1063,7 @@ export default function PunchClock() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const activeSession = sessions.find((s) => !s.checkOut);
-  const todaySessions = sessions.filter(
-    (s) => new Date(s.checkIn).toISOString().slice(0, 10) === todayStr(),
-  );
+  const todaySessions = sessions.filter((s) => ymdLocal(new Date(s.checkIn)) === todayStr());
   const todayDate = todayStr();
   const { net: todayNet } = computeDayMinutes(todaySessions, todayDate, schedules);
   void todayNet;
@@ -1036,7 +1075,7 @@ export default function PunchClock() {
 
   function getHistoryDates(fSessions: Session[], fAbsences: AbsenceEntry[]) {
     const dateSet = new Set<string>();
-    for (const s of fSessions) dateSet.add(new Date(s.checkIn).toISOString().slice(0, 10));
+    for (const s of fSessions) dateSet.add(ymdLocal(new Date(s.checkIn)));
     for (const a of fAbsences) expandAbsenceDates(a).forEach((d) => dateSet.add(d));
     return dateSet;
   }
@@ -1061,7 +1100,7 @@ export default function PunchClock() {
   function doCheckIn(source?: ActionSource, atMs?: number) {
     const checkInTime = atMs ?? now();
     if (!trackingStartDate) {
-      setTrackingStartDate(new Date(checkInTime).toISOString().slice(0, 10));
+      setTrackingStartDate(ymdLocal(new Date(checkInTime)));
     }
     setSessions((prev) => [
       ...prev,
@@ -1373,45 +1412,35 @@ export default function PunchClock() {
   }
 
   const monthStartStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-01`;
-  const weekStartStr = getWeekMonday(new Date()).toISOString().slice(0, 10);
-  const flexPastTotal = computeFlexMinutes(
+  const weekStartStr = ymdLocal(getWeekMonday(new Date()));
+  // Flex = a fold over evaluateDay (src/lib/days.ts). Today counts once it is settled.
+  const flexCtx: DayContext = {
     sessions,
     absences,
-    schedules,
+    schedule: schedules,
+    exceptions: scheduleExceptions,
+    reportingMode: reportingMode ?? resolveReportingMode({ sessions }),
     trackingStartDate,
-    undefined,
-    undefined,
-    scheduleExceptions,
-  );
-  const flexPastMonth = computeFlexMinutes(
-    sessions,
-    absences,
-    schedules,
-    trackingStartDate,
-    monthStartStr,
-    todayDate,
-    scheduleExceptions,
-  );
-  const flexPastWeek = computeFlexMinutes(
-    sessions,
-    absences,
-    schedules,
-    trackingStartDate,
-    weekStartStr,
-    todayDate,
-    scheduleExceptions,
-  );
-  const todayCommitted = computeTodayContribution(
-    sessions,
-    absences,
-    schedules,
-    todayDate,
-    trackingStartDate,
-    scheduleExceptions,
-  );
-  const flexTotal = flexBaseMinutes + flexPastTotal + todayCommitted;
-  const flexMonth = flexPastMonth + todayCommitted;
-  const flexWeek = flexPastWeek + todayCommitted;
+    today: todayDate,
+    now: now(),
+    autoLunchThresholdMin,
+    confirmedDays,
+    lockedMonths,
+    dayAdjustments,
+  };
+  const flexAll = computeFlex(flexCtx);
+  const flexTotal = flexBaseMinutes + flexAll.minutes;
+  const flexMonth = computeFlex(flexCtx, { from: monthStartStr, to: todayDate }).minutes;
+  const flexWeek = computeFlex(flexCtx, { from: weekStartStr, to: todayDate }).minutes;
+  // "· N dagar saknas" (punch) / "· N ej bekräftade" (schedule) next to the balance.
+  const flexAttention =
+    flexCtx.reportingMode === "punch"
+      ? flexAll.missingDays.length > 0
+        ? `${flexAll.missingDays.length} ${flexAll.missingDays.length === 1 ? "dag saknas" : "dagar saknas"}`
+        : null
+      : flexAll.unconfirmedDays.length > 0
+        ? `${flexAll.unconfirmedDays.length} ej ${flexAll.unconfirmedDays.length === 1 ? "bekräftad" : "bekräftade"}`
+        : null;
 
   const liveMs = activeSession ? now() - activeSession.checkIn : 0;
   const todayCfg = getEffectiveDayConfig(todayDate, schedules, scheduleExceptions);
@@ -1421,7 +1450,7 @@ export default function PunchClock() {
 
   // Live today delta — shown live in the "Idag" flex sub-stat, regardless of
   // active state. Negative early in the day, positive once you overshoot target.
-  const todayDelta = computeTodayDelta(todaySessions, todayCfg);
+  const todayDelta = liveDayDelta(evaluateDay(todayDate, flexCtx, { explain: false }));
 
   // Leave-time predictor — only on active workdays with an ongoing session.
   // Lunch is auto-deducted from punched-in time (net = raw − lunchMinutes), so to
@@ -1775,17 +1804,28 @@ export default function PunchClock() {
                   </div>
                   <div className="text-[11px] font-semibold text-pc-muted">Visa veckor →</div>
                 </div>
-                <div
-                  className={`text-[34px] font-extrabold tabular-nums tracking-tight leading-none ${
-                    flexTotal > 0
-                      ? "text-green-600"
-                      : flexTotal < 0
-                        ? "text-red-500"
-                        : "text-pc-ink"
-                  }`}
-                >
-                  {flexTotal >= 0 ? "+" : "−"}
-                  {fmtMin(Math.abs(flexTotal))}
+                <div className="flex items-baseline flex-wrap gap-x-2 gap-y-1">
+                  <div
+                    className={`text-[34px] font-extrabold tabular-nums tracking-tight leading-none ${
+                      flexTotal > 0
+                        ? "text-green-600"
+                        : flexTotal < 0
+                          ? "text-red-500"
+                          : "text-pc-ink"
+                    }`}
+                  >
+                    {flexTotal >= 0 ? "+" : "−"}
+                    {fmtMin(Math.abs(flexTotal))}
+                  </div>
+                  {flexAttention && (
+                    <div
+                      className={`text-[13px] font-semibold ${
+                        flexCtx.reportingMode === "punch" ? "text-red-500" : "text-pc-muted"
+                      }`}
+                    >
+                      · {flexAttention}
+                    </div>
+                  )}
                 </div>
                 <div className="grid grid-cols-3 gap-2 mt-4">
                   <FlexSubStat label="Idag" minutes={todayDelta} />
@@ -1859,8 +1899,7 @@ export default function PunchClock() {
                   {calendarSelectedDate &&
                     (() => {
                       const daySessions = sessions.filter(
-                        (s) =>
-                          new Date(s.checkIn).toISOString().slice(0, 10) === calendarSelectedDate,
+                        (s) => ymdLocal(new Date(s.checkIn)) === calendarSelectedDate,
                       );
                       const dayAbsences = getAbsencesForDate(absences, calendarSelectedDate);
                       const dayCfg = getEffectiveDayConfig(
@@ -2782,15 +2821,7 @@ export default function PunchClock() {
         open={flexBreakdownOpen}
         onClose={() => setFlexBreakdownOpen(false)}
         trackingStartDate={trackingStartDate}
-        weeks={computeWeeklyFlexBreakdown(
-          sessions,
-          absences,
-          schedules,
-          trackingStartDate,
-          12,
-          todayCommitted,
-          scheduleExceptions,
-        )}
+        weeks={computeWeeklyFlex(flexCtx, 12)}
         total={flexTotal}
       />
 

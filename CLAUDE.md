@@ -100,29 +100,51 @@ weeklyNetMinFor(source, date); // net norm of the week containing date
 
 ### Flex bank
 
-Flex logic lives in pure, tested modules (no React): `src/lib/flex.ts` (the four functions below), `src/lib/days.ts` (`computeDayMinutes`, `getAbsencesForDate`), `src/lib/dates.ts` (`ymdLocal`, `todayLocal`, week helpers, `isoWeekNumber`) and `src/lib/types.ts` (`Session`, `ScheduleException`, `AppState`, re-exports of absence/expense types). Tests are in `src/lib/__tests__/`; `it.fails` cases there document known bugs (scheduled empty day = −norm, flex absence counted twice, lunch deducted despite lunch punch-out, 00:00–02:00 sessions on the previous UTC day). Day keys here still use UTC `toISOString` — kept on purpose until the bug-fix PR.
+Everything about a day's hours goes through **`evaluateDay(date, ctx)`** in `src/lib/days.ts` (pure, no React). The flex bank, the flex card, the week breakdown and `confirmMonth` are folds over it; the calendar and report (PR 5) read its `status` and `explanation`. Don't compute worked time or flex anywhere else.
 
-Three flex functions in `src/lib/flex.ts`:
+Modules: `days.ts` (`evaluateDay`, `DayContext`, `DayStatus`, `liveDayDelta`, `resolveReportingMode`, `computeDayMinutes`, Swedish `fmtDuration`), `absence.ts` (`absenceForDay`, `getAbsencesForDate`, labels), `flex.ts` (`computeFlex`, `computeWeeklyFlex` + old-API wrappers), `confirm.ts` (confirm/lock/audit + `migrateDayStatusState` / `mergeDayStatusState` for `load()` and sync), `dates.ts` (`ymdLocal`, `todayLocal`, `weekKey`, `monthRange`, `hmLocal`). Day iteration uses `addDaysStr` / `mondayOfStr` from `schedule.ts` (DST-safe). Tests: `src/lib/__tests__/{evaluateDay,flex,confirm,absence,days,dates}.test.ts`.
 
-**`computeFlexMinutes(sessions, absences, schedule, trackingStartDate, rangeStart?, rangeEnd?)`**
+```ts
+evaluateDay(date, ctx) → { status, normMin, workedMin, breakMin,
+  absence: { flexMin, excusedMin }, travel: { inScheduleMin, outsideMin }, flexDelta,
+  explanation: string[] }  // "Norm 8 h (08:00–17:00, lunch 1 h)", "Arbetat 7 h 40 min", "Flex −20 min"
+ctx = { sessions, absences, schedule /* WeekSchedule | SchedulePeriod[] */, exceptions, reportingMode,
+  trackingStartDate, today?, now?, autoLunchThresholdMin?, confirmedDays?, lockedMonths?,
+  dayAdjustments?, travelFor? /* PR 8 hook: passed through, not in flexDelta yet */ }
+computeFlex(ctx, { from?, to? }) → { minutes, missingDays, unconfirmedDays } // trackingStartDate..today
+```
 
-- Day-by-day accrual over **completed past days only** (date < today).
-- For each day in range: `flex += actual_net − norm`, where `norm = netDayMin(cfg) − non_flex_absence_min` (clamped at 0). Flex-leave absences additionally drain the bank.
-- Only completed sessions count. Today is excluded — see the two helpers below for in-progress and just-finished signals.
+**Rules**
 
-**`computeTodayContribution(sessions, absences, schedule, today, trackingStartDate)`**
+- Day keys are **local** (`ymdLocal`). A session belongs to the local day of its check-in (00:30 is that day; a session over midnight stays on its start day). Session time is real elapsed time in whole minutes as displayed, so 00:30–09:00 on a DST night is 7 h 30 min (spring) or 9 h 30 min (autumn).
+- `normMin` = net schedule minutes from `getEffectiveDayConfig` (rotations, periods and exceptions apply). A day is "scheduled" when that is > 0.
+- Absence (`absence.ts`): only on scheduled days (ignored on days off). `hours` is per day, undefined = the whole norm. Non-flex categories are `excusedMin` (lower the norm); `flex` is `flexMin` (paid by the bank). Together capped at the norm, excused first.
+- **Break:** if any session (or the adjustment) carries `breakMinutes` / `breakMin`, that is used. Otherwise the schedule lunch is deducted only when the day has **exactly one** session **longer than** `autoLunchThresholdMin` (default 300). Two or more sessions = the user punched out over lunch → nothing deducted. `computeDayMinutes` (history, share text, CSV) uses the same rule.
+- **flexDelta = worked − (norm − excused)**. A flex absence explains the missing time; it is not deducted on top (that was the 2× bug).
+- What counts as worked, in precedence order: open session → `ongoing` (flex 0, `workedMin` live) · `dayAdjustments[date]` (missing start/end fall back to the schedule; on a day off both are required) · completed sessions · `confirmedDays[date]` or a locked month → per schedule · nothing.
 
-- Returns today's `actual − norm` only when today looks "settled": no active session AND ≥ 1 completed session today (or a flex absence on today).
-- Added to total flex, the week/month sub-stats and the current-week row in the breakdown the moment the user punches out. During an active session it returns 0 — keeps the morning from going red on an unworked day.
+| Day (scheduled, ≥ trackingStartDate)                         | Status                                    | workedMin      | flexDelta                 |
+| ------------------------------------------------------------ | ----------------------------------------- | -------------- | ------------------------- |
+| Sessions / adjustment                                        | `reported` (`partial` with absence)       | as registered  | worked − (norm − excused) |
+| Absence covers the norm, nothing worked                      | `absent`                                  | 0              | −flexMin                  |
+| Confirmed "Enligt schema" or locked month                    | `reported` (`partial` with absence)       | norm − absence | −flexMin                  |
+| Nothing, punch mode                                          | `missing` (listed)                        | 0              | −flexMin (0 without flex) |
+| Nothing, schedule mode                                       | `unconfirmed` (listed)                    | norm − absence | −flexMin                  |
+| Open session (any day)                                       | `ongoing`                                 | live           | 0                         |
+| Not scheduled                                                | `off`, or `reported` if worked            | worked         | worked                    |
+| Future day / before trackingStartDate / no trackingStartDate | `off` (registered days keep their status) | —              | 0                         |
 
-**`computeTodayDelta(todaySessions, todayCfg)`**
+**Today** keeps the old baseline so the card never goes red in the morning: an open session → `ongoing`, 0. Punched out (≥ 1 completed session, no open one), an adjustment, a confirmation or a whole-day absence → settled at once and counted (as before: the moment you punch out). Nothing registered → `ongoing` with flex 0 until the scheduled end of the shift, then `missing` / `unconfirmed` like a past day. A partial absence alone does not settle today.
 
-- Pure live computation: `liveNet − todayTarget`. Updates every tick. Drives the "Idag" sub-stat in the flex section so the user can see in-progress status (− while behind, + once overshoot).
-- Never feeds total flex — it's display-only.
+**Reporting mode** (`AppState.reportingMode`, chosen in the schedule editor): `resolveReportingMode(state)` — a stored value wins, else `"punch"` if the state has sessions, else `"schedule"`. `load()` (and `applyRemoteState` for payloads without it) runs it through `migrateDayStatusState` and the result is saved, so it never flips. The mode only decides missing vs. unconfirmed; it never changes flex minutes.
 
-Total displayed = `flexBaseMinutes + computeFlexMinutes(...) + computeTodayContribution(...)`. `flexBaseMinutes` is a one-time correction users can set on first sync. The "Idag" sub-stat uses `computeTodayDelta`; "Veckan" / "Månaden" use the past-day range computation plus `todayContribution`.
+**Locked months** (`confirm.ts`): `lockedMonths["YYYY-MM"] = { at, by }`. `isDayLocked(date, state)` is true for every day of the month — the UI must block edits there (PR 5). In a locked month an unregistered day reads as `reported` per schedule; registered days keep their real values. `confirmMonth(month, ctx, { at, by, auditLog })` marks every `unconfirmed` day up to today in `confirmedDays`, locks, and appends `{ at, action: "confirm", month }`; it refuses with the list while `missing` days exist (punch mode), and refuses a locked or not-yet-started month. Confirming early (from the 25th) is allowed: the rest of the month then reads as per schedule. `unlockMonth` removes the lock and logs `{ action: "unlock" }`; explicitly confirmed days stay confirmed. `confirmDay` / `unconfirmDay` refuse on locked days. All return new values; PunchClock stores them.
 
-`computeWeeklyFlexBreakdown(...)` is a thin wrapper that calls the per-week computation for the last N weeks (newest first); the current week's row adds `todayContribution` so it stays consistent with the "Veckan" sub-stat. Stops when a week ends before `trackingStartDate`.
+**Persisted fields** (all optional on `AppState`, defaulted by `load()` via `migrateDayStatusState`, synced via `SyncState`): `reportingMode`, `autoLunchThresholdMin` (300), `confirmedDays`, `lockedMonths`, `dayAdjustments` (`{ date, start?, end?, breakMin?, note? }`), `auditLog`, plus `Session.breakMinutes`. Dirty-sync merge (`mergeDayStatusState`): confirmed days and locked months are a union, adjustments a union by date (local wins), the audit log a union by `at` + action, sorted.
+
+**Flex card** (PunchClock): total = `flexBaseMinutes + computeFlex(ctx).minutes`; "Veckan" / "Månaden" = `computeFlex` over the local week / month (today included once settled); "Idag" = `liveDayDelta(evaluateDay(today))` (worked − expected while the day is open, display only); "Visa veckor" = `computeWeeklyFlex(ctx, 12)` with local Monday keys. Next to the balance: "· N dagar saknas" (punch) or "· N ej bekräftade" (schedule).
+
+**Old API** (`computeFlexMinutes`, `computeTodayContribution`, `computeTodayDelta`, `computeWeeklyFlexBreakdown`) are thin wrappers over the above in punch mode with no confirmations; `computeFlexMinutes` still covers past days only. Prefer `computeFlex` / `evaluateDay` in new code.
 
 ### Components
 

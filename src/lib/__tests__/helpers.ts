@@ -7,13 +7,20 @@ export function at(date: string, time: string): number {
 
 let seq = 0;
 
-export function session(date: string, from: string, to: string | null, endDate = date): Session {
+export function session(
+  date: string,
+  from: string,
+  to: string | null,
+  endDate = date,
+  extra: Partial<Session> = {},
+): Session {
   seq += 1;
   return {
     id: `s${seq}`,
     checkIn: at(date, from),
     checkOut: to === null ? null : at(endDate, to),
     manual: true,
+    ...extra,
   };
 }
 
