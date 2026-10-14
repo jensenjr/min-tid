@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> **Current version: 1.0.0-beta.12.** Exposed to the UI via `__APP_VERSION__` (set by Vite from the root `package.json`) and shown at the bottom of the settings modal. Bump versions in both `package.json` and `server/package.json` together.
+> **Current version: 1.0.0.** Exposed to the UI via `__APP_VERSION__` (set by Vite from the root `package.json`) and shown in Mer → Om appen and at the bottom of the settings modal. Bump versions in both `package.json` and `server/package.json` together.
 
 ## Commands
 
@@ -25,9 +25,9 @@ Tests live in `src/lib/__tests__/` (Vitest, `vitest.config.ts` pins `TZ=Europe/S
 
 ## Architecture
 
-The app is a client-side SPA with an optional lightweight sync backend.
+The app is an offline-first client-side SPA plus an optional sync backend (`server/`, Express). The backend only ever stores end-to-end encrypted ciphertext; the app works fully without it.
 
-All local state lives in `localStorage` under the key `punchclock_v2`. The entire UI is in Swedish. Sync is additive — the app works fully offline; the backend is only used to push/pull state between devices.
+All local state lives in `localStorage` under the key `punchclock_v2` (the demo, `?demo=1`, uses `punchclock_demo` instead, see "Demo mode"). The entire UI is in Swedish. Sync is additive: the backend is only used to push/pull state between devices.
 
 ### Routing
 
@@ -39,26 +39,37 @@ TanStack Router with file-based routes. There is one real route:
 
 ### State management
 
-`PunchClock.tsx` (the shell) owns all runtime state (sessions, absences, expenses, name, schedules, day-status state, view). It loads from `localStorage` on mount and saves on every state change via a `useEffect`. There is no external state library.
+`PunchClock.tsx` (the shell) owns all runtime state: profile, schedules, reporting mode, sessions, absences, expenses, travel, vacation, and the day-status state (confirmed days, locked months, adjustments, audit log), plus the current tab. Views in `src/views/` get data and callbacks as props and own nothing persisted (see "Navigation & views"). `load()` reads `localStorage` synchronously before the first render and migrates old shapes; the save effect writes the whole state on every change. There is no external state library.
 
 ```
-localStorage["punchclock_v2"] = {
-  name, department, schedule, onboardingDone,
-  sessions, absences, expenses,
-  flexBaseMinutes, flexBaseDate, vacation, trackingStartDate
+localStorage["punchclock_v2"] = AppState (src/lib/types.ts), roughly:
+{
+  name, department, onboardingDone,
+  schedule,                 // legacy: week 1 of the period valid today (rollback aid)
+  schedules,                // SchedulePeriod[] — the source of truth
+  reportingMode,            // "schedule" | "punch"
+  sessions, absences, expenses, travel, travelRules,
+  flexBaseMinutes, flexBaseDate, vacation, trackingStartDate, scheduleExceptions,
+  autoLunchThresholdMin, confirmedDays, lockedMonths, dayAdjustments, auditLog
 }
 localStorage["sync_token"]    = "<JWT>"   // set only when sync is configured
 localStorage["sync_username"] = "<username>"
+localStorage["sync_phone"]    = "+46…"    // display copy of the SMS-recovery number
 localStorage["sync_rev"]      = "<ms>"    // last server revision this device has seen
 localStorage["sync_dirty"]    = "1"       // local edits the server hasn't acknowledged
 localStorage["sync_error_log"] = [...]    // last 10 sync failures (device-local, never synced)
+localStorage["punchclock_import_undo"] = {...}  // one pre-import snapshot (device-local, never synced)
+localStorage["punchclock_banner_dismissed"]     // per-day schedule-banner dismissals (device-local)
+IndexedDB "min-tid-sync" / "keys"               // the sync encryption key (src/lib/keyStore.ts)
 ```
 
-`trackingStartDate` (YYYY-MM-DD, optional) anchors flex accrual. Set automatically to today on a user's first punch-in; for migrating users it's backfilled in `load()` from the earliest session date so historic flex stays sensible. It also round-trips through sync (`SyncState.trackingStartDate`).
+Everything except the sync, undo and banner keys and IndexedDB is synced (as `SyncState`, encrypted). `onboardingDone` is never synced.
 
-### Date-key gotcha (local vs UTC)
+`trackingStartDate` (YYYY-MM-DD, optional) anchors flex accrual. It is set by the first registration (first punch-in, or "Enligt schema", an adjustment, a confirmation, added time or an absence; see "Flex anchor" below); for migrating users it's backfilled in `load()` from the earliest session date so historic flex stays sensible. It round-trips through sync (`SyncState.trackingStartDate`).
 
-Session timestamps are converted to `YYYY-MM-DD` day-keys with `new Date(ms).toISOString().slice(0,10)` throughout the flex/share code. That's fine for work-hour timestamps but **wrong for a local-midnight `Date`** in a positive-UTC-offset timezone (Sweden is UTC+1/+2): `toISOString()` rolls back to the previous day. The calendar grid builds cells from local-midnight `Date` objects, so it must use the local `ymdLocal(d)` helper (not `toISOString`) — otherwise every cell is off by one day. If you add a new surface that maps a midnight `Date` → day-key, use `ymdLocal`.
+### Date keys are local (`ymdLocal`)
+
+Every day key (`YYYY-MM-DD`) is a **local** date. Build one with `ymdLocal(date)` / `todayLocal()` from `src/lib/dates.ts`, or do whole-day arithmetic on the strings with `addDaysStr` / `mondayOfStr` from `schedule.ts` (DST-safe). Never use `new Date(ms).toISOString().slice(0, 10)`: it is UTC, so in Sweden (UTC+1/+2) a session at 00:30 lands on the previous day and a local-midnight `Date` (every calendar cell) rolls back a day. A session belongs to the local day of its check-in. Tests run with `TZ=Europe/Stockholm` (`vitest.config.ts`).
 
 ### Mobile layout invariant
 
@@ -223,6 +234,17 @@ Pure rules in `src/lib/travel.ts`; UI in `TravelTimeEditor.tsx` (a day's trips) 
 - Excel export: `src/lib/excel/travelExport.ts` `buildTravelExport(travel, rules, cfgFor, start, end)` → `{ extraSheets, extraSummary, travelFor }` passed to `buildReportWorkbook` (sheet "Restid": Datum, Från, Till, Resmål, Inom schema, Utanför schema, Till lön, Till flex, Kommentar; summary gets Restid totals incl. payroll hours). Datum/Från/Till/Resmål/Kommentar are read back by the importer; midnight-crossing and duration-only trips are exported but not re-importable.
 - Migration (`migrateTravelState`, in `load()` and `applyRemoteState`): `resetimmar` expenses (the old form only had a kr "Belopp" field, so the amount is read as hours, 0 < h ≤ 24) become `imp-<expenseId>` entries with `durationMin`, `imported: true` and the original amount in the note; anything else stays an expense. Idempotent. `ExpenseModal` no longer offers the category but the type and `EXPENSE_META` keep it so unmigrated legacy rows still render.
 
+### Demo mode (`?demo=1`, `src/lib/demo.ts`)
+
+Opening the app with `?demo=1` shows eight weeks of made-up data for "Anna Demo" (Enligt schema, a two-week rotation with Friday off in week 2, one semester week, one VAB day, two unconfirmed days, a trip outside the schedule, some expenses, the oldest full month confirmed and locked) under a banner "Demoläge – inget sparas" with "Avsluta demo". `buildDemoState(today)` is pure and deterministic and builds everything relative to today, so the demo never goes stale; `__tests__/demo.test.ts` runs it through `evaluateDay` / `computeFlex` / `vacationBalance` for every day of two years.
+
+The rules that keep the user's real data safe (all enforced in `PunchClock.tsx`, checked by a browser run with a storage/network audit):
+
+- Demo mode is read once per page load (`isDemoSearch(location.search)`); leaving it is a full navigation.
+- `load(demo)` never reads any key in demo: it returns the seed. `save(data, demo)` writes `punchclock_demo` (`storageKeyFor`), and `pagehide` removes it again, so edits survive neither a reload nor leaving the page, which is what the banner promises. Every `?demo=1` entry starts fresh.
+- Sync is off: `shouldSync(demo, token)` gates every push/pull/effect, `syncTokenRef` is null, and the sync keys (`sync_*`), the IndexedDB key store and `punchclock_import_undo` are never read or written. No request to `/api` is made. `SyncModal` (which mounts `RecoveryKeySheet`) is not mounted, "Synk och säkerhet" says sync is off, the Excel import row only shows a toast (Excel export works), and URL actions (`?action=`) are ignored.
+- "Avsluta demo" removes `punchclock_demo` and navigates to `exitDemoUrl` (same address without `demo`), which loads the untouched real app. Onboarding never shows in demo (`onboardingDone: true`).
+
 ### Components
 
 | File                                                               | Responsibility                                                                                                                                                                                                                                                                                   |
@@ -235,17 +257,18 @@ Pure rules in `src/lib/travel.ts`; UI in `TravelTimeEditor.tsx` (a day's trips) 
 | `SessionModal.tsx`, `DayExceptionModal.tsx`                        | "Lägg till tid" / "Redigera pass" (incl. "Flera dagar" via `planFill`) and "Ändra schema för dag"; moved out of PunchClock                                                                                                                                                                       |
 | `ConfirmSheet.tsx`, `SyncSecuritySheet.tsx`, `ui.tsx`, `dayUi.tsx` | Confirm/unlock month sheet; "Synk och säkerhet" (green encryption status, routes to SyncModal/SettingsModal); shared presentational pieces (icons, `Sheet`, `MoreRow`, `MonthPicker`, `SessionRow`, status chip, schedule banner)                                                                |
 | `src/lib/{attend,report,fill,today,format}.ts`                     | Pure, tested helpers: attention list, per-day report/CSV/share text, multi-day fill, leave time + flex anchor, Swedish formatting                                                                                                                                                                |
-| `Onboarding.tsx`                                                   | First-run flow with welcome → info/login → choice → schedule → sync. Exports `WeekScheduleEditor` used by both onboarding and the "Planera dagar" modal                                                                                                                                          |
-| `SettingsModal.tsx`                                                | Bottom sheet for editing name + department, controlling sync (activate / disconnect), opening the automation sheet, and showing app version                                                                                                                                                      |
+| `Onboarding.tsx`                                                   | First-run flow with welcome (incl. a "Titta runt i en demo först" link to `?demo=1`) → info/login → choice → schedule → sync. Exports `WeekScheduleEditor` used by both onboarding and the schedule editor                                                                                       |
+| `SettingsModal.tsx`                                                | Bottom sheet (Mer → Redigera profil) for editing name + department and the sync account: sync code, SMS-recovery phone, disconnect, delete account, troubleshooting panel; shows the app version. Takes `demo` and then never reads the sync keys                                                |
 | `ImportModal.tsx`                                                  | Bottom sheet "Importera från Excel" (More row, lazy-loaded): download the template, pick a file, preview counts and row-numbered errors, "Importera" (stores the undo snapshot first), "Ångra senaste import". Owns no state — gets the importable slice, returns an `ImportPatch` via `onApply` |
 | `AbsenceModal.tsx`                                                 | Bottom sheet for logging absence entries (VAB, semester, etc.)                                                                                                                                                                                                                                   |
 | `ExpenseModal.tsx`                                                 | Bottom sheet for logging expense entries (milersättning with km, kost, etc.)                                                                                                                                                                                                                     |
-| `SyncModal.tsx`                                                    | Bottom sheet for setting up sync on an existing device (create code or restore) — collects username + secret                                                                                                                                                                                     |
+| `SyncModal.tsx`, `RecoveryKeySheet.tsx`                            | Bottom sheets for setting up encrypted sync on an existing device (create code or restore), re-login and SMS recovery; the one-time recovery key. The shell does not mount them in demo (RecoveryKeySheet would open the IndexedDB key store)                                                    |
 | `FlexBreakdownModal.tsx`                                           | Bottom sheet showing total flex + the last 12 weeks of flex broken down individually                                                                                                                                                                                                             |
 | `LatePunchoutModal.tsx`                                            | Bottom sheet that intercepts punch-outs after a 4+ hour active session — offers "use now", a custom end-time picker, or cancel                                                                                                                                                                   |
 | `AutomationModal.tsx`                                              | Bottom sheet ("Automatisera in/ut-checkning", opened from settings) — QR codes (via `uqr`), printable office signs, iOS Shortcuts recipes for WiFi/NFC punching, install-to-home-screen instructions                                                                                             |
 | `src/lib/schedule.ts`                                              | Pure schedule types, constants, calculations, and localStorage migration                                                                                                                                                                                                                         |
-| `src/lib/sync.ts`                                                  | Thin fetch wrapper for all sync API calls; passes `username` + `secret`                                                                                                                                                                                                                          |
+| `src/lib/sync.ts`, `crypto.ts`, `keyStore.ts`                      | Encrypted sync client: derives keys from the secret, encrypts/decrypts the state, keeps the device key in IndexedDB, wraps every server call (see "End-to-end encryption"). Same exported signatures the UI always used                                                                          |
+| `src/lib/demo.ts`                                                  | `?demo=1`: `buildDemoState(today)` seed, `storageKeyFor`, `shouldSync`, `exitDemoUrl` (see "Demo mode")                                                                                                                                                                                          |
 | `src/lib/actions.ts`                                               | URL actions (`?action=in\|out\|toggle&source=…`): parse-and-strip from the address bar, build trigger URLs, 2-min dedupe window                                                                                                                                                                  |
 
 ### URL actions & automation
@@ -528,22 +551,22 @@ The Vite proxy (`server.proxy` in `vite.config.ts`) forwards all `/api` requests
 
 ## Versioning
 
-This project follows semver with `-beta.N` suffixes during pre-1.0.
+This project follows semver. 1.0.0 shipped the omtag rework; the `-beta.N` suffixes (beta.1–beta.12) belong to the past.
 
 - Source of truth: root `package.json` `version` field.
 - `server/package.json` must be bumped in lockstep.
 - `vite.config.ts` reads `package.json` and exposes the version as the `__APP_VERSION__` global; `src/env.d.ts` declares the type.
-- The version is rendered in the footer of `SettingsModal.tsx` as `min-tid v{__APP_VERSION__}`.
+- The version is rendered in Mer → Om appen (`views/More.tsx`) and in the footer of `SettingsModal.tsx` as `min-tid v{__APP_VERSION__}`.
 
 ### Policy
 
-**Pre-1.0 (we are here):** every batch of changes that ships → bump `-beta.N`. So beta.1 → beta.2 → beta.3, etc. There is no patch suffix inside a beta — each shipped beta is the next integer. The "1.0.0" prefix doesn't move until we declare 1.0.0 stable.
-
-**Post-1.0 stable:** standard semver:
+**Post-1.0 (we are here):** standard semver.
 
 - `1.0.1` — backwards-compatible bug fixes
 - `1.1.0` — backwards-compatible new features
-- `2.0.0` — breaking change (storage shape, API, etc.)
+- `2.0.0` — breaking change (storage shape, sync API/protocol, etc.). `load()` must keep migrating every older stored shape, and the sync protocol marker (`X-Sync-Protocol`) keeps older clients from corrupting encrypted data.
+
+(Before 1.0 every shipped batch was the next `1.0.0-beta.N`.)
 
 ### When to bump
 
@@ -555,11 +578,11 @@ Bump (and add a `CHANGELOG.md` section) whenever you ship anything user-visible 
 2. In `CHANGELOG.md`: move whatever is under `[Unreleased]` into a new `[X.Y.Z] — YYYY-MM-DD` section just above the previous release. Leave a fresh `_Nothing yet._` under `[Unreleased]`. Add the link at the bottom.
 3. `npm run build` to confirm Vite injects the new value.
 4. Commit (`package.json`, `server/package.json`, `CHANGELOG.md`, plus the actual change). Push.
-5. If publishing a GitHub release: tag `v1.0.0-beta.N` and the changelog links resolve.
+5. If publishing a GitHub release: tag `vX.Y.Z` and the changelog links resolve.
 
 ### When work is in flight
 
-Smaller in-progress changes can land under `[Unreleased]` in the changelog without a version bump. When the next deploy goes out, roll `[Unreleased]` into the new beta number. Don't ship to users without bumping.
+Smaller in-progress changes can land under `[Unreleased]` in the changelog without a version bump. When the next deploy goes out, roll `[Unreleased]` into the new version number. Don't ship to users without bumping.
 
 ---
 

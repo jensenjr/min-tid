@@ -301,7 +301,7 @@ export default function PunchClock() {
   const [editSession, setEditSession] = useState<Session | null>(null);
   const [shortWarn, setShortWarn] = useState(false);
   const [expenses, setExpenses] = useState<ExpenseEntry[]>(boot.expenses ?? []);
-  // Restid (PR 8). No UI edits these yet (TravelTimeEditor is mounted after PR 5); they load, save and sync.
+  // Restid: edited in "Justera dag" (TravelTimeEditor) and Mer → Restidsregler; both load, save and sync.
   const [travel, setTravel] = useState<TravelEntry[]>(boot.travel ?? []);
   const [travelRules, setTravelRules] = useState<TravelRules>(
     boot.travelRules ?? DEFAULT_TRAVEL_RULES,
@@ -412,7 +412,7 @@ export default function PunchClock() {
     const urlAction = consumeActionFromUrl();
     // A QR/NFC punch must never land in the demo (and the dedupe key is a real-app key).
     if (urlAction && !demo) setPendingAction(urlAction);
-  }, []);
+  }, [demo]);
 
   useEffect(() => {
     if (!pendingAction || !onboardingDone) return;
@@ -672,6 +672,7 @@ export default function PunchClock() {
     dayAdjustments,
     auditLog,
     syncToken,
+    demo,
   ]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Pull when the app opens with a token, and whenever it comes back to the

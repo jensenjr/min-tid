@@ -113,7 +113,7 @@ export function buildDemoState(today: string): AppState {
   for (let weeks = 8; weeks <= 24; weeks++) {
     start = addDaysStr(curMonday, -7 * weeks);
     const schedules = [buildPeriod(start)];
-    let month = start.endsWith("-01") ? start.slice(0, 7) : nextMonth(start.slice(0, 7));
+    const month = start.endsWith("-01") ? start.slice(0, 7) : nextMonth(start.slice(0, 7));
     // Skip months that have not fully passed (cannot happen for the oldest, kept for safety).
     if (monthRange(month).last >= today) continue;
     const days: string[] = [];
