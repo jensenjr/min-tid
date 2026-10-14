@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_SCHEDULE, getEffectiveDayConfig } from "../schedule";
-import { evaluateDay, type DayContext } from "../days";
+import { evaluateDay, liveDayDelta, type DayContext } from "../days";
+import { computeFlex } from "../flex";
+import { buildReport } from "../report";
 import {
   DEFAULT_TRAVEL_RULES,
   makeTravelFor,
@@ -16,7 +18,7 @@ import {
   type TravelRules,
 } from "../travel";
 import type { ExpenseEntry } from "../types";
-import { at } from "./helpers";
+import { at, session } from "./helpers";
 
 // Default schedule: Mon–Fri 08:00–17:00 (lunch 60). 2026-03-11 is a Wednesday.
 const WED = "2026-03-11";
@@ -217,7 +219,7 @@ describe("duration-only entries (imported)", () => {
 });
 
 describe("makeTravelFor and evaluateDay", () => {
-  const ctx = (travelFor: DayContext["travelFor"]): DayContext => ({
+  const ctx = (travelFor: DayContext["travelFor"], over: Partial<DayContext> = {}): DayContext => ({
     sessions: [],
     absences: [],
     schedule: DEFAULT_SCHEDULE,
@@ -227,24 +229,152 @@ describe("makeTravelFor and evaluateDay", () => {
     today: "2026-03-12",
     now: at("2026-03-12", "12:00"),
     travelFor,
+    ...over,
   });
+  const full = [session(WED, "08:00", "17:00")]; // a normal 8 h day: flexDelta 0 without travel
 
-  it("feeds inScheduleMin/outsideMin into evaluateDay's travel field", () => {
+  it("feeds all four numbers into evaluateDay's travel field", () => {
     const f = makeTravelFor([trip("16:00", "19:00")], rules());
-    const ev = evaluateDay(WED, ctx(f));
-    expect(ev.travel).toEqual({ inScheduleMin: 60, outsideMin: 120 });
+    expect(evaluateDay(WED, ctx(f)).travel).toEqual({
+      inScheduleMin: 60,
+      outsideMin: 120,
+      payrollMin: 120,
+      flexMin: 0,
+    });
   });
 
   it("returns nothing for days without trips and sums several trips on one day", () => {
     const f = makeTravelFor([trip("17:00", "18:00"), trip("19:00", "20:00")], rules());
     expect(f("2026-03-10", cfgOf("2026-03-10"))).toBeUndefined();
     expect(f(WED, cfgOf(WED))).toMatchObject({ outsideMin: 120, payrollMin: 120 });
-    expect(evaluateDay("2026-03-10", ctx(f)).travel).toEqual({ inScheduleMin: 0, outsideMin: 0 });
+    expect(evaluateDay("2026-03-10", ctx(f)).travel).toEqual({
+      inScheduleMin: 0,
+      outsideMin: 0,
+      payrollMin: 0,
+      flexMin: 0,
+    });
   });
 
-  it("does not change flexDelta yet (days.ts rules are PR 3's)", () => {
-    const f = makeTravelFor([trip("18:00", "20:00")], rules({ outside: "flex" }));
-    expect(evaluateDay(WED, ctx(f)).flexDelta).toBe(evaluateDay(WED, ctx(undefined)).flexDelta);
+  describe("flex rule", () => {
+    const flexRules = rules({ outside: "flex" });
+
+    it("adds the flex-routed minutes to flexDelta exactly once", () => {
+      const f = makeTravelFor([trip("17:00", "19:00")], flexRules);
+      const ev = evaluateDay(WED, ctx(f, { sessions: full }));
+      expect(ev.flexDelta).toBe(120);
+      expect(ev.explanation).toContain("Restid utanför schemat 2 h → flex +2 h");
+      expect(ev.explanation.at(-1)).toBe("Flex +2 h");
+    });
+
+    it("respects factor and cap", () => {
+      const f = makeTravelFor(
+        [trip("17:00", "20:00")],
+        rules({ outside: "flex", factor: 0.5, maxPerDayMin: 60 }),
+      );
+      expect(evaluateDay(WED, ctx(f, { sessions: full })).flexDelta).toBe(60);
+    });
+
+    it("payroll and 'none' never change flex; explanations say where the time goes", () => {
+      const pay = makeTravelFor([trip("17:00", "19:00")], rules());
+      const evPay = evaluateDay(WED, ctx(pay, { sessions: full }));
+      expect(evPay.flexDelta).toBe(0);
+      expect(evPay.explanation).toContain("Restid utanför schemat 2 h → lön");
+      const none = makeTravelFor([trip("17:00", "19:00")], rules({ outside: "none" }));
+      const evNone = evaluateDay(WED, ctx(none, { sessions: full }));
+      expect(evNone.flexDelta).toBe(0);
+      expect(evNone.explanation).toContain("Restid utanför schemat 2 h → räknas inte");
+    });
+
+    it("inside-schedule travel is never added to worked time or flex", () => {
+      const f = makeTravelFor([trip("09:00", "11:00")], flexRules);
+      const base = evaluateDay(WED, ctx(undefined, { sessions: full }));
+      const ev = evaluateDay(WED, ctx(f, { sessions: full }));
+      expect(ev.workedMin).toBe(base.workedMin);
+      expect(ev.flexDelta).toBe(base.flexDelta);
+      expect(ev.explanation).toContain("Restid inom schemat 2 h – ingår i arbetstiden");
+    });
+
+    it("a missing day still gets its travel flex", () => {
+      const f = makeTravelFor([trip("17:30", "18:30")], flexRules);
+      const ev = evaluateDay(WED, ctx(f));
+      expect(ev.status).toBe("missing");
+      expect(ev.flexDelta).toBe(60);
+    });
+
+    it("an unconfirmed day (schedule mode) still gets its travel flex", () => {
+      const f = makeTravelFor([trip("17:30", "18:30")], flexRules);
+      const ev = evaluateDay(WED, ctx(f, { reportingMode: "schedule" }));
+      expect(ev.status).toBe("unconfirmed");
+      expect(ev.flexDelta).toBe(60);
+    });
+
+    it("a day off with travel (weekend trip) gets its travel flex", () => {
+      const f = makeTravelFor([trip("09:00", "11:00", SAT)], flexRules);
+      const ev = evaluateDay(SAT, ctx(f, { today: "2026-03-16", now: at("2026-03-16", "12:00") }));
+      expect(ev.flexDelta).toBe(120);
+    });
+
+    it("today while ongoing is excluded (open session or before the end of the shift)", () => {
+      const f = makeTravelFor([trip("07:00", "08:00", "2026-03-12")], flexRules);
+      const open = evaluateDay(
+        "2026-03-12",
+        ctx(f, { sessions: [session("2026-03-12", "08:00", null)] }),
+      );
+      expect(open.status).toBe("ongoing");
+      expect(open.flexDelta).toBe(0);
+      const morning = evaluateDay("2026-03-12", ctx(f));
+      expect(morning.status).toBe("ongoing");
+      expect(morning.flexDelta).toBe(0);
+      expect(morning.explanation.join("\n")).toContain("flex (räknas inte den här dagen än)");
+    });
+
+    it("today counts once the day is settled (punched out)", () => {
+      const f = makeTravelFor([trip("17:00", "18:00", "2026-03-12")], flexRules);
+      const ev = evaluateDay(
+        "2026-03-12",
+        ctx(f, { sessions: [session("2026-03-12", "08:00", "17:00")] }),
+      );
+      expect(ev.flexDelta).toBe(60);
+    });
+
+    it("future days and days before the flex start are excluded", () => {
+      const f = makeTravelFor(
+        [trip("17:00", "18:00", "2026-03-13"), trip("17:00", "18:00", "2026-03-04")],
+        flexRules,
+      );
+      expect(evaluateDay("2026-03-13", ctx(f)).flexDelta).toBe(0);
+      const early = evaluateDay("2026-03-04", ctx(f, { trackingStartDate: "2026-03-09" }));
+      expect(early.flexDelta).toBe(0);
+      expect(early.travel.flexMin).toBe(60); // reported, just not banked
+      expect(evaluateDay("2026-03-04", ctx(f, { trackingStartDate: undefined })).flexDelta).toBe(0);
+    });
+
+    it("liveDayDelta: a missing day shows its travel flex, an ongoing day does not", () => {
+      const f = makeTravelFor(
+        [trip("17:30", "18:30"), trip("07:00", "08:00", "2026-03-12")],
+        flexRules,
+      );
+      expect(liveDayDelta(evaluateDay(WED, ctx(f)))).toBe(60);
+      expect(liveDayDelta(evaluateDay("2026-03-12", ctx(f)))).toBe(0);
+    });
+
+    it("the report total equals the flex card (computeFlex), travel included", () => {
+      const f = makeTravelFor(
+        [trip("17:00", "19:00"), trip("17:30", "18:30", "2026-03-10"), trip("18:00", "19:00", SAT)],
+        flexRules,
+      );
+      const c = ctx(f, {
+        sessions: [session(WED, "08:00", "17:00"), session("2026-03-12", "08:00", "17:00")],
+        today: "2026-03-16",
+        now: at("2026-03-16", "12:00"),
+      });
+      const card = computeFlex(c).minutes;
+      const report = buildReport(c, "2026-03-02", "2026-03-16");
+      expect(report.totals.flexMin).toBe(card);
+      expect(card).toBeGreaterThanOrEqual(120 + 60 + 60);
+      // Travel flex on a day off is listed in the report rows too.
+      expect(report.rows.some((r) => r.date === SAT)).toBe(true);
+    });
   });
 });
 
