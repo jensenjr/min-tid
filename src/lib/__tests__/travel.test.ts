@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_SCHEDULE, getEffectiveDayConfig } from "../schedule";
 import { evaluateDay, liveDayDelta, type DayContext } from "../days";
 import { computeFlex } from "../flex";
-import { buildReport } from "../report";
+import { buildCsv, buildReport, buildShareText } from "../report";
 import {
   DEFAULT_TRAVEL_RULES,
   makeTravelFor,
@@ -502,5 +502,46 @@ describe("sync merge", () => {
     );
     expect(m.travel).toEqual([a, bLocal]);
     expect(m.travelRules.outside).toBe("none");
+  });
+});
+
+describe("report: Restid in totals, CSV and share text", () => {
+  const entries = [trip("16:00", "19:00"), trip("18:00", "19:00", "2026-03-12")];
+  const c: DayContext = {
+    sessions: [session(WED, "08:00", "17:00")],
+    absences: [],
+    schedule: DEFAULT_SCHEDULE,
+    exceptions: {},
+    reportingMode: "punch",
+    trackingStartDate: "2026-03-02",
+    today: "2026-03-13",
+    now: at("2026-03-13", "12:00"),
+    travelFor: makeTravelFor(entries, rules()),
+  };
+  const report = buildReport(c, "2026-03-09", "2026-03-15");
+
+  it("totals match travelTotals for the same period", () => {
+    const t = travelTotals(entries, rules(), cfgOf, { from: "2026-03-09", to: "2026-03-15" });
+    expect(report.totals.travel).toEqual({
+      inScheduleMin: t.inScheduleMin,
+      outsideMin: t.outsideMin,
+      payrollMin: t.payrollMin,
+      flexMin: t.flexMin,
+      totalMin: t.inScheduleMin + t.outsideMin,
+    });
+    expect(report.totals.travel.payrollMin).toBe(180);
+  });
+
+  it("CSV has the Restid columns and the share text a summary line", () => {
+    const csv = buildCsv(report);
+    expect(csv).toContain('"Restid (min)","Restid till lön (min)"');
+    expect(csv).toContain('"180","120"'); // WED: 1 h inside + 2 h outside, 2 h to payroll
+    const text = buildShareText(report, {
+      name: "",
+      periodLabel: "v11",
+      expenses: [],
+      mode: "punch",
+    });
+    expect(text).toContain("Restid: 4 h (1 h under arbetstid, 3 h utanför) · till lön 3 h");
   });
 });

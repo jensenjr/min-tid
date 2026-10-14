@@ -14,6 +14,8 @@ import AdjustDaySheet from "./AdjustDaySheet";
 import ConfirmSheet from "./ConfirmSheet";
 import { ScheduleBanner } from "./dayUi";
 import { MoreRow, NavIcon, Sheet } from "./ui";
+import TravelTimeEditor from "./TravelTimeEditor";
+import { TravelReportRow, TravelRulesRow } from "./TravelUi";
 // Loaded on first open: keeps the Excel import code out of the main bundle.
 const ImportModal = lazy(() => import("./ImportModal"));
 import Today from "../views/Today";
@@ -83,6 +85,12 @@ import {
   unlockMonth,
 } from "../lib/confirm";
 import { buildAttend, lateThresholdMs } from "../lib/attend";
+import {
+  DEFAULT_TRAVEL_RULES,
+  makeTravelFor,
+  mergeTravelState,
+  migrateTravelState,
+} from "../lib/travel";
 import { fmtTime, monthTitle } from "../lib/format";
 import { nextTrackingStart, punchLeaveEstimate, scheduledLeaveTime } from "../lib/today";
 import type {
@@ -93,6 +101,8 @@ import type {
   DayAdjustment,
   LockedMonth,
   VacationSettings,
+  TravelEntry,
+  TravelRules,
   AppState as StorageShape,
 } from "../lib/types";
 import type { ImportPatch } from "../lib/excel/plan";
@@ -125,6 +135,8 @@ function load(): StorageShape {
       normHours: p.normHours,
       trackingStartDate,
     });
+    // Old "Resetimmar" expenses become duration-only travel entries (once; idempotent).
+    const travelState = migrateTravelState(p);
     return {
       name: p.name ?? "",
       schedule: legacyScheduleOf(schedules, ymdLocal(new Date())),
@@ -133,7 +145,9 @@ function load(): StorageShape {
       onboardingDone: p.onboardingDone ?? false,
       sessions: p.sessions ?? [],
       absences: p.absences ?? [],
-      expenses: p.expenses ?? [],
+      expenses: travelState.expenses,
+      travel: travelState.travel,
+      travelRules: travelState.travelRules,
       flexBaseMinutes: typeof p.flexBaseMinutes === "number" ? p.flexBaseMinutes : 0,
       flexBaseDate: isYmd(p.flexBaseDate) ? p.flexBaseDate : undefined,
       vacation: parseVacation(p.vacation),
@@ -157,6 +171,8 @@ function load(): StorageShape {
       sessions: [],
       absences: [],
       expenses: [],
+      travel: [],
+      travelRules: DEFAULT_TRAVEL_RULES,
       flexBaseMinutes: 0,
       scheduleExceptions: {},
       ...migrateDayStatusState({}),
@@ -216,6 +232,8 @@ function mergeSyncState(server: SyncState, local: SyncState): SyncState {
       (server.expenses ?? []) as ExpenseEntry[],
       (local.expenses ?? []) as ExpenseEntry[],
     ),
+    // travel: union by id (local wins); travelRules: local wins.
+    ...mergeTravelState(server, local),
     scheduleExceptions: {
       ...((server.scheduleExceptions as Record<string, ScheduleException>) ?? {}),
       ...((local.scheduleExceptions as Record<string, ScheduleException>) ?? {}),
@@ -271,6 +289,11 @@ export default function PunchClock() {
   const [editSession, setEditSession] = useState<Session | null>(null);
   const [shortWarn, setShortWarn] = useState(false);
   const [expenses, setExpenses] = useState<ExpenseEntry[]>(boot.expenses ?? []);
+  // Restid (PR 8). No UI edits these yet (TravelTimeEditor is mounted after PR 5); they load, save and sync.
+  const [travel, setTravel] = useState<TravelEntry[]>(boot.travel ?? []);
+  const [travelRules, setTravelRules] = useState<TravelRules>(
+    boot.travelRules ?? DEFAULT_TRAVEL_RULES,
+  );
   const [expenseModal, setExpenseModal] = useState(false);
   const [flexBaseMinutes, setFlexBaseMinutes] = useState(boot.flexBaseMinutes ?? 0);
   // The balance above is at the END of this day (Excel import "Saldon"); flex accrues after it.
@@ -443,7 +466,11 @@ export default function PunchClock() {
     setAuditLog(ds.auditLog);
     setSessions((s.sessions ?? []) as Session[]);
     setAbsences((s.absences ?? []) as AbsenceEntry[]);
-    setExpenses((s.expenses ?? []) as ExpenseEntry[]);
+    // A payload from an older build may still hold "Resetimmar" expenses: migrate them too.
+    const ts = migrateTravelState(s);
+    setExpenses(ts.expenses);
+    setTravel(ts.travel);
+    setTravelRules(ts.travelRules);
     setFlexBaseMinutes(typeof s.flexBaseMinutes === "number" ? s.flexBaseMinutes : 0);
     setFlexBaseDate(isYmd(s.flexBaseDate) ? s.flexBaseDate : undefined);
     setVacation(parseVacation(s.vacation));
@@ -559,6 +586,8 @@ export default function PunchClock() {
       sessions,
       absences,
       expenses,
+      travel,
+      travelRules,
       flexBaseMinutes,
       flexBaseDate,
       vacation,
@@ -579,6 +608,8 @@ export default function PunchClock() {
       sessions,
       absences,
       expenses,
+      travel,
+      travelRules,
       flexBaseMinutes,
       flexBaseDate,
       vacation,
@@ -606,6 +637,8 @@ export default function PunchClock() {
     sessions,
     absences,
     expenses,
+    travel,
+    travelRules,
     flexBaseMinutes,
     flexBaseDate,
     vacation,
@@ -1104,6 +1137,8 @@ export default function PunchClock() {
     lockedMonths,
     dayAdjustments,
     flexBaseDate,
+    // Restid: fills evaluateDay's `travel` field. Does not touch flexDelta (see travel.ts).
+    travelFor: makeTravelFor(travel, travelRules),
   };
   const flexAll = computeFlex(flexCtx);
   const flexTotal = flexBaseMinutes + flexAll.minutes;
@@ -1217,8 +1252,13 @@ export default function PunchClock() {
         onClick={() => setVacationSheet(true)}
       />
     ),
+    travelRules: <TravelRulesRow rules={travelRules} onChange={setTravelRules} />,
   };
   const reportSlots: ReportSlots = {
+    travel: (p) =>
+      p.report.totals.travel.totalMin > 0 ? (
+        <TravelReportRow travel={p.report.totals.travel} />
+      ) : null,
     excelExport: (p) => (
       <button
         type="button"
@@ -1232,7 +1272,15 @@ export default function PunchClock() {
       <VacationCard compact state={vacationState} today={todayDate} onChange={setVacation} />
     ),
   };
-  const adjustTravelSlot: ReactNode = null;
+  const adjustTravelSlot: ReactNode = adjustDate ? (
+    <TravelTimeEditor
+      date={adjustDate}
+      travel={travel}
+      dayConfig={getEffectiveDayConfig(adjustDate, schedules, scheduleExceptions)}
+      rules={travelRules}
+      onChange={setTravel}
+    />
+  ) : null;
 
   const banners = (
     <>

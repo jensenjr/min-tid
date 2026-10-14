@@ -105,15 +105,16 @@ All notable changes to **min-tid** are recorded here. Format loosely follows [Ke
 
 ### Restid (PR 8)
 
-- **Restid som egen post.** En resa har från- och tilltid (i femminutersteg), valfri destination och anteckning. Resor kan korsa midnatt. Redigeraren (lägg till, ändra, ta bort) kopplas in på dagen i nästa steg av navigeringen.
-- **Restidsregler.** Restid inom schemalagd arbetstid räknas alltid som arbetad tid. För restid utanför arbetstid väljer du: till lön (standard), till flex eller räknas inte. Du kan också ange en faktor (till exempel 0,5), en maxgräns per dag och att natten (22:00–06:00) inte ska räknas.
+- **Restid som egen post.** En resa har från- och tilltid (i femminutersteg), valfri destination och anteckning. Resor kan korsa midnatt. Du lägger till, ändrar och tar bort restid i ”Justera dag”. Restiden sparas direkt, även om du inte sparar justeringen.
+- **Restidsregler.** Restid inom schemalagd arbetstid räknas alltid som arbetad tid. För restid utanför arbetstid väljer du: till lön (standard), till flex eller räknas inte. Du kan också ange en faktor (till exempel 0,5), en maxgräns per dag och att natten (22:00–06:00) inte ska räknas. Reglerna hittar du under Mer → Restidsregler.
 - **Resetimmar flyttas.** Utlägg av typen Resetimmar finns inte längre att välja. Gamla resetimmar flyttas automatiskt till restid, märkta ”importerad”, med din anteckning kvar. Eftersom de saknar klockslag räknas de som restid utanför arbetstid. Ett gammalt utlägg vars belopp inte kan vara timmar (till exempel 350) lämnas orört som utlägg – inget försvinner.
 - Restid sparas och synkas mellan enheterna.
-- Restiden påverkar ännu inte flexsaldot: det kräver en ändring i beräkningen (dag-status) som görs separat.
+- **Restid i flexsaldot.** Restid utanför schemat som du lagt på flex ökar saldot den dagen (inte för framtida dagar, dagar före flexstart eller dagen som pågår). Restid inom schemat ingår redan i arbetstiden och läggs inte på igen, och restid till lön påverkar aldrig flex. Dagens förklaring visar vart restiden tog vägen.
+- **Rapport.** Rapporten har en rad ”Restid” med totalt, inom schemat, utanför schemat och timmar till lön separat. CSV har kolumnerna ”Restid (min)” och ”Restid till lön (min)”, och delningstexten får en restidsrad.
 
 #### Internt
 
-- Ny `src/lib/travel.ts` (`splitTravel`, `splitTravelDay`, `makeTravelFor`, `migrateTravelState`) med tester. `evaluateDay` får restiden genom `travelFor`-kroken men reglerna i `days.ts` är oförändrade.
+- Ny `src/lib/travel.ts` (`splitTravel`, `splitTravelDay`, `makeTravelFor`, `migrateTravelState`) med tester. `evaluateDay` får restiden genom `travelFor`-kroken; `days.ts` lägger `travel.flexMin` på `flexDelta` för dagar som räknas och förklarar restiden i `explanation`. `DayEvaluation.travel` har nu även `payrollMin` och `flexMin`.
 
 ## [1.0.0-beta.12] — 2026-08-26
 

@@ -148,11 +148,11 @@ Modules: `days.ts` (`evaluateDay`, `DayContext`, `DayStatus`, `liveDayDelta`, `r
 
 ```ts
 evaluateDay(date, ctx) → { status, normMin, workedMin, breakMin,
-  absence: { flexMin, excusedMin }, travel: { inScheduleMin, outsideMin }, flexDelta,
+  absence: { flexMin, excusedMin }, travel: { inScheduleMin, outsideMin, payrollMin, flexMin }, flexDelta,
   explanation: string[] }  // "Norm 8 h (08:00–17:00, lunch 1 h)", "Arbetat 7 h 40 min", "Flex −20 min"
 ctx = { sessions, absences, schedule /* WeekSchedule | SchedulePeriod[] */, exceptions, reportingMode,
   trackingStartDate, today?, now?, autoLunchThresholdMin?, confirmedDays?, lockedMonths?,
-  dayAdjustments?, travelFor? /* PR 8 hook: passed through, not in flexDelta yet */ }
+  dayAdjustments?, travelFor? /* Restid hook, see "Travel time"; travel.flexMin is added to flexDelta */ }
 computeFlex(ctx, { from?, to? }) → { minutes, missingDays, unconfirmedDays } // trackingStartDate..today
 ```
 
@@ -215,11 +215,11 @@ Pure balance logic; settings live in `AppState.vacation?: VacationSettings` (`da
 
 ### Travel time (Restid)
 
-Pure rules in `src/lib/travel.ts`; UI in `TravelTimeEditor.tsx` (a day's trips) and `TravelRulesEditor.tsx` (rules), both controlled and standalone.
+Pure rules in `src/lib/travel.ts`; UI in `TravelTimeEditor.tsx` (a day's trips) and `TravelRulesEditor.tsx` (rules), both controlled and standalone; `TravelUi.tsx` holds what PunchClock mounts: `TravelRulesRow` (`moreSlots.travelRules`, a MoreRow + Sheet), `TravelReportRow` (`reportSlots.travel`, from `report.totals.travel`), and `TravelTimeEditor` goes into `adjustTravelSlot` (it saves immediately, independent of the sheet's Spara).
 
 - Data: `AppState.travel?: TravelEntry[]` (`{ id, date, from?, to?, durationMin?, destination?, note?, imported? }`; UI entries always have from/to, imported ones only `durationMin`) and `travelRules?: TravelRules` (`outside: 'payroll'|'flex'|'none'` default payroll, `factor` 1, `maxPerDayMin?`, `excludeNight` false). Both persist via `load()`/`save()`, sync (`SyncState`) and the dirty merge (`mergeTravelState`: union by id, local wins; rules local).
 - `splitTravel(entry, dayConfig, rules)` / `splitTravelDay(entries, cfg, rules)` → `{ inScheduleMin, outsideMin, payrollMin, flexMin }`. Inside the effective schedule window = worked time (no factor). Outside = `outsideMin` (after night exclusion), credited as `round(outside × factor)`, then capped by `maxPerDayMin` (cap is per day and AFTER the factor), routed by `rules.outside` ('none' → 0/0). Times are wall-clock minutes (DST not corrected); a trip across midnight is outside after 24:00; a non-scheduled day is all outside; a duration-only entry counts entirely as outside. Overlap with punched sessions is not removed.
-- `makeTravelFor(travel, rules)` builds evaluateDay's `ctx.travelFor` hook (PunchClock's `flexCtx`). **It only fills `evaluateDay().travel`; `flexDelta` ignores travel until days.ts gets a rule for it.**
+- `makeTravelFor(travel, rules)` builds evaluateDay's `ctx.travelFor` hook (PunchClock's `flexCtx`). **Flex rule (days.ts):** `flexDelta += travel.flexMin` on every day that counts: not future days, not before `trackingStartDate`, not while status is `ongoing`; `missing` and `unconfirmed` days included. `inScheduleMin` is never added to workedMin (the schedule or the punch already covers it); `payrollMin` never touches flex. The explanation says "Restid inom schemat … – ingår i arbetstiden" and "Restid utanför schemat … → lön / flex +… / räknas inte". `liveDayDelta` adds the flex for a `missing` day only. `buildReport` rows/totals carry `travel`; a day off with travel is listed so report total == flex card; CSV has "Restid (min)" and "Restid till lön (min)".
 - Migration (`migrateTravelState`, in `load()` and `applyRemoteState`): `resetimmar` expenses (the old form only had a kr "Belopp" field, so the amount is read as hours, 0 < h ≤ 24) become `imp-<expenseId>` entries with `durationMin`, `imported: true` and the original amount in the note; anything else stays an expense. Idempotent. `ExpenseModal` no longer offers the category but the type and `EXPENSE_META` keep it so unmigrated legacy rows still render.
 
 ### Components
