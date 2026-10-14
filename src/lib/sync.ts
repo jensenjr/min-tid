@@ -47,6 +47,11 @@ export interface SyncState {
   flexBaseMinutes: number;
   trackingStartDate?: string;
   scheduleExceptions?: unknown;
+  autoLunchThresholdMin?: unknown; // minutes; one session longer than this gets the schedule lunch
+  confirmedDays?: unknown; // Record<YYYY-MM-DD, true>
+  lockedMonths?: unknown; // Record<YYYY-MM, { at, by }>
+  dayAdjustments?: unknown; // Record<YYYY-MM-DD, DayAdjustment>
+  auditLog?: unknown; // { at, action, month }[]
 }
 
 // Base URL — empty string in dev (Vite proxies /api → localhost:3001)
