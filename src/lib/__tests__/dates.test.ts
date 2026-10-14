@@ -1,16 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  addDays,
   getWeekMonday,
   hmLocal,
   isoWeekNumber,
   isYmd,
-  mondayOf,
   monthRange,
   todayLocal,
   weekKey,
   ymdLocal,
 } from "../dates";
+import { addDaysStr as addDays, mondayOfStr as mondayOf } from "../schedule";
 import { at } from "./helpers";
 
 describe("dates", () => {
@@ -71,6 +70,7 @@ describe("dates", () => {
 });
 
 describe("local day-key helpers", () => {
+  // Day iteration in days/flex/confirm uses schedule.ts's DST-safe helpers (PR 4).
   it("addDays steps whole calendar days, across DST, months, years and leap days", () => {
     expect(addDays("2026-03-28", 1)).toBe("2026-03-29");
     expect(addDays("2026-03-29", 1)).toBe("2026-03-30");
