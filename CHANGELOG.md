@@ -110,6 +110,7 @@ All notable changes to **min-tid** are recorded here. Format loosely follows [Ke
 - **Resetimmar flyttas.** Utlägg av typen Resetimmar finns inte längre att välja. Gamla resetimmar flyttas automatiskt till restid, märkta ”importerad”, med din anteckning kvar. Eftersom de saknar klockslag räknas de som restid utanför arbetstid. Ett gammalt utlägg vars belopp inte kan vara timmar (till exempel 350) lämnas orört som utlägg – inget försvinner.
 - Restid sparas och synkas mellan enheterna.
 - **Restid i flexsaldot.** Restid utanför schemat som du lagt på flex ökar saldot den dagen (inte för framtida dagar, dagar före flexstart eller dagen som pågår). Restid inom schemat ingår redan i arbetstiden och läggs inte på igen, och restid till lön påverkar aldrig flex. Dagens förklaring visar vart restiden tog vägen.
+- **Excel.** Importen läser nu Restid-bladet: resorna visas i förhandsgranskningen (”N restider”), läggs till med från/till, resmål och kommentar, och finns med när du ångrar importen. En resa som redan finns (samma datum och från) hoppas över. Excel-exporten får ett eget blad ”Restid” (datum, från, till, resmål, inom schema, utanför, till lön, till flex, kommentar) och timmar till lön i sammanfattningen. Resor över midnatt och importerade resor utan klockslag skrivs ut, men kan inte läsas in igen.
 - **Rapport.** Rapporten har en rad ”Restid” med totalt, inom schemat, utanför schemat och timmar till lön separat. CSV har kolumnerna ”Restid (min)” och ”Restid till lön (min)”, och delningstexten får en restidsrad.
 
 #### Internt

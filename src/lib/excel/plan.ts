@@ -18,12 +18,19 @@
 import { addDaysStr } from "../schedule";
 import { hmLocal, todayLocal, ymdLocal } from "../dates";
 import { confirmDay, isDayLocked } from "../confirm";
-import type { AbsenceEntry, AppState, ExpenseEntry, Session, VacationSettings } from "../types";
+import type {
+  AbsenceEntry,
+  AppState,
+  ExpenseEntry,
+  Session,
+  TravelEntry,
+  VacationSettings,
+} from "../types";
 import type { ParsedBalances, ParsedWorkbook, RowIssue, TravelImport } from "./parse";
 import { SHEETS } from "./lists";
 import { resolveVacation } from "../vacation";
 
-/** The slice of AppState an import reads. Travel is PR 8's; see ImportPlan.travel. */
+/** The slice of AppState an import reads. */
 export type ImportableState = Pick<
   AppState,
   | "sessions"
@@ -35,6 +42,7 @@ export type ImportableState = Pick<
   | "flexBaseMinutes"
   | "flexBaseDate"
   | "vacation"
+  | "travel"
 >;
 
 /** The fields an import changes. Every key is present (undefined = clear it). */
@@ -47,15 +55,15 @@ export type ImportPatch = {
   flexBaseMinutes: number;
   flexBaseDate: string | undefined;
   vacation: VacationSettings | undefined;
-  // Hook for PR 8: add `travel: TravelEntry[] | undefined` here (and in the snapshot) when
-  // travel state exists, and map plan.travel to TravelEntry in applyImportPlan.
+  /** Restid. Optional so a snapshot that predates travel never clears it (undefined = leave as is). */
+  travel?: TravelEntry[];
 };
 
 export type ImportPlan = {
   sessions: Session[];
   absences: AbsenceEntry[];
   expenses: ExpenseEntry[];
-  /** Parsed Restid rows. Not stored yet: the app has no travel state until PR 8. */
+  /** Restid rows that will be added (locked months and duplicates of date + Från removed). */
   travel: TravelImport[];
   balances: ParsedBalances | null;
   errors: RowIssue[];
@@ -160,7 +168,8 @@ export function buildImportPlan(
     }
   });
 
-  // Travel (preview only)
+  // Travel: a row is a duplicate of a stored trip with the same date and Från
+  const haveTravel = new Set((state.travel ?? []).map((t) => `${t.date}|${t.from ?? ""}`));
   const travel: TravelImport[] = [];
   parsed.travel.forEach((t, i) => {
     const row = parsed.rows.travel[i];
@@ -169,6 +178,12 @@ export function buildImportPlan(
         sheet: SHEETS.travel,
         row,
         message: `Månaden ${t.date.slice(0, 7)} är låst`,
+      });
+    } else if (haveTravel.has(`${t.date}|${t.from ?? ""}`)) {
+      duplicates.push({
+        sheet: SHEETS.travel,
+        row,
+        message: "Finns redan i appen (samma datum och från)",
       });
     } else {
       travel.push(t);
@@ -245,7 +260,18 @@ export function snapshotOf(state: ImportableState): ImportPatch {
     flexBaseMinutes: state.flexBaseMinutes,
     flexBaseDate: state.flexBaseDate,
     vacation: state.vacation,
+    travel: state.travel ?? [],
   };
+}
+
+/** A parsed Restid row as a UI-style entry: from/to, destination and note, a fresh id. */
+function toTravelEntry(t: TravelImport): TravelEntry {
+  const e: TravelEntry = { id: globalThis.crypto.randomUUID(), date: t.date };
+  if (t.from) e.from = t.from;
+  if (t.to) e.to = t.to;
+  if (t.destination) e.destination = t.destination;
+  if (t.note) e.note = t.note;
+  return e;
 }
 
 export function applyImportPlan(plan: ImportPlan, state: ImportableState): ImportPatch {
@@ -256,6 +282,7 @@ export function applyImportPlan(plan: ImportPlan, state: ImportableState): Impor
   patch.sessions = [...state.sessions, ...plan.sessions].sort((a, b) => a.checkIn - b.checkIn);
   patch.absences = [...state.absences, ...plan.absences];
   patch.expenses = [...state.expenses, ...plan.expenses];
+  patch.travel = [...(state.travel ?? []), ...plan.travel.map(toTravelEntry)];
   patch.confirmedDays = confirmedDays;
   patch.trackingStartDate = plan.trackingStartDate ?? state.trackingStartDate;
 

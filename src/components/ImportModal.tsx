@@ -39,6 +39,7 @@ function summaryOf(plan: ImportPlan): string {
   if (plan.sessions.length) parts.push(plural(plan.sessions.length, "pass", "pass"));
   if (plan.absences.length) parts.push(plural(plan.absences.length, "frånvaro", "frånvaro"));
   if (plan.expenses.length) parts.push(plural(plan.expenses.length, "utlägg", "utlägg"));
+  if (plan.travel.length) parts.push(plural(plan.travel.length, "restid", "restider"));
   if (plan.balances) parts.push("saldon");
   return parts.join(", ");
 }
@@ -69,7 +70,7 @@ export default function ImportModal({
   open: boolean;
   onClose: () => void;
   state: ImportableState;
-  /** PR 8 sets this once the app can store travel entries; until then Restid rows are only counted. */
+  /** The app stores travel entries (PR 8). Without it Restid rows are only counted, not imported. */
   hasTravelSupport?: boolean;
   onApply: (patch: ImportPatch) => void;
 }) {

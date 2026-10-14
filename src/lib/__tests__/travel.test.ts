@@ -325,7 +325,7 @@ describe("makeTravelFor and evaluateDay", () => {
       const morning = evaluateDay("2026-03-12", ctx(f));
       expect(morning.status).toBe("ongoing");
       expect(morning.flexDelta).toBe(0);
-      expect(morning.explanation.join("\n")).toContain("flex (räknas inte den här dagen än)");
+      expect(morning.explanation.join("\n")).toContain("flex (räknas inte den här dagen)");
     });
 
     it("today counts once the day is settled (punched out)", () => {
@@ -347,6 +347,19 @@ describe("makeTravelFor and evaluateDay", () => {
       expect(early.flexDelta).toBe(0);
       expect(early.travel.flexMin).toBe(60); // reported, just not banked
       expect(evaluateDay("2026-03-04", ctx(f, { trackingStartDate: undefined })).flexDelta).toBe(0);
+    });
+
+    it("a travel day inside the imported opening balance gets no travel flex", () => {
+      const f = makeTravelFor(
+        [trip("17:00", "18:00", "2026-03-10"), trip("17:00", "18:00", "2026-03-12")],
+        flexRules,
+      );
+      const c = ctx(f, { flexBaseDate: "2026-03-10", today: "2026-03-13" });
+      const inside = evaluateDay("2026-03-10", c);
+      expect(inside.flexDelta).toBe(0);
+      expect(inside.travel.flexMin).toBe(60); // reported, but part of the imported balance
+      expect(evaluateDay("2026-03-12", c).flexDelta).toBe(60); // after "Per datum": counts
+      expect(computeFlex(c).minutes).toBe(60);
     });
 
     it("liveDayDelta: a missing day shows its travel flex, an ongoing day does not", () => {

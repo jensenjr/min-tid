@@ -1026,12 +1026,21 @@ export default function PunchClock() {
     setFlexBaseMinutes(patch.flexBaseMinutes);
     setFlexBaseDate(patch.flexBaseDate);
     setVacation(patch.vacation);
+    if (patch.travel) setTravel(patch.travel);
   }
 
   // Excel export of a report period (SheetJS loads on demand).
   async function downloadReportXlsx(start: string, end: string) {
     const { buildReportWorkbook, exportFilename, downloadBytes, XLSX_MIME } =
       await import("../lib/excel/export");
+    const { buildTravelExport } = await import("../lib/excel/travelExport");
+    const travelExport = buildTravelExport(
+      travel,
+      travelRules,
+      (d) => getEffectiveDayConfig(d, schedules, scheduleExceptions),
+      start,
+      end,
+    );
     const bytes = await buildReportWorkbook(
       {
         name,
@@ -1052,6 +1061,7 @@ export default function PunchClock() {
       },
       start,
       end,
+      travelExport,
     );
     downloadBytes(bytes, exportFilename(start, end), XLSX_MIME);
   }
@@ -1679,7 +1689,9 @@ export default function PunchClock() {
               flexBaseMinutes,
               flexBaseDate,
               vacation,
+              travel,
             }}
+            hasTravelSupport
             onApply={handleImportApply}
           />
         </Suspense>

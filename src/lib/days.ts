@@ -472,8 +472,8 @@ export function evaluateDay(
   // Travel (Restid). Inside the schedule it is worked time that the schedule/punch already
   // covers, so it is only explained, never added (adding it would count it twice).
   // Outside: only the flex-routed minutes change the bank, and only on a day that counts —
-  // not before the flex start and not while the day is ongoing. Payroll never touches flex.
-  const counts = !!ctx.trackingStartDate && date >= ctx.trackingStartDate && status !== "ongoing";
+  // not before the flex start, not inside an imported opening balance and not while ongoing. Payroll never touches flex.
+  const counts = !beforeStart && !inOpeningBalance && status !== "ongoing";
   if (counts) flexDelta += travel.flexMin;
   if (travel.inScheduleMin > 0) {
     say(`Restid inom schemat ${fmtDuration(travel.inScheduleMin)} – ingår i arbetstiden`);
@@ -484,7 +484,7 @@ export function evaluateDay(
       say(
         counts
           ? `Restid utanför schemat ${out} → flex +${fmtDuration(travel.flexMin)}`
-          : `Restid utanför schemat ${out} → flex (räknas inte den här dagen än)`,
+          : `Restid utanför schemat ${out} → flex (räknas inte den här dagen)`,
       );
     } else if (travel.payrollMin > 0) {
       const paid =
