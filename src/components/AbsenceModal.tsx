@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { type WeekSchedule, dayKeyOf, netDayMin } from "../lib/schedule";
+import { type ScheduleSource, getEffectiveDayConfig, netDayMin } from "../lib/schedule";
 
 export type AbsenceCategory =
   | "sjuk"
@@ -54,7 +54,7 @@ export default function AbsenceModal({
 }: {
   open: boolean;
   initialDate?: string;
-  schedule?: WeekSchedule;
+  schedule?: ScheduleSource;
   onClose: () => void;
   onSave: (entry: AbsenceEntry) => void;
 }) {
@@ -80,9 +80,7 @@ export default function AbsenceModal({
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reference hours = scheduled net minutes for the start day (fall back to 8h)
-  const refDay = schedule
-    ? schedule[dayKeyOf(new Date((startDate || todayStr()) + "T12:00:00"))]
-    : undefined;
+  const refDay = schedule ? getEffectiveDayConfig(startDate || todayStr(), schedule) : undefined;
   const refHours = refDay && refDay.active ? netDayMin(refDay) / 60 : 8;
   const presetPcts = [100, 75, 50, 25] as const;
   function applyPreset(pct: number) {

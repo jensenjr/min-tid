@@ -73,20 +73,30 @@ This keeps the nav anchored to the visible viewport bottom while only the main a
 
 ### Schedule data model (`src/lib/schedule.ts`)
 
-`getEffectiveDayConfig(date, schedule, exceptions)` also lives in `schedule.ts`; the `ScheduleException` type is in `src/lib/types.ts`.
-
-Everything time-related flows through this file. Key types and functions:
+Everything time-related flows through this file. The schedule is a list of **periods**, each holding a **rotation** of 1–8 weekly schedules:
 
 ```ts
 DayConfig = { active, startTime, endTime, lunchMinutes };
+WeekSchedule = Record<DayKey, DayConfig>;
+ScheduleRotation = { weeks: WeekSchedule[] }; // 1–8 weeks (MAX_ROTATION_WEEKS)
+SchedulePeriod = { validFrom, anchorMonday, rotation }; // YYYY-MM-DD, local dates
+ScheduleSource = WeekSchedule | SchedulePeriod[];
 shiftMinutes(cfg); // gross: endTime − startTime
 netDayMin(cfg); // net: shiftMinutes − lunchMinutes (0 if inactive)
-weeklyNetMin(schedule); // sum of netDayMin across all 7 days
+weeklyNetMin(week); // sum of netDayMin across all 7 days
+weeklyNetMinFor(source, date); // net norm of the week containing date
 ```
+
+- **State.** `PunchClock` holds `schedules: SchedulePeriod[]` (sorted by `validFrom`), persisted as `schedules` in `punchclock_v2` and in the sync payload. `reportingMode?: "schedule" | "punch"` sits next to it (`undefined` = not chosen yet; the UI shows it as "Stämpla"; the default rule belongs to the day-status work, not here).
+- **Lookup.** `getEffectiveDayConfig(date, source, exceptions = {})` = `periodFor(date)` → `rotation.weeks[mod(weeksBetween(anchorMonday, mondayOfStr(date)), n)]` → weekday, then a `ScheduleException` overrides `endTime`/`lunchMinutes` on top of that day. `periodFor` is the last period with `validFrom <= date`; a date before the first period uses the first one. The modulo is positive, so dates before the anchor work. A plain `WeekSchedule` is accepted everywhere a `ScheduleSource` is (one 1-week period valid forever); `toPeriods(source)` normalises either form. `days.ts`/`flex.ts` take a `ScheduleSource`, so callers pass `schedules`.
+- **Dates.** Monday math is string-based on whole-day numbers (`mondayOfStr`, `weeksBetween`, `addDaysStr`), so DST can never shift a week. Weeks run Monday–Sunday; the weekend belongs to the week whose Monday precedes it.
+- **Editing.** `ScheduleEditorModal` ("Planera dagar", `src/components/schedule/`) asks "Gäller från" (default today) and calls `appendPeriod` — it adds a period (or replaces one with the same `validFrom`) and never edits earlier ones, so history keeps its norm. The anchor is derived from the start date plus "the week containing the start date is week N" (default: keeps the current rhythm if the length is unchanged, else week 1). It offers rotation length 1–8, tabs "Vecka 1…N", "Kopiera vecka 1 till alla" and the reporting-mode choice (Enligt schema / Stämpla). `WeekScheduleEditor` (Onboarding.tsx) edits a single week and is reused per tab; onboarding still produces one week, wrapped with `periodFromWeek`.
+- **Migration & rollback.** `migrateSchedules({ schedules, schedule, normHours, trackingStartDate })` is the only way to load: `schedules` if valid (`parsePeriods` drops junk, caps at 8 weeks, snaps anchors to Mondays), otherwise the old single `schedule` (via `migrateSchedule`) or `normHours` becomes one period with `validFrom = trackingStartDate ?? "2000-01-01"`. `save()` also writes the legacy `schedule` field = week 1 of the period valid today (`legacyScheduleOf`), so an older build still finds a schedule.
+- **Sync.** `SyncState` carries `schedules` and `reportingMode` next to the legacy `schedule`. The dirty-merge unions periods by `validFrom` (`mergePeriods`, local wins).
 
 `DEFAULT_SCHEDULE` = Mon–Fri 08:00–17:00 with 60 min lunch (8 h net, 40 h/week).
 
-`migrateSchedule()` handles three historical storage formats — always pass raw localStorage data through it when loading.
+`migrateSchedule()` handles three historical storage formats for a single week and `migrateSchedules()` wraps it for periods — always pass raw localStorage data through it when loading. The `ScheduleException` type is in `src/lib/types.ts`.
 
 ### Flex bank
 

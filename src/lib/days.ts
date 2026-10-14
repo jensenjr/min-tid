@@ -1,10 +1,10 @@
-import { type WeekSchedule, getEffectiveDayConfig } from "./schedule";
+import { type ScheduleSource, getEffectiveDayConfig } from "./schedule";
 import type { AbsenceEntry, ScheduleException, Session } from "./types";
 
 export function computeDayMinutes(
   sessions: Session[],
   dateStr: string,
-  schedule: WeekSchedule,
+  schedule: ScheduleSource,
   exceptions: Record<string, ScheduleException> = {},
 ) {
   const cfg = getEffectiveDayConfig(dateStr, schedule, exceptions);

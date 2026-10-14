@@ -38,7 +38,9 @@ export type { PendingRecoveryKey, RecoveryKeyReason } from "./keyStore";
 export interface SyncState {
   name: string;
   department?: string;
-  schedule: unknown;
+  schedule: unknown; // legacy single week — week 1 of the current schedule period
+  schedules?: unknown; // SchedulePeriod[] (rotating schedule periods)
+  reportingMode?: unknown; // "schedule" | "punch"
   sessions: unknown[];
   absences: unknown[];
   expenses: unknown[];

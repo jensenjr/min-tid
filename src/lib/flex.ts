@@ -1,4 +1,4 @@
-import { type WeekSchedule, type DayConfig, netDayMin, getEffectiveDayConfig } from "./schedule";
+import { type ScheduleSource, type DayConfig, netDayMin, getEffectiveDayConfig } from "./schedule";
 import { getWeekMonday, todayLocal } from "./dates";
 import { computeDayMinutes, getAbsencesForDate } from "./days";
 import type { AbsenceEntry, ScheduleException, Session } from "./types";
@@ -13,7 +13,7 @@ import type { AbsenceEntry, ScheduleException, Session } from "./types";
 export function computeFlexMinutes(
   sessions: Session[],
   absences: AbsenceEntry[],
-  schedule: WeekSchedule,
+  schedule: ScheduleSource,
   trackingStartDate: string | undefined,
   rangeStart?: string,
   rangeEnd?: string,
@@ -78,7 +78,7 @@ export function computeFlexMinutes(
 export function computeTodayContribution(
   sessions: Session[],
   absences: AbsenceEntry[],
-  schedule: WeekSchedule,
+  schedule: ScheduleSource,
   today: string,
   trackingStartDate: string | undefined,
   exceptions: Record<string, ScheduleException> = {},
@@ -136,7 +136,7 @@ export function computeTodayDelta(todaySessions: Session[], todayCfg: DayConfig)
 export function computeWeeklyFlexBreakdown(
   sessions: Session[],
   absences: AbsenceEntry[],
-  schedule: WeekSchedule,
+  schedule: ScheduleSource,
   trackingStartDate: string | undefined,
   weeks: number,
   todayContribution: number,
