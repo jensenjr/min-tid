@@ -121,6 +121,8 @@ export type MoreProps = {
   onOpenSyncAccount: () => void;
   onPullNow: () => void;
   onOpenAutomation: () => void;
+  /** Demo mode: sync is off and the sheet says so. */
+  demo?: boolean;
   /** Wave 3 integration slots: travelRules (PR 8), vacation (PR 7), excelImport (PR 6). */
   slots?: MoreSlots;
 };
@@ -177,7 +179,11 @@ export default function More(p: MoreProps) {
           icon="🔒"
           title="Synk och säkerhet"
           subtitle={
-            p.syncToken ? "Krypterad synk är på · AES-256" : "Krypterad på enheten · AES-256"
+            p.demo
+              ? "Av i demoläget"
+              : p.syncToken
+                ? "Krypterad synk är på · AES-256"
+                : "Krypterad på enheten · AES-256"
           }
           onClick={() => setSync(true)}
         />
@@ -208,6 +214,7 @@ export default function More(p: MoreProps) {
         syncStatus={p.syncStatus}
         syncedAt={p.syncedAt}
         dirty={p.syncDirty}
+        demo={p.demo}
         onPullNow={p.onPullNow}
         onSetupSync={() => {
           setSync(false);

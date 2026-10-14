@@ -30,6 +30,7 @@ export default function SettingsModal({
   onDisconnectSync,
   onDeleteSyncAccount,
   onOpenAutomation,
+  demo = false,
 }: {
   open: boolean;
   initialName: string;
@@ -50,6 +51,8 @@ export default function SettingsModal({
   onDisconnectSync: () => void;
   onDeleteSyncAccount: () => void;
   onOpenAutomation: () => void;
+  /** Demo mode: never touch the sync keys in localStorage. */
+  demo?: boolean;
 }) {
   const [name, setName] = useState(initialName);
   const [department, setDepartment] = useState(initialDepartment ?? "");
@@ -85,8 +88,8 @@ export default function SettingsModal({
       setName(initialName);
       setDepartment(initialDepartment ?? "");
       setNameErr("");
-      setSyncUsername(localStorage.getItem("sync_username"));
-      setSyncPhone(localStorage.getItem(SYNC_PHONE_KEY));
+      setSyncUsername(demo ? null : localStorage.getItem("sync_username"));
+      setSyncPhone(demo ? null : localStorage.getItem(SYNC_PHONE_KEY));
       setShowPin(false);
       setNewSecret("");
       setConfirmSec("");
@@ -747,6 +750,10 @@ export default function SettingsModal({
               för alla enheter.
             </p>
           </>
+        ) : demo ? (
+          <p className="text-[12px] text-[#9c7c5c] mb-4 leading-relaxed">
+            Synk är avstängd i demoläget. Avsluta demon för att slå på krypterad synk.
+          </p>
         ) : (
           <button
             onClick={onSetupSync}

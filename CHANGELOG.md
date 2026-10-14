@@ -4,12 +4,27 @@ All notable changes to **min-tid** are recorded here. Format loosely follows [Ke
 
 **Versioning policy:**
 
-- Pre-1.0 we use `1.0.0-beta.N`. Each batch of changes that ships → bump `-beta.N` (no patch suffix inside a beta).
-- After 1.0.0 stable: standard semver — `1.0.1` for bug fixes, `1.1.0` for new features, `2.0.0` for breaking changes.
+- Before 1.0 we used `1.0.0-beta.N` (one bump per shipped batch).
+- From 1.0.0 (stable): standard semver — `1.0.1` for bug fixes, `1.1.0` for new features, `2.0.0` for breaking changes.
 - The version in `package.json` and `server/package.json` must move in lockstep. The running version is shown at the bottom of the settings modal.
 - Add a section here for every bump. Never let it slip — traceability over polish.
 
 ## [Unreleased]
+
+_Nothing yet._
+
+## [1.0.0] — 2026-10-14
+
+**min-tid 1.0.** Den här versionen är en genomgripande omarbetning. Det viktigaste:
+
+- **Rättad flexberäkning och dagstatus.** Dagar utan registrering drar inte längre en hel dag, heldag flex dras en gång och lunch dras bara från ett enda långt pass. Hela historiken räknas om, så ditt saldo kan ändras.
+- **Enligt schema eller Stämpla.** Rapportera genom att bekräfta schemat och bara justera det som avviker, eller stämpla in och ut som förut. Månader kan bekräftas och låsas.
+- **Nya flikar:** Idag, Kalender, Rapport och Mer, med "Att åtgärda" som samlar det som väntar på dig.
+- **Roterande scheman** (1–8 veckor) och schemaperioder som bevarar historiken.
+- **Krypterad synk** mellan enheter: servern kan inte läsa dina data.
+- **Excel:** importera din historik från en mall och exportera rapporten.
+- **Semestersaldo** och **restid** med egna regler.
+- **Demoläge:** öppna `?demo=1` för att titta runt med exempeldata utan att röra dina egna.
 
 ### Internt — kärnlogik utbruten (PR 1)
 
@@ -116,6 +131,18 @@ All notable changes to **min-tid** are recorded here. Format loosely follows [Ke
 #### Internt
 
 - Ny `src/lib/travel.ts` (`splitTravel`, `splitTravelDay`, `makeTravelFor`, `migrateTravelState`) med tester. `evaluateDay` får restiden genom `travelFor`-kroken; `days.ts` lägger `travel.flexMin` på `flexDelta` för dagar som räknas och förklarar restiden i `explanation`. `DayEvaluation.travel` har nu även `payrollMin` och `flexMin`.
+
+### Demoläge och 1.0 (PR 9)
+
+- **Demoläge.** Lägg till `?demo=1` i adressen så öppnas appen med exempeldata för "Anna Demo": åtta veckor i Enligt schema, ett tvåveckorsschema, en semestervecka, en VAB-dag, två dagar att bekräfta, en resa utanför schemat, några utlägg och en bekräftad och låst månad. Ett fält högst upp säger "Demoläge – inget sparas" med en knapp för att avsluta. Allt du ändrar i demon försvinner när du laddar om eller avslutar.
+- **Dina egna data rörs aldrig i demon.** Demon läser och skriver inte dina vanliga data, pratar aldrig med servern och synken är avstängd ("Synk och säkerhet" förklarar det). Importen är avstängd. "Avsluta demo" tar dig tillbaka till din egen app precis som du lämnade den.
+- **Välkomstskärmen** har en länk "Titta runt i en demo först".
+- **Tydligare första start.** Schemavalet i introduktionen pekar på rätt plats (Mer → Schema & rapportläge). Kalendern visar inte längre dagar före din första registrering som "Ledig · 8 h".
+
+#### Internt
+
+- Ny `src/lib/demo.ts`: `buildDemoState(today)` är ren och deterministisk och bygger allt relativt dagens datum, så demon blir aldrig inaktuell. `storageKeyFor`, `shouldSync` och `exitDemoUrl` är små hjälpare med tester som visar att demon använder `punchclock_demo` och att synklagret aldrig anropas.
+- Version 1.0.0 i `package.json` och `server/package.json`. README och CLAUDE.md är uppdaterade.
 
 ## [1.0.0-beta.12] — 2026-08-26
 
@@ -351,6 +378,8 @@ First public beta. The app is feature-complete for time, absence and expense tra
 - **`nixpacks.toml`** overrides the default Caddy start command if Coolify falls back to Nixpacks instead of Dockerfile.
 - **Zero native deps** on the server — `better-sqlite3` was replaced with a plain JSON file store.
 
+[Unreleased]: https://github.com/jensenjr/min-tid/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0
 [1.0.0-beta.12]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.12
 [1.0.0-beta.11]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.11
 [1.0.0-beta.10]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.10

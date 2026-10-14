@@ -106,9 +106,16 @@ import type {
   AppState as StorageShape,
 } from "../lib/types";
 import type { ImportPatch } from "../lib/excel/plan";
+import {
+  DEMO_STORAGE_KEY,
+  buildDemoState,
+  exitDemoUrl,
+  isDemoSearch,
+  shouldSync,
+  storageKeyFor,
+} from "../lib/demo";
 
 // ─── Constants ────────────────────────────────────────────────
-const STORAGE_KEY = "punchclock_v2";
 const SHORT_SESSION_THRESHOLD_MS = 60 * 1000;
 
 function now() {
@@ -116,9 +123,12 @@ function now() {
 }
 
 // ─── Storage ──────────────────────────────────────────────────
-function load(): StorageShape {
+// In demo mode the state is always rebuilt from the seed: neither the real key nor an old
+// demo copy is read, so every ?demo=1 entry starts fresh.
+function load(demo: boolean): StorageShape {
+  if (demo) return buildDemoState(ymdLocal(new Date())) as StorageShape;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(storageKeyFor(false));
     const p = raw ? JSON.parse(raw) : {};
     // Derive trackingStartDate for existing users who don't have it yet:
     // use the earliest session date, so historic flex isn't blown up by missing days.
@@ -180,9 +190,9 @@ function load(): StorageShape {
   }
 }
 
-function save(data: StorageShape) {
+function save(data: StorageShape, demo: boolean) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    localStorage.setItem(storageKeyFor(demo), JSON.stringify(data));
   } catch {
     /* ignore */
   }
@@ -253,8 +263,10 @@ type View = "today" | "calendar" | "report" | "more";
 export default function PunchClock() {
   // Read localStorage once, synchronously, before the first render. Loading in an
   // effect instead used to let the save-effect fire with empty defaults first.
+  // Demo mode (?demo=1) is decided once per page load; leaving it is a full navigation.
+  const [demo] = useState(() => isDemoSearch(window.location.search));
   const bootRef = useRef<StorageShape | null>(null);
-  if (bootRef.current === null) bootRef.current = load();
+  if (bootRef.current === null) bootRef.current = load(demo);
   const boot = bootRef.current;
 
   const [name, setName] = useState(boot.name);
@@ -289,7 +301,7 @@ export default function PunchClock() {
   const [editSession, setEditSession] = useState<Session | null>(null);
   const [shortWarn, setShortWarn] = useState(false);
   const [expenses, setExpenses] = useState<ExpenseEntry[]>(boot.expenses ?? []);
-  // Restid (PR 8). No UI edits these yet (TravelTimeEditor is mounted after PR 5); they load, save and sync.
+  // Restid: edited in "Justera dag" (TravelTimeEditor) and Mer → Restidsregler; both load, save and sync.
   const [travel, setTravel] = useState<TravelEntry[]>(boot.travel ?? []);
   const [travelRules, setTravelRules] = useState<TravelRules>(
     boot.travelRules ?? DEFAULT_TRAVEL_RULES,
@@ -313,17 +325,20 @@ export default function PunchClock() {
     month: string;
   } | null>(null);
   const [focusExpenses, setFocusExpenses] = useState(false);
+  // Demo never reads the sync keys: no token, no revision, no error log.
   const [syncToken, setSyncToken] = useState<string | null>(() =>
-    localStorage.getItem(SYNC_TOKEN_KEY),
+    demo ? null : localStorage.getItem(SYNC_TOKEN_KEY),
   );
   const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "pulling" | "ok" | "error">(
     "idle",
   );
   const [syncedAt, setSyncedAt] = useState<number | null>(null);
   const [syncFailure, setSyncFailure] = useState<SyncFailure | null>(
-    () => readSyncErrorLog()[0] ?? null,
+    () => (demo ? null : readSyncErrorLog()[0]) ?? null,
   );
-  const [syncErrorLog, setSyncErrorLog] = useState<SyncFailure[]>(() => readSyncErrorLog());
+  const [syncErrorLog, setSyncErrorLog] = useState<SyncFailure[]>(() =>
+    demo ? [] : readSyncErrorLog(),
+  );
   // A dismissed banner stays hidden until the *next* failure — a red bar you can
   // never get rid of is worse than one that comes back when it matters.
   const [bannerHiddenFor, setBannerHiddenFor] = useState<number | null>(null);
@@ -337,14 +352,17 @@ export default function PunchClock() {
   // hydrated     we have read the server at least once this session → safe to push
   // suppressPush the next save-effect run comes from applying server data, not the user
   // stateRef     latest payload, so timers/listeners never push a stale closure
-  const syncRevRef = useRef<number>(Number(localStorage.getItem(SYNC_REV_KEY) ?? 0) || 0);
-  const dirtyRef = useRef<boolean>(localStorage.getItem(SYNC_DIRTY_KEY) === "1");
+  const syncRevRef = useRef<number>(
+    demo ? 0 : Number(localStorage.getItem(SYNC_REV_KEY) ?? 0) || 0,
+  );
+  const dirtyRef = useRef<boolean>(demo ? false : localStorage.getItem(SYNC_DIRTY_KEY) === "1");
   const hydratedRef = useRef(false);
   const suppressPushRef = useRef(false);
   const pullingRef = useRef(false);
   const stateRef = useRef<SyncState | null>(null);
   const syncTokenRef = useRef<string | null>(null);
-  syncTokenRef.current = syncToken;
+  // Single choke point for "may we talk to the server": never in demo, never without a token.
+  syncTokenRef.current = shouldSync(demo, syncToken) ? syncToken : null;
   const [automationModal, setAutomationModal] = useState(false);
   const [pendingAction, setPendingAction] = useState<ParsedAction | null>(null);
   const [confirmAction, setConfirmAction] = useState<ParsedAction | null>(null);
@@ -352,7 +370,7 @@ export default function PunchClock() {
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Schedule banners ("you start at 08:00 — check in?") are dismissible per day.
   const [bannerDismissed, setBannerDismissed] = useState<string>(
-    () => localStorage.getItem("punchclock_banner_dismissed") ?? "",
+    () => (demo ? "" : localStorage.getItem("punchclock_banner_dismissed")) ?? "",
   );
 
   function dismissBanner(kind: "start" | "end") {
@@ -360,7 +378,7 @@ export default function PunchClock() {
     const keys = bannerDismissed.split(",").filter((k) => k.startsWith(todayStr()));
     keys.push(`${todayStr()}:${kind}`);
     const next = keys.join(",");
-    localStorage.setItem("punchclock_banner_dismissed", next);
+    if (!demo) localStorage.setItem("punchclock_banner_dismissed", next);
     setBannerDismissed(next);
   }
 
@@ -392,8 +410,9 @@ export default function PunchClock() {
     // ?action=in|out|toggle from a QR code / NFC tag / WiFi automation.
     // Parked in state and executed by the effect below once onboarding is done.
     const urlAction = consumeActionFromUrl();
-    if (urlAction) setPendingAction(urlAction);
-  }, []);
+    // A QR/NFC punch must never land in the demo (and the dedupe key is a real-app key).
+    if (urlAction && !demo) setPendingAction(urlAction);
+  }, [demo]);
 
   useEffect(() => {
     if (!pendingAction || !onboardingDone) return;
@@ -576,29 +595,32 @@ export default function PunchClock() {
   // Persist locally on every change, then push (once we know what the server holds).
   useEffect(() => {
     const legacySchedule = legacyScheduleOf(schedules, ymdLocal(new Date()));
-    save({
-      name,
-      schedule: legacySchedule,
-      schedules,
-      reportingMode,
-      department,
-      onboardingDone,
-      sessions,
-      absences,
-      expenses,
-      travel,
-      travelRules,
-      flexBaseMinutes,
-      flexBaseDate,
-      vacation,
-      trackingStartDate,
-      scheduleExceptions,
-      autoLunchThresholdMin,
-      confirmedDays,
-      lockedMonths,
-      dayAdjustments,
-      auditLog,
-    });
+    save(
+      {
+        name,
+        schedule: legacySchedule,
+        schedules,
+        reportingMode,
+        department,
+        onboardingDone,
+        sessions,
+        absences,
+        expenses,
+        travel,
+        travelRules,
+        flexBaseMinutes,
+        flexBaseDate,
+        vacation,
+        trackingStartDate,
+        scheduleExceptions,
+        autoLunchThresholdMin,
+        confirmedDays,
+        lockedMonths,
+        dayAdjustments,
+        auditLog,
+      },
+      demo,
+    );
     stateRef.current = {
       name,
       schedule: legacySchedule,
@@ -621,7 +643,7 @@ export default function PunchClock() {
       dayAdjustments,
       auditLog,
     };
-    if (!syncToken) return;
+    if (!shouldSync(demo, syncToken)) return;
     if (suppressPushRef.current) {
       suppressPushRef.current = false;
       return;
@@ -650,12 +672,13 @@ export default function PunchClock() {
     dayAdjustments,
     auditLog,
     syncToken,
+    demo,
   ]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Pull when the app opens with a token, and whenever it comes back to the
   // foreground or regains network — that is when the other device's changes land.
   useEffect(() => {
-    if (!syncToken) return;
+    if (!shouldSync(demo, syncToken)) return;
     void pullNow();
     const onVisible = () => {
       if (document.visibilityState === "visible") void pullNow();
@@ -673,6 +696,15 @@ export default function PunchClock() {
   // Don't leave a queued push behind when the tab goes away.
   useEffect(() => {
     const flush = () => {
+      // Demo leaves nothing behind once the page goes away.
+      if (demo) {
+        try {
+          localStorage.removeItem(DEMO_STORAGE_KEY);
+        } catch {
+          /* ignore */
+        }
+        return;
+      }
       if (dirtyRef.current) void pushNow();
     };
     window.addEventListener("pagehide", flush);
@@ -967,6 +999,16 @@ export default function PunchClock() {
     },
   };
 
+  /** Leave the demo: drop its key and reload the real app (same address, without ?demo=1). */
+  function exitDemo() {
+    try {
+      localStorage.removeItem(DEMO_STORAGE_KEY);
+    } catch {
+      /* ignore */
+    }
+    window.location.assign(exitDemoUrl(window.location));
+  }
+
   function handleOnboardingComplete(result: OnboardingResult) {
     if (result.syncToken) {
       localStorage.setItem(SYNC_TOKEN_KEY, result.syncToken);
@@ -1226,7 +1268,11 @@ export default function PunchClock() {
   // Sync failure banner: only when sync is actually set up, and only until the
   // user dismisses *this* failure (a newer one shows it again).
   const showSyncErrorBanner =
-    !!syncToken && syncStatus === "error" && !!syncFailure && bannerHiddenFor !== syncFailure.at;
+    !demo &&
+    !!syncToken &&
+    syncStatus === "error" &&
+    !!syncFailure &&
+    bannerHiddenFor !== syncFailure.at;
   const syncErrorInfo = explainSyncError(syncFailure);
 
   const showEndBanner =
@@ -1251,7 +1297,11 @@ export default function PunchClock() {
         icon="📥"
         title="Importera från Excel"
         subtitle="Hämta mallen och läs in din historik"
-        onClick={() => setImportModal(true)}
+        onClick={() =>
+          demo
+            ? showToast("Import är avstängd i demoläget – dina riktiga data rörs inte.")
+            : setImportModal(true)
+        }
       />
     ),
     vacation: (
@@ -1384,6 +1434,8 @@ export default function PunchClock() {
       <div className="mx-auto max-w-[480px] h-full flex flex-col">
         <div className="shrink-0 h-[env(safe-area-inset-top,0px)]" />
 
+        {demo && <DemoBanner onExit={exitDemo} />}
+
         {/* Header */}
         <header className="shrink-0 px-5 pt-6 pb-4 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
@@ -1500,7 +1552,8 @@ export default function PunchClock() {
               slots={moreSlots}
               onOpenProfile={() => setSettingsModal(true)}
               onOpenSchedule={() => setScheduleModal(true)}
-              onSetupSync={() => setSyncModal(true)}
+              demo={demo}
+              onSetupSync={() => !demo && setSyncModal(true)}
               onOpenSyncAccount={() => setSettingsModal(true)}
               onPullNow={() => {
                 void pullNow({ manual: true });
@@ -1654,6 +1707,7 @@ export default function PunchClock() {
         syncErrorLog={syncErrorLog}
         openSyncHelp={syncHelpOpen}
         dirty={dirtyRef.current}
+        demo={demo}
         onClose={() => {
           setSettingsModal(false);
           setSyncHelpOpen(false);
@@ -1661,7 +1715,7 @@ export default function PunchClock() {
         onSave={handleSettingsSave}
         onSetupSync={() => {
           setSettingsModal(false);
-          setSyncModal(true);
+          if (!demo) setSyncModal(true);
         }}
         onPullNow={() => {
           void pullNow({ manual: true });
@@ -1697,12 +1751,15 @@ export default function PunchClock() {
         </Suspense>
       )}
 
-      <SyncModal
-        open={syncModal}
-        onClose={() => setSyncModal(false)}
-        onToken={handleSyncToken}
-        onRestore={handleSyncRestore}
-      />
+      {/* Demo never mounts the sync UI (RecoveryKeySheet would open the IndexedDB key store). */}
+      {!demo && (
+        <SyncModal
+          open={syncModal}
+          onClose={() => setSyncModal(false)}
+          onToken={handleSyncToken}
+          onRestore={handleSyncRestore}
+        />
+      )}
 
       <FlexBreakdownModal
         open={flexBreakdownOpen}
@@ -1766,6 +1823,22 @@ export default function PunchClock() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Demo banner ───────────────────────────────────────────────
+// Always on screen in demo (above the header, outside the scrolling area).
+function DemoBanner({ onExit }: { onExit: () => void }) {
+  return (
+    <div role="status" className="shrink-0 flex items-center gap-3 px-5 py-2 bg-pc-ink text-white">
+      <span className="flex-1 min-w-0 text-[12px] font-bold truncate">Demoläge – inget sparas</span>
+      <button
+        onClick={onExit}
+        className="pc-press shrink-0 px-3 py-1 rounded-full bg-white text-pc-ink text-[12px] font-extrabold"
+      >
+        Avsluta demo
+      </button>
     </div>
   );
 }
