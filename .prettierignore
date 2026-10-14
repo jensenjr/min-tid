@@ -6,3 +6,4 @@ pnpm-lock.yaml
 package-lock.json
 routeTree.gen.ts
 vendor/
+src/lib/excel/templateData.ts

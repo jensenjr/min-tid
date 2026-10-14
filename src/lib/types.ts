@@ -55,6 +55,30 @@ export type LockedMonth = { at: number; by: string };
 export type AuditAction = "confirm" | "unlock";
 export type AuditEntry = { at: number; action: AuditAction; month: string }; // month: YYYY-MM
 
+export type TravelEntry = {
+  id: string;
+  date: string;
+  from?: string;
+  to?: string;
+  durationMin?: number;
+  destination?: string;
+  note?: string;
+  linkedExpenseId?: string;
+  imported?: boolean;
+};
+export type TravelRules = {
+  outside: "payroll" | "flex" | "none";
+  factor: number;
+  maxPerDayMin?: number;
+  excludeNight: boolean;
+};
+export type VacationSettings = {
+  daysPerYear: number;
+  yearStart: string;
+  allowHalfDays: boolean;
+  opening?: { asOf: string; daysLeft: number; savedDays: number };
+};
+
 // Shape persisted in localStorage under `punchclock_v2`.
 export type AppState = {
   name: string;
@@ -75,4 +99,8 @@ export type AppState = {
   lockedMonths?: Record<string, LockedMonth>; // YYYY-MM → lock
   dayAdjustments?: Record<string, DayAdjustment>; // YYYY-MM-DD → adjustment
   auditLog?: AuditEntry[]; // confirm/unlock history, sorted by at
+  travel?: TravelEntry[];
+  travelRules?: TravelRules;
+  vacation?: VacationSettings;
+  flexBaseDate?: string;
 };
