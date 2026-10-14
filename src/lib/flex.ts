@@ -20,27 +20,17 @@ import {
 } from "./days";
 import type { AbsenceEntry, ScheduleException, Session } from "./types";
 
-/**
- * DayContext plus the day an opening balance was set on. A balance (AppState.flexBaseMinutes,
- * e.g. from the Excel import "Saldon") is the balance at the END of flexBaseDate, so the
- * bank accrues only from the day after it. Without a date it accrues from trackingStartDate.
- */
-export type FlexContext = DayContext & { flexBaseDate?: string };
-
 export type FlexRange = { from?: string; to?: string }; // inclusive local day keys
 export type FlexResult = { minutes: number; missingDays: string[]; unconfirmedDays: string[] };
 
 /** Flex over a range (default: everything since trackingStartDate), clamped to today. */
-export function computeFlex(ctx: FlexContext, range: FlexRange = {}): FlexResult {
+export function computeFlex(ctx: DayContext, range: FlexRange = {}): FlexResult {
   const out: FlexResult = { minutes: 0, missingDays: [], unconfirmedDays: [] };
-  const tracking = ctx.trackingStartDate;
-  if (!isYmd(tracking)) return out;
-  // The opening balance already covers everything up to and including flexBaseDate.
-  const afterBase = isYmd(ctx.flexBaseDate) ? addDaysStr(ctx.flexBaseDate, 1) : undefined;
-  const start = afterBase && afterBase > tracking ? afterBase : tracking;
+  const start = ctx.trackingStartDate;
+  if (!isYmd(start)) return out;
   const today = ctx.today ?? todayLocal();
   // Freeze "today" and "now" so every day of the fold sees the same clock.
-  const c: FlexContext = { ...ctx, today, now: ctx.now ?? Date.now() };
+  const c: DayContext = { ...ctx, today, now: ctx.now ?? Date.now() };
   const from = isYmd(range.from) && range.from > start ? range.from : start;
   const to = isYmd(range.to) && range.to < today ? range.to : today;
   for (let d = from; d <= to; d = addDaysStr(d, 1)) {
@@ -55,11 +45,11 @@ export function computeFlex(ctx: FlexContext, range: FlexRange = {}): FlexResult
 export type WeekFlex = FlexResult & { mondayStr: string };
 
 /** The last `weeks` weeks (newest first, local Mondays), stopping before trackingStartDate. */
-export function computeWeeklyFlex(ctx: FlexContext, weeks: number): WeekFlex[] {
+export function computeWeeklyFlex(ctx: DayContext, weeks: number): WeekFlex[] {
   const start = ctx.trackingStartDate;
   if (!isYmd(start)) return [];
   const today = ctx.today ?? todayLocal();
-  const c: FlexContext = { ...ctx, today, now: ctx.now ?? Date.now() };
+  const c: DayContext = { ...ctx, today, now: ctx.now ?? Date.now() };
   const thisMonday = mondayOfStr(today);
   const rows: WeekFlex[] = [];
   for (let i = 0; i < weeks; i++) {

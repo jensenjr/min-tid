@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_SCHEDULE, periodFromWeek, type WeekSchedule } from "../schedule";
 import {
-  type FlexContext,
   computeFlex,
   computeFlexMinutes,
   computeTodayContribution,
@@ -248,7 +247,7 @@ describe("known bugs (fixed in PR 3)", () => {
 });
 
 // ─── New API: a fold over evaluateDay ─────────────────────────
-function ctx(over: Partial<FlexContext> = {}): FlexContext {
+function ctx(over: Partial<DayContext> = {}): DayContext {
   return {
     sessions: [],
     absences: [],

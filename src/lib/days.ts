@@ -51,6 +51,12 @@ export type DayContext = {
   exceptions?: Record<string, ScheduleException>;
   reportingMode: ReportingMode;
   trackingStartDate?: string;
+  /**
+   * An opening flex balance (AppState.flexBaseMinutes) is the balance at the END of this day,
+   * so the day itself and everything before it is already inside it: flexDelta is 0 for
+   * date <= flexBaseDate (worked time and norm are untouched).
+   */
+  flexBaseDate?: string;
   /** Local day key of "today". Defaults to todayLocal(). */
   today?: string;
   /** Current time in ms. Defaults to Date.now(). */
@@ -433,14 +439,18 @@ export function evaluateDay(
     );
   }
 
-  if (!ctx.trackingStartDate || date < ctx.trackingStartDate) {
+  const beforeStart = !ctx.trackingStartDate || date < ctx.trackingStartDate;
+  const inOpeningBalance = !beforeStart && !!ctx.flexBaseDate && date <= ctx.flexBaseDate;
+  if (beforeStart || inOpeningBalance) {
     flexDelta = 0;
     if (status === "missing" || status === "unconfirmed" || (status === "ongoing" && !open.length))
       status = "off";
     say(
-      ctx.trackingStartDate
-        ? `Före flexstart (${ctx.trackingStartDate}) – räknas inte i flexsaldot`
-        : "Flex räknas från din första registrering – den här dagen räknas inte",
+      inOpeningBalance
+        ? `Ingår i importerat flexsaldo per ${ctx.flexBaseDate}`
+        : ctx.trackingStartDate
+          ? `Före flexstart (${ctx.trackingStartDate}) – räknas inte i flexsaldot`
+          : "Flex räknas från din första registrering – den här dagen räknas inte",
     );
   }
 

@@ -177,7 +177,9 @@ describe("buildReportSheets", () => {
       (s) => s.name === "Sammanfattning",
     )!.rows;
     const mon = rows.find(
-      (r) => r[1] === "Rapporterad" && String(r[5]).includes("Före saldodatum"),
+      (r) =>
+        r[1] === "Rapporterad" &&
+        String(r[5]).includes("Ingår i importerat flexsaldo per 2026-03-02"),
     );
     expect(mon).toBeDefined();
     expect(mon![4]).toBe(0);

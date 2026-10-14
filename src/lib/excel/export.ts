@@ -124,7 +124,7 @@ export function buildReportSheets(
 ): ExportSheet[] {
   const today = opts.today ?? todayLocal();
   const now = opts.now ?? Date.now();
-  const ctx: DayContext & { flexBaseDate?: string } = {
+  const ctx: DayContext = {
     sessions: state.sessions,
     absences: state.absences,
     schedule: state.schedules,
@@ -156,29 +156,22 @@ export function buildReportSheets(
   for (let d = start; d <= end && days < MAX_DAYS; d = addDaysStr(d, 1), days++) {
     const ev = evaluateDay(d, ctx);
     const cfg = getEffectiveDayConfig(d, state.schedules, state.scheduleExceptions);
-    const beforeBase = !!state.flexBaseDate && d <= state.flexBaseDate;
-    const flexDelta = beforeBase ? 0 : ev.flexDelta;
     if (ev.status === "reported" || ev.status === "partial") {
       workedMin += ev.workedMin;
     }
     normMin += ev.normMin;
     excusedMin += ev.absence.excusedMin;
     flexAbsMin += ev.absence.flexMin;
-    if (!beforeBase) {
-      if (ev.status === "missing") missing++;
-      if (ev.status === "unconfirmed") unconfirmed++;
-    }
+    if (ev.status === "missing") missing++;
+    if (ev.status === "unconfirmed") unconfirmed++;
     if (ev.status !== "off" || ev.workedMin > 0) {
       dayRows.push([
         date(d),
         STATUS_LABEL[ev.status],
         hours(ev.normMin),
         hours(ev.workedMin),
-        hours(flexDelta),
-        (beforeBase
-          ? ["Före saldodatum – räknas inte i flexsaldot", ...ev.explanation]
-          : ev.explanation
-        ).join(" · "),
+        hours(ev.flexDelta),
+        ev.explanation.join(" · "),
       ]);
     }
 

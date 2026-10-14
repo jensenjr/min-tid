@@ -70,7 +70,7 @@ import {
   getAbsencesForDate,
   type DayContext,
 } from "../lib/days";
-import { type FlexContext, computeFlex, computeWeeklyFlex } from "../lib/flex";
+import { computeFlex, computeWeeklyFlex } from "../lib/flex";
 import {
   confirmDay,
   confirmMonth,
@@ -1089,7 +1089,7 @@ export default function PunchClock() {
   const weekStartStr = ymdLocal(getWeekMonday(new Date()));
   // Flex = a fold over evaluateDay (src/lib/days.ts). Today counts once it is settled.
   // Everything the views show about a day is derived from this one context.
-  const flexCtx: FlexContext = {
+  const flexCtx: DayContext = {
     sessions,
     absences,
     schedule: schedules,
