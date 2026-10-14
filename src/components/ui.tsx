@@ -105,7 +105,7 @@ export function IconSliders(p: IconProps) {
 }
 
 // Bottom-nav icons
-export const NAV_ICONS = {
+const NAV_ICONS = {
   today: (
     <Svg className="w-6 h-6" strokeWidth={2}>
       <circle cx="12" cy="12" r="9" />
@@ -136,6 +136,10 @@ export const NAV_ICONS = {
     </Svg>
   ),
 };
+
+export function NavIcon({ name }: { name: keyof typeof NAV_ICONS }) {
+  return NAV_ICONS[name];
+}
 
 // ─── Layout bits ──────────────────────────────────────────────
 export function Label({ children }: { children: ReactNode }) {

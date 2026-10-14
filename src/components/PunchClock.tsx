@@ -13,7 +13,7 @@ import DayExceptionModal from "./DayExceptionModal";
 import AdjustDaySheet from "./AdjustDaySheet";
 import ConfirmSheet from "./ConfirmSheet";
 import { ScheduleBanner } from "./dayUi";
-import { NAV_ICONS } from "./ui";
+import { NavIcon } from "./ui";
 import Today from "../views/Today";
 import Calendar from "../views/Calendar";
 import Report from "../views/Report";
@@ -1068,7 +1068,7 @@ export default function PunchClock() {
     0,
   );
   const leave =
-    isIn && todayCfg.active
+    isIn && todayCfg.active && ymdLocal(new Date(activeSession.checkIn)) === todayDate
       ? punchLeaveEstimate({
           cfg: todayCfg,
           workedRawMin: todayWorkedRaw,
@@ -1181,10 +1181,10 @@ export default function PunchClock() {
   );
 
   const NAV: { key: View; label: string; icon: ReactNode }[] = [
-    { key: "today", label: "Idag", icon: NAV_ICONS.today },
-    { key: "calendar", label: "Kalender", icon: NAV_ICONS.calendar },
-    { key: "report", label: "Rapport", icon: NAV_ICONS.report },
-    { key: "more", label: "Mer", icon: NAV_ICONS.more },
+    { key: "today", label: "Idag", icon: <NavIcon name="today" /> },
+    { key: "calendar", label: "Kalender", icon: <NavIcon name="calendar" /> },
+    { key: "report", label: "Rapport", icon: <NavIcon name="report" /> },
+    { key: "more", label: "Mer", icon: <NavIcon name="more" /> },
   ];
 
   const lockedToday = isLocked(todayDate);

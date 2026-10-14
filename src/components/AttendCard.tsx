@@ -8,7 +8,7 @@ import { Card } from "./ui";
 export const ATTEND_VISIBLE_DAYS = 5;
 
 const quickBtn =
-  "pc-press flex-1 min-w-0 py-2 rounded-[12px] border border-pc-line bg-pc-bg text-[11.5px] font-bold text-pc-ink whitespace-nowrap";
+  "pc-press flex-1 min-w-0 py-2 rounded-[12px] border border-pc-line bg-pc-bg text-[11px] font-bold text-pc-ink whitespace-nowrap";
 
 /**
  * "Att åtgärda": days that are missing (punch) or unconfirmed (schedule), receipts to
@@ -113,14 +113,14 @@ export default function AttendCard({
             <div className="text-[12px] text-pc-muted font-medium mb-2 leading-snug">{dayHint}</div>
             <div className="rounded-[18px] border border-pc-line overflow-hidden">
               {visible.map((d) => (
-                <div key={d} className="px-3 py-3 border-t border-pc-line first:border-t-0">
+                <div key={d} className="px-2.5 py-3 border-t border-pc-line first:border-t-0">
                   <div className="flex items-center gap-2 mb-2">
                     <span
                       className={`w-2.5 h-2.5 rounded-full shrink-0 ${summary.dayKind === "punch" ? "bg-red-400" : "bg-gray-300"}`}
                     />
                     <span className="text-[13px] font-bold capitalize">{fmtDateShort(d)}</span>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-1.5">
                     <button onClick={() => actions.enligtSchema(d)} className={quickBtn}>
                       Enligt schema
                     </button>

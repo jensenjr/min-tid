@@ -119,6 +119,14 @@ function AbsenceTile({
 export default function Today(p: TodayProps) {
   const { mode, evaluation: ev, cfg, actions, today } = p;
   const scheduled = ev.normMin > 0;
+  // The clock view already shows a prominent card for a forgotten check-out.
+  const attendShown = p.isLongSession
+    ? {
+        ...p.attend,
+        longSessions: [],
+        total: p.attend.total - p.attend.longSessions.length,
+      }
+    : p.attend;
   const showClock = mode === "punch" || !!p.activeSession;
   // A scheduled day nothing has been said about yet (or the flex clock has not started).
   const awaiting =
@@ -445,7 +453,7 @@ export default function Today(p: TodayProps) {
       )}
 
       <AttendCard
-        summary={p.attend}
+        summary={attendShown}
         actions={actions}
         onFixLongSession={p.onFixLongSession}
         onShowReceipts={p.onShowReceipts}

@@ -63,6 +63,22 @@ All notable changes to **min-tid** are recorded here. Format loosely follows [Ke
 - Nya, valfria fält som sparas och synkas: `reportingMode` (sparas nu alltid), `autoLunchThresholdMin` (300), `confirmedDays`, `lockedMonths`, `dayAdjustments`, `auditLog` och `breakMinutes` på pass. Äldre data laddas utan förlust.
 - `todayLocal()` och `weekKey()` använder lokalt datum. De tidigare förväntat felande testerna är nu vanliga tester, plus nya fall för glömda dagar, halvdagsfrånvaro, helgarbete, helgdag, frånvaro över helg, låst månad och sommartidsnätter.
 
+### Ny navigation och "Enligt schema" (PR 5)
+
+- **Fyra flikar:** Idag, Kalender, Rapport och Mer. Allt som låg bakom kugghjulet, "Planera dagar" och automatiseringen finns nu under Mer.
+- **Enligt schema.** Om du rapporterar enligt schema visar Idag tre stora val: **Enligt schema ✓**, **Justera dag** (start, slut, rast och anteckning) och **Frånvaro**, samt "Du kan gå kl. 17:00". Stämplar du i stället ser du klockan som förut.
+- **Att åtgärda.** En ruta på Idag samlar dagar som saknas (stämpling) eller inte är bekräftade (schema), kvitton att bifoga och pass som varit öppna länge. Varje dag har snabbval: Enligt schema, Justera, Frånvaro. Har du många dagar visas de senaste fem och "Visa alla (N)". Från den 25:e kommer "Bekräfta oktober", som bekräftar och låser månaden.
+- **Kalender.** Månadsvy där saknade dagar har röd ring, ej bekräftade grå ring och låsta månader ett hänglås. Tryck på en dag för att se vad som registrerats och, under "Så räknades dagen", hur tiden räknades. Det finns också en listvy.
+- **Låsta månader.** Dagar i en låst månad går inte att ändra (justera, enligt schema, tider, frånvaro). Du ser ett lås och kan välja "Lås upp månaden"; upplåsningen sparas i loggen. Stämpling i realtid fungerar fortfarande.
+- **Rapport.** Period, totaler, frånvaro per typ, utlägg och export. Text och CSV byggs nu per dag, så siffrorna stämmer med flexsaldot (tidigare räknades varje pass för sig).
+- **Mer.** Schema & rapportläge, Frånvaroregler, Synk och säkerhet (med den gröna raden "Krypterad på enheten · AES-256"), Automatisering och Om appen.
+- **Rättat:** "Flera dagar" med 25, 50 eller 75 % ger inte längre upp till en timme för mycket per dag. Nettotiden på Idag räknar lunch på samma sätt som flexsaldot. Frånvaro och utlägg föreslår rätt datum även mellan midnatt och 02:00. Användare som aldrig stämplar får nu sitt flexstartdatum när de först bekräftar eller justerar en dag. "Koppla från här" glömmer även enhetens nyckel.
+
+#### Internt
+
+- `PunchClock.tsx` är nu skalet (tillstånd, lagring, synk, navigation). Flikarna ligger i `src/views/`, och det som listas under "Att åtgärda", rapportraderna, flerdagsfyllningen och "du kan gå kl." är rena, testade funktioner i `src/lib/` (`attend`, `report`, `fill`, `today`, `format`).
+- Platser för kommande delar finns färdiga: `ReportSlots`, `MoreSlots` och `AdjustDaySheet`s `travelSlot` (dokumenterade i CLAUDE.md).
+
 ## [1.0.0-beta.12] — 2026-08-26
 
 ### Added
