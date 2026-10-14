@@ -21,6 +21,7 @@ import { confirmDay, isDayLocked } from "../confirm";
 import type { AbsenceEntry, AppState, ExpenseEntry, Session, VacationSettings } from "../types";
 import type { ParsedBalances, ParsedWorkbook, RowIssue, TravelImport } from "./parse";
 import { SHEETS } from "./lists";
+import { resolveVacation } from "../vacation";
 
 /** The slice of AppState an import reads. Travel is PR 8's; see ImportPlan.travel. */
 export type ImportableState = Pick<
@@ -48,13 +49,6 @@ export type ImportPatch = {
   vacation: VacationSettings | undefined;
   // Hook for PR 8: add `travel: TravelEntry[] | undefined` here (and in the snapshot) when
   // travel state exists, and map plan.travel to TravelEntry in applyImportPlan.
-};
-
-/** Defaults for a state that has no vacation settings yet (PR 7 owns the real ones). */
-export const DEFAULT_VACATION: VacationSettings = {
-  daysPerYear: 25,
-  yearStart: "04-01",
-  allowHalfDays: false,
 };
 
 export type ImportPlan = {
@@ -274,7 +268,7 @@ export function applyImportPlan(plan: ImportPlan, state: ImportableState): Impor
     if (b.vacationDaysLeft !== undefined || b.savedVacationDays !== undefined) {
       const prev = state.vacation?.opening;
       patch.vacation = {
-        ...(state.vacation ?? DEFAULT_VACATION),
+        ...resolveVacation(state.vacation),
         opening: {
           asOf: b.asOf,
           daysLeft: b.vacationDaysLeft ?? prev?.daysLeft ?? 0,
