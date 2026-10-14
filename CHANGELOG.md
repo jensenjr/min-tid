@@ -31,6 +31,18 @@ All notable changes to **min-tid** are recorded here. Format loosely follows [Ke
 - Servern: ny `server/core.js` med all konto- och synkpolicy (testbar utan serverberoenden), `GET /api/auth/salt`, atomiska skrivningar av `data.json`, vägrar starta på en trasig `data.json` i stället för att tömma den, och loggar aldrig request-bodies.
 - Rättat: en inloggning eller ett kodbyte som pågick samtidigt som en annan enhet synkade kunde skriva tillbaka en gammal kopia av kontot.
 
+### Roterande scheman och schemaperioder (PR 4)
+
+- **Roterande schema.** I "Planera dagar" kan du nu välja 1–8 veckor i schemat, till exempel varannan vecka eller en fyraveckorsrotation. Varje vecka redigeras under en egen flik ("Vecka 1…N"), och "Kopiera vecka 1 till alla" fyller övriga veckor med samma tider. Raden "Den här veckan är vecka 2 av 4" visar var du befinner dig i rotationen, och du kan ange vilken vecka startdatumet ligger i.
+- **Gäller från.** När du ändrar schemat anger du från vilket datum det gäller (som standard idag). Ändringen läggs till som en ny period i stället för att skriva över det gamla, så tidigare dagar behåller sin norm och flexsaldot för passerade veckor ändras inte.
+- **Registrering: Enligt schema eller Stämpla.** Du kan välja hur dagarna ska registreras direkt i "Planera dagar". Valet sparas och synkas, men har ännu ingen effekt på beräkningarna.
+- **Inget går förlorat.** Ditt befintliga schema flyttas automatiskt till en period som gäller från din första registrerade dag. Synk tar med alla perioder, och äldre versioner av appen hittar fortfarande ett vanligt veckoschema.
+
+#### Internt
+
+- `schedule.ts` har nya typer (`ScheduleRotation`, `SchedulePeriod`, `ScheduleSource`) och funktioner för perioder och rotation (`periodFor`, `toPeriods`, `appendPeriod`, `mergePeriods`, `migrateSchedules`, `weeksBetween`, `mondayOfStr` m.fl.). `getEffectiveDayConfig` behåller sin signatur men tar även en lista av perioder; ett vanligt veckoschema fungerar som förut. Veckomatematiken är datumsträngsbaserad och opåverkad av sommartid.
+- "Planera dagar" ligger nu i `src/components/schedule/`. Nya tester i `src/lib/__tests__/schedule.test.ts` (varannan vecka, fyraveckorsrotation, datum före ankaret, periodbyte mitt i veckan, migrering och rundtur).
+
 ## [1.0.0-beta.12] — 2026-08-26
 
 ### Added
