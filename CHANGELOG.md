@@ -92,7 +92,7 @@ All notable changes to **min-tid** are recorded here. Format loosely follows [Ke
 #### Internt
 
 - Nytt `src/lib/excel/` (parser, importplan, ångra-kopia, export, mall) och `src/components/ImportModal.tsx`. SheetJS 0.20.3 ligger som `vendor/xlsx-0.20.3.tgz` (inte npm-paketet `xlsx`) och laddas först när du importerar eller exporterar, så startbunten växer knappt.
-- Nytt `AppState.flexBaseDate`: `flexBaseMinutes` gäller i slutet av det datumet och `computeFlex` räknar bara från dagen efter. Fältet följer med i sparande och synk, liksom `vacation` (ingångssaldo för semester).
+- Nytt `AppState.flexBaseDate`: `flexBaseMinutes` gäller i slutet av det datumet och `evaluateDay` ger flex 0 för det datumet och tidigare dagar, så flexkortet, rapporten och kalendern alltid är överens. Fältet följer med i sparande och synk, liksom `vacation` (ingångssaldo för semester).
 
 ## [1.0.0-beta.12] — 2026-08-26
 

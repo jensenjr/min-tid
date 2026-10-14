@@ -586,3 +586,57 @@ describe("resolveReportingMode", () => {
     expect(resolveReportingMode({ reportingMode: "bogus", sessions: [{}] })).toBe("punch");
   });
 });
+
+describe("evaluateDay with flexBaseDate (opening balance)", () => {
+  const overtime = [session(MON, "08:00", "18:00"), session(TUE, "08:00", "18:00")];
+  const LINE = (d: string) => `Ingår i importerat flexsaldo per ${d}`;
+
+  it("a day before flexBaseDate adds no flex but keeps its status, worked time and norm", () => {
+    const ev = evaluateDay(MON, ctx({ sessions: overtime, flexBaseDate: TUE }));
+    expect(ev.flexDelta).toBe(0);
+    expect(ev.status).toBe("reported");
+    expect(ev.workedMin).toBe(540);
+    expect(ev.normMin).toBe(480);
+    expect(ev.explanation).toContain(LINE(TUE));
+  });
+
+  it("flexBaseDate itself is inside the balance; the day after counts", () => {
+    const c = ctx({ sessions: overtime, flexBaseDate: MON });
+    expect(evaluateDay(MON, c).flexDelta).toBe(0);
+    expect(evaluateDay(MON, c).explanation).toContain(LINE(MON));
+    const after = evaluateDay(TUE, c);
+    expect(after.flexDelta).toBe(60);
+    expect(after.explanation.some((l) => l.includes("importerat flexsaldo"))).toBe(false);
+  });
+
+  it("missing days inside the balance are not listed as missing, later ones are", () => {
+    const c = ctx({ flexBaseDate: MON });
+    expect(evaluateDay("2026-03-06", c).status).toBe("off"); // Friday, covered by the balance
+    expect(evaluateDay(TUE, c).status).toBe("missing");
+  });
+
+  it("a flex absence inside the balance is already in it", () => {
+    const c = ctx({ absences: [absence("flex", MON)], flexBaseDate: MON });
+    expect(evaluateDay(MON, c).flexDelta).toBe(0);
+    expect(evaluateDay(MON, ctx({ absences: [absence("flex", MON)] })).flexDelta).toBe(-480);
+  });
+
+  it("a flexBaseDate before trackingStartDate changes nothing", () => {
+    const withBase = evaluateDay(MON, ctx({ sessions: overtime, flexBaseDate: "2026-01-01" }));
+    const without = evaluateDay(MON, ctx({ sessions: overtime }));
+    expect(withBase).toEqual(without);
+    expect(withBase.flexDelta).toBe(60);
+  });
+
+  it("before trackingStartDate the usual line wins", () => {
+    const ev = evaluateDay(
+      "2026-03-02",
+      ctx({ trackingStartDate: "2026-03-05", flexBaseDate: "2026-03-10" }),
+    );
+    expect(ev.explanation.some((l) => l.startsWith("Före flexstart"))).toBe(true);
+  });
+
+  it("without flexBaseDate nothing changes", () => {
+    expect(evaluateDay(MON, ctx({ sessions: overtime })).flexDelta).toBe(60);
+  });
+});
