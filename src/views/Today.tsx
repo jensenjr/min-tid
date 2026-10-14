@@ -120,6 +120,14 @@ export default function Today(p: TodayProps) {
   const { mode, evaluation: ev, cfg, actions, today } = p;
   const scheduled = ev.normMin > 0;
   const showClock = mode === "punch" || !!p.activeSession;
+  // A scheduled day nothing has been said about yet (or the flex clock has not started).
+  const awaiting =
+    scheduled &&
+    !p.confirmed &&
+    !p.adjustment &&
+    p.sessions.length === 0 &&
+    p.absences.length === 0 &&
+    (ev.status === "off" || ev.status === "ongoing" || ev.status === "unconfirmed");
   const lockedText = p.locked
     ? `${p.lockedMonth ? monthTitle(p.lockedMonth) : "Månaden"} är bekräftad och låst.`
     : null;
@@ -135,8 +143,8 @@ export default function Today(p: TodayProps) {
               <IconLock className="w-4 h-4" />
             </span>
             <div className="flex-1 text-[13px] font-semibold text-amber-800 leading-snug">
-              {lockedText} Du kan inte ändra dagar förrän du låst upp månaden. Stämpling i realtid
-              fungerar som vanligt.
+              {lockedText} Du kan inte ändra dagar förrän du låst upp månaden.
+              {mode === "punch" && " Stämpling i realtid fungerar som vanligt."}
             </div>
           </div>
           <button
@@ -233,12 +241,16 @@ export default function Today(p: TodayProps) {
                 month: "long",
               })}
             </div>
-            <StatusChip
-              status={ev.status}
-              label={
-                p.confirmed && !p.adjustment ? "Bekräftad" : p.adjustment ? "Justerad" : undefined
-              }
-            />
+            {awaiting ? (
+              <StatusChip status="unconfirmed" label="Att bekräfta" />
+            ) : (
+              <StatusChip
+                status={ev.status}
+                label={
+                  p.confirmed && !p.adjustment ? "Bekräftad" : p.adjustment ? "Justerad" : undefined
+                }
+              />
+            )}
           </div>
           <div className="text-[28px] font-extrabold tracking-tight leading-tight">
             {scheduled ? `${cfg.startTime}–${cfg.endTime}` : "Ledig dag"}

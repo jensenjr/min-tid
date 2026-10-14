@@ -301,11 +301,13 @@ export function FlexSubStat({ label, minutes }: { label: string; minutes: number
   const color = minutes > 0 ? "text-green-600" : minutes < 0 ? "text-red-500" : "text-pc-muted";
   const sign = minutes >= 0 ? "+" : "−";
   return (
-    <div className="bg-pc-apricot rounded-2xl px-3 py-3 min-w-0">
+    <div className="bg-pc-apricot rounded-2xl px-2.5 py-3 min-w-0">
       <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-1 truncate">
         {label}
       </div>
-      <div className={`text-[15px] font-extrabold tabular-nums tracking-tight ${color} truncate`}>
+      <div
+        className={`text-[14px] font-extrabold tabular-nums tracking-tight whitespace-nowrap ${color}`}
+      >
         {sign}
         {fmtMin(Math.abs(minutes))}
       </div>

@@ -85,7 +85,7 @@ export default function Calendar({ ctx, actions }: { ctx: DayContext; actions: D
   const listDays: string[] = [];
   for (let d = last < todayS ? last : todayS; d >= first; d = addDaysStr(d, -1)) {
     const ev = evs.get(d) ?? evaluateDay(d, ctx, { explain: false });
-    const hasEntries = getAbsencesForDate(ctx.absences, d).length > 0;
+    const hasEntries = ev.normMin > 0 && getAbsencesForDate(ctx.absences, d).length > 0;
     if (ev.status !== "off" || ev.workedMin > 0 || hasEntries) listDays.push(d);
   }
 
@@ -151,7 +151,7 @@ export default function Calendar({ ctx, actions }: { ctx: DayContext; actions: D
                 const ev = evs.get(dateStr) as DayEvaluation;
                 const inMonth = dateStr.slice(0, 7) === monthKey;
                 const isToday = dateStr === todayS;
-                const abs = getAbsencesForDate(ctx.absences, dateStr);
+                const abs = ev.normMin > 0 ? getAbsencesForDate(ctx.absences, dateStr) : [];
                 const dot = inMonth
                   ? dotClass(
                       ev,
@@ -198,7 +198,8 @@ export default function Calendar({ ctx, actions }: { ctx: DayContext; actions: D
                         className="text-pc-muted font-medium leading-none mt-0.5"
                         style={{ fontSize: "9px" }}
                       >
-                        {Math.floor(wmin / 60)}h{wmin % 60 >= 30 ? "30" : ""}
+                        {Math.floor(wmin / 60)}h
+                        {wmin % 60 > 0 ? String(wmin % 60).padStart(2, "0") : ""}
                       </span>
                     )}
                     {inMonth && abs.length > 0 && ev.workedMin === 0 && (
@@ -208,11 +209,6 @@ export default function Calendar({ ctx, actions }: { ctx: DayContext; actions: D
                     )}
                     {dot && (
                       <span className={`absolute bottom-0.5 w-1.5 h-1.5 rounded-full ${dot}`} />
-                    )}
-                    {inMonth && locked && (
-                      <span className="absolute top-0.5 right-0.5 text-amber-500">
-                        <IconLock className="w-2 h-2" />
-                      </span>
                     )}
                   </button>
                 );
@@ -261,7 +257,7 @@ export default function Calendar({ ctx, actions }: { ctx: DayContext; actions: D
           <div className="-mx-1">
             {listDays.map((d) => {
               const ev = evs.get(d) ?? evaluateDay(d, ctx, { explain: false });
-              const abs = getAbsencesForDate(ctx.absences, d);
+              const abs = ev.normMin > 0 ? getAbsencesForDate(ctx.absences, d) : [];
               return (
                 <button
                   key={d}

@@ -8,7 +8,7 @@ import { Card } from "./ui";
 export const ATTEND_VISIBLE_DAYS = 5;
 
 const quickBtn =
-  "pc-press flex-1 py-2 rounded-[12px] border border-pc-line bg-pc-bg text-[12px] font-bold text-pc-ink";
+  "pc-press flex-1 min-w-0 py-2 rounded-[12px] border border-pc-line bg-pc-bg text-[11.5px] font-bold text-pc-ink whitespace-nowrap";
 
 /**
  * "Att åtgärda": days that are missing (punch) or unconfirmed (schedule), receipts to
