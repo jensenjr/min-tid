@@ -449,10 +449,12 @@ export function evaluateDay(
 
 /**
  * "How is the day going" for the live "Idag" figure: worked − expected while the day is
- * open (ongoing/missing), otherwise the day's flexDelta. Display only.
+ * open (ongoing/missing), otherwise the day's flexDelta. Display only. Nothing worked yet
+ * shows 0, not −norm: an unworked morning (or a missing day) must not look like red flex.
  */
 export function liveDayDelta(ev: DayEvaluation): number {
   if (ev.status === "ongoing" || ev.status === "missing") {
+    if (ev.workedMin === 0) return 0;
     return ev.workedMin - (ev.normMin - ev.absence.excusedMin);
   }
   return ev.flexDelta;
