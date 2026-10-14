@@ -237,9 +237,9 @@ export default function ImportModal({
               Förhandsgranskning · {step.fileName}
             </div>
             <div className="bg-pc-apricot rounded-2xl px-4 py-3 mb-3 text-[14px] text-pc-ink space-y-1">
-              <Line n={plan.sessions.length} label="pass" />
-              <Line n={plan.absences.length} label="frånvaroperioder" />
-              <Line n={plan.expenses.length} label="utlägg" />
+              <Line n={plan.sessions.length} one="pass" many="pass" />
+              <Line n={plan.absences.length} one="frånvaroperiod" many="frånvaroperioder" />
+              <Line n={plan.expenses.length} one="utlägg" many="utlägg" />
               {plan.travel.length > 0 && (
                 <div className="text-pc-muted">
                   {plural(plan.travel.length, "restid", "restider")}
@@ -401,8 +401,8 @@ export default function ImportModal({
             width: "100%",
             padding: "15px",
             borderRadius: "16px",
-            background: step.kind === "idle" ? "#f3ece4" : "#ff5f00",
-            color: step.kind === "idle" ? "#2d1717" : "white",
+            background: step.kind === "done" ? "#ff5f00" : "#f3ece4",
+            color: step.kind === "done" ? "white" : "#2d1717",
             fontWeight: 700,
             fontSize: "15px",
             marginTop: "16px",
@@ -415,11 +415,11 @@ export default function ImportModal({
   );
 }
 
-function Line({ n, label }: { n: number; label: string }) {
+function Line({ n, one, many }: { n: number; one: string; many: string }) {
   if (n === 0) return null;
   return (
     <div>
-      <span className="font-extrabold tabular-nums">{n}</span> {label}
+      <span className="font-extrabold tabular-nums">{n}</span> {n === 1 ? one : many}
     </div>
   );
 }
