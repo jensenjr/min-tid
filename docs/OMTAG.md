@@ -13,7 +13,8 @@ CLAUDE.md in the repo stays the source of truth for conventions (mobile layout i
 ## 0. Ground rules (apply to you and every sub-agent)
 
 - **Never push to, merge into, rebase, or force-push `main`.** The only final step towards `main` is
-  opening a PR that a human merges.
+  opening a PR that a human merges. `stage` (branched from `main`) receives `omtag/v1` at the very end
+  (section 5); nothing else is pushed to it.
 - All feature branches are created from the **current tip of `omtag/v1`** and merged back into it.
 - Each PR owns the files listed for it. Touching another PR's files is only allowed for a one-line import
   or entry-point button. If a PR needs more, stop and note it in the report instead of doing it.
@@ -339,13 +340,14 @@ removal of the "Resetimmar" category.
 1. Full check on `omtag/v1`. Start `npm run dev`, open `?demo=1`, and walk the demo path: Idag → Enligt
    schema → Justera dag with restid → Kalender day explanation → Rapport → Excel export → Mer → Synk och
    säkerhet. Fix anything broken (small fixes only, on a branch `omtag/fixes`, merged like any PR).
-2. Push `omtag/v1`.
-3. With `gh`: open — **do not merge** — a PR `omtag/v1` → `main` titled "min-tid 1.0 — omtag". Body: what
-   changed per PR, migration notes, and the open questions below.
-4. Write `docs/OMTAG-RAPPORT.md` on `omtag/v1`: per PR — status (merged / open / blocked), PR link, tests
-   added, deviations from spec, TODOs. Commit and push.
-5. End with a short summary to the human: what is merged, what is blocked, and the link to the PR to
-   `main`.
+2. Write `docs/OMTAG-RAPPORT.md` on `omtag/v1`: per PR — status (merged / open / blocked), PR link, tests
+   added, deviations from spec, TODOs. Commit and push `omtag/v1`.
+3. With `gh`: open a PR `omtag/v1` → `stage` titled "min-tid 1.0 — omtag". Body: what changed per PR,
+   migration notes, and the open questions below. Re-run the full check, then **merge it into `stage`**
+   (squash is not required here — use a merge commit so the per-PR history stays visible).
+4. With `gh`: open — **do not merge** — a PR `stage` → `main` titled "min-tid 1.0". A human tests `stage`
+   and merges it.
+5. End with a short summary to the human: what is merged, what is blocked, and the links to both PRs.
 
 ## Open questions to list in the report (do not guess beyond the defaults above)
 
