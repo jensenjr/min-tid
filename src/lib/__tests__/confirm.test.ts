@@ -81,7 +81,10 @@ describe("confirmMonth — schedule mode", () => {
   it("keeps earlier audit entries", () => {
     const earlier: AuditEntry[] = [{ at: 5, action: "unlock", month: "2026-02" }];
     const r = confirmMonth("2026-03", base(), { at: 10, by: "Anna", auditLog: earlier });
-    expect(r.ok && r.auditLog).toEqual([...earlier, { at: 10, action: "confirm", month: "2026-03" }]);
+    expect(r.ok && r.auditLog).toEqual([
+      ...earlier,
+      { at: 10, action: "confirm", month: "2026-03" },
+    ]);
   });
 
   it("mid-month: confirms the past, the rest of the month reads as per schedule", () => {
@@ -128,7 +131,14 @@ describe("confirmMonth — punch mode", () => {
     expect(r).toEqual({
       ok: false,
       reason: "missing-days",
-      missingDays: ["2026-03-24", "2026-03-25", "2026-03-26", "2026-03-27", "2026-03-30", "2026-03-31"],
+      missingDays: [
+        "2026-03-24",
+        "2026-03-25",
+        "2026-03-26",
+        "2026-03-27",
+        "2026-03-30",
+        "2026-03-31",
+      ],
     });
   });
 
@@ -244,7 +254,12 @@ describe("migrateDayStatusState (load() / sync tolerate old data)", () => {
       reportingMode: "schedule",
       autoLunchThresholdMin: 240,
       confirmedDays: { "2026-03-02": true, bad: true, "2026-03-03": "yes" },
-      lockedMonths: { "2026-03": { at: 5, by: "Anna" }, "2026-3": { at: 1 }, "2026-04": "x", "2026-02": { at: 3 } },
+      lockedMonths: {
+        "2026-03": { at: 5, by: "Anna" },
+        "2026-3": { at: 1 },
+        "2026-04": "x",
+        "2026-02": { at: 3 },
+      },
       dayAdjustments: {
         "2026-03-02": { start: "08:00", end: "9", breakMin: -1, note: 5 },
         "2026-03-03": { date: "2026-03-03", end: "15:00", breakMin: 30, note: "Tandläkare" },

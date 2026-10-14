@@ -116,9 +116,9 @@ describe("computeFlexMinutes (past days only)", () => {
 
   it("accepts schedule periods (PR 4) as well as a plain week", () => {
     const periods = [periodFromWeek(DEFAULT_SCHEDULE, "2026-01-01")];
-    expect(
-      computeFlexMinutes([session(MON, "08:00", "18:00")], [], periods, START, MON, MON),
-    ).toBe(60);
+    expect(computeFlexMinutes([session(MON, "08:00", "18:00")], [], periods, START, MON, MON)).toBe(
+      60,
+    );
   });
 });
 
@@ -303,10 +303,10 @@ describe("computeFlex", () => {
   });
 
   it("never counts future days", () => {
-    const r = computeFlex(
-      ctx({ sessions: [session("2026-03-12", "08:00", "18:00")] }),
-      { from: MON, to: "2026-03-31" },
-    );
+    const r = computeFlex(ctx({ sessions: [session("2026-03-12", "08:00", "18:00")] }), {
+      from: MON,
+      to: "2026-03-31",
+    });
     expect(r.minutes).toBe(0);
     expect(r.missingDays).toEqual([MON, TUE]);
   });
@@ -435,7 +435,11 @@ describe("computeFlex", () => {
     };
     // Week of 2026-03-02 works, week of 2026-03-09 is off (2-week rotation anchored 03-02).
     const schedule = [
-      { validFrom: "2026-01-01", anchorMonday: "2026-03-02", rotation: { weeks: [DEFAULT_SCHEDULE, off] } },
+      {
+        validFrom: "2026-01-01",
+        anchorMonday: "2026-03-02",
+        rotation: { weeks: [DEFAULT_SCHEDULE, off] },
+      },
     ];
     const r = computeFlex(ctx({ schedule }));
     expect(r.missingDays).toEqual([

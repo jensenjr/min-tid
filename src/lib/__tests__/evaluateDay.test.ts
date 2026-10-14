@@ -120,7 +120,10 @@ describe("evaluateDay — punch mode, past days", () => {
     ];
     expect(evaluateDay(MON, ctx({ sessions: two })).breakMin).toBe(30);
     const zero = [session(MON, "08:00", "17:00", MON, { breakMinutes: 0 })];
-    expect(evaluateDay(MON, ctx({ sessions: zero }))).toMatchObject({ workedMin: 540, breakMin: 0 });
+    expect(evaluateDay(MON, ctx({ sessions: zero }))).toMatchObject({
+      workedMin: 540,
+      breakMin: 0,
+    });
   });
 
   it("an open session on a past day is ongoing and does not touch flex", () => {
@@ -213,7 +216,11 @@ describe("evaluateDay — absences", () => {
 
   it("absence on a non-scheduled day is ignored", () => {
     const r = evaluateDay(SAT_PREV, ctx({ absences: [absence("flex", SAT_PREV)] }));
-    expect(r).toMatchObject({ status: "off", flexDelta: 0, absence: { flexMin: 0, excusedMin: 0 } });
+    expect(r).toMatchObject({
+      status: "off",
+      flexDelta: 0,
+      absence: { flexMin: 0, excusedMin: 0 },
+    });
     expect(r.explanation.join("\n")).toContain("ledig dag");
   });
 });
@@ -241,7 +248,10 @@ describe("evaluateDay — weekend work, exceptions, helgdag", () => {
     const unworked = evaluateDay(MON, ctx({ exceptions, reportingMode: "schedule" }));
     expect(unworked).toMatchObject({ status: "unconfirmed", normMin: 300, workedMin: 300 });
     expect(unworked.explanation).toContain("Norm 5 h (08:00–13:00, ingen lunch)");
-    const worked = evaluateDay(MON, ctx({ exceptions, sessions: [session(MON, "08:00", "13:00")] }));
+    const worked = evaluateDay(
+      MON,
+      ctx({ exceptions, sessions: [session(MON, "08:00", "13:00")] }),
+    );
     expect(worked.flexDelta).toBe(0);
   });
 
@@ -317,14 +327,19 @@ describe("evaluateDay — schedule mode", () => {
   it("an adjustment is worked as adjusted", () => {
     const r = evaluateDay(
       MON,
-      sched({ dayAdjustments: { [MON]: { date: MON, start: "08:00", end: "16:00", breakMin: 30 } } }),
+      sched({
+        dayAdjustments: { [MON]: { date: MON, start: "08:00", end: "16:00", breakMin: 30 } },
+      }),
     );
     expect(r).toMatchObject({ status: "reported", workedMin: 450, breakMin: 30, flexDelta: -30 });
     expect(r.explanation.join("\n")).toContain("Justerad dag 08:00–16:00, rast 30 min");
   });
 
   it("an adjustment fills missing times from the schedule and applies the lunch rule", () => {
-    const left = evaluateDay(MON, sched({ dayAdjustments: { [MON]: { date: MON, end: "15:00" } } }));
+    const left = evaluateDay(
+      MON,
+      sched({ dayAdjustments: { [MON]: { date: MON, end: "15:00" } } }),
+    );
     expect(left).toMatchObject({ workedMin: 360, breakMin: 60, flexDelta: -120 });
     const short = evaluateDay(
       MON,
@@ -507,9 +522,9 @@ describe("evaluateDay — locked months", () => {
       workedMin: 480,
       flexDelta: 0,
     });
-    expect(
-      evaluateDay(MON, ctx({ lockedMonths: locked, reportingMode: "schedule" })).status,
-    ).toBe("reported");
+    expect(evaluateDay(MON, ctx({ lockedMonths: locked, reportingMode: "schedule" })).status).toBe(
+      "reported",
+    );
     expect(evaluateDay(MON, ctx({ lockedMonths: locked })).explanation.join("\n")).toContain(
       "låst",
     );
@@ -532,9 +547,10 @@ describe("evaluateDay — locked months", () => {
   });
 
   it("another month is not affected", () => {
-    expect(evaluateDay("2026-02-27", ctx({ lockedMonths: locked, trackingStartDate: "2026-02-01" })).status).toBe(
-      "missing",
-    );
+    expect(
+      evaluateDay("2026-02-27", ctx({ lockedMonths: locked, trackingStartDate: "2026-02-01" }))
+        .status,
+    ).toBe("missing");
   });
 });
 

@@ -41,7 +41,10 @@ describe("absenceForDay", () => {
   it("is ignored on a non-scheduled day", () => {
     const r = absenceForDay([absence("flex", SAT), absence("semester", SAT)], SAT, cfg(SAT));
     expect(r).toMatchObject({ excusedMin: 0, flexMin: 0, ignored: true });
-    const off: WeekSchedule = { ...DEFAULT_SCHEDULE, fri: { ...DEFAULT_SCHEDULE.fri, active: false } };
+    const off: WeekSchedule = {
+      ...DEFAULT_SCHEDULE,
+      fri: { ...DEFAULT_SCHEDULE.fri, active: false },
+    };
     expect(absenceForDay([absence("vab", FRI)], FRI, cfg(FRI, off)).ignored).toBe(true);
   });
 
@@ -51,9 +54,9 @@ describe("absenceForDay", () => {
       capped: true,
     });
     expect(absenceForDay([absence("flex", MON, MON, 10)], MON, cfg(MON)).flexMin).toBe(480);
-    expect(absenceForDay([absence("sjuk", MON), absence("flex", MON)], MON, cfg(MON))).toMatchObject(
-      { excusedMin: 480, flexMin: 0, capped: true },
-    );
+    expect(
+      absenceForDay([absence("sjuk", MON), absence("flex", MON)], MON, cfg(MON)),
+    ).toMatchObject({ excusedMin: 480, flexMin: 0, capped: true });
     expect(
       absenceForDay([absence("vab", MON, MON, 4), absence("flex", MON, MON, 2)], MON, cfg(MON)),
     ).toMatchObject({ excusedMin: 240, flexMin: 120, capped: false });
@@ -61,7 +64,11 @@ describe("absenceForDay", () => {
 
   it("uses the effective (exception) norm for a full day", () => {
     const exceptions = { [FRI]: { type: "override" as const, endTime: "13:00", lunchMinutes: 0 } };
-    const r = absenceForDay([absence("semester", FRI)], FRI, cfg(FRI, DEFAULT_SCHEDULE, exceptions));
+    const r = absenceForDay(
+      [absence("semester", FRI)],
+      FRI,
+      cfg(FRI, DEFAULT_SCHEDULE, exceptions),
+    );
     expect(r.excusedMin).toBe(300);
   });
 
@@ -73,7 +80,11 @@ describe("absenceForDay", () => {
   });
 
   it("lists the entries that applied", () => {
-    const r = absenceForDay([absence("vab", MON, MON, 4), absence("flex", MON, MON, 2)], MON, cfg(MON));
+    const r = absenceForDay(
+      [absence("vab", MON, MON, 4), absence("flex", MON, MON, 2)],
+      MON,
+      cfg(MON),
+    );
     expect(r.items.map((i) => [i.entry.category, i.minutes, i.flex])).toEqual([
       ["vab", 240, false],
       ["flex", 120, true],
