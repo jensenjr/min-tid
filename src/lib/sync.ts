@@ -54,6 +54,8 @@ export interface SyncState {
   lockedMonths?: unknown; // Record<YYYY-MM, { at, by }>
   dayAdjustments?: unknown; // Record<YYYY-MM-DD, DayAdjustment>
   auditLog?: unknown; // { at, action, month }[]
+  travel?: unknown; // TravelEntry[] (restid)
+  travelRules?: unknown; // TravelRules
 }
 
 // Base URL — empty string in dev (Vite proxies /api → localhost:3001)

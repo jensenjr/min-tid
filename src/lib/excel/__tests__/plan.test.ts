@@ -130,11 +130,13 @@ describe("buildImportPlan", () => {
     expect(again.sessions).toEqual([]);
     expect(again.absences).toEqual([]);
     expect(again.expenses).toEqual([]);
-    expect(again.duplicates).toHaveLength(3 + 4 + 3 + 2);
+    expect(again.travel).toEqual([]);
+    expect(again.duplicates).toHaveLength(3 + 4 + 3 + 2 + 1); // + the Restid row
     const applied = applyImportPlan(again, state1);
     expect(applied.sessions).toHaveLength(4);
     expect(applied.absences).toHaveLength(3);
     expect(applied.expenses).toHaveLength(2);
+    expect(applied.travel).toHaveLength(1); // still one trip: not added twice
   });
 
   it("reports how many imported days fall on or before the balance date", async () => {
@@ -229,6 +231,7 @@ describe("applyImportPlan", () => {
       flexBaseMinutes: 60,
       flexBaseDate: undefined,
       vacation: undefined,
+      travel: [],
     });
     expect(isDayLocked("2026-03-02", {})).toBe(false);
   });

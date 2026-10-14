@@ -556,10 +556,15 @@ describe("evaluateDay — locked months", () => {
 
 describe("evaluateDay — travel hook", () => {
   it("returns zero travel by default", () => {
-    expect(evaluateDay(MON, ctx()).travel).toEqual({ inScheduleMin: 0, outsideMin: 0 });
+    expect(evaluateDay(MON, ctx()).travel).toEqual({
+      inScheduleMin: 0,
+      outsideMin: 0,
+      payrollMin: 0,
+      flexMin: 0,
+    });
   });
 
-  it("passes travel from ctx.travelFor through without touching flex (PR 8 wires the rules)", () => {
+  it("passes travel from ctx.travelFor through (payroll and inside minutes never touch flex)", () => {
     const r = evaluateDay(
       MON,
       ctx({
@@ -567,7 +572,12 @@ describe("evaluateDay — travel hook", () => {
         travelFor: (date) => (date === MON ? { inScheduleMin: 30, outsideMin: 90 } : undefined),
       }),
     );
-    expect(r.travel).toEqual({ inScheduleMin: 30, outsideMin: 90 });
+    expect(r.travel).toEqual({
+      inScheduleMin: 30,
+      outsideMin: 90,
+      payrollMin: 0,
+      flexMin: 0,
+    });
     expect(r.flexDelta).toBe(0);
   });
 });

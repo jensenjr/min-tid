@@ -41,7 +41,19 @@ export type DayStatus =
   | "partial" // absence covers part of the norm, the rest is known
   | "off"; // not a working day, future, or before trackingStartDate
 
-export type TravelMinutes = { inScheduleMin: number; outsideMin: number };
+/**
+ * What the `travelFor` hook returns (see travel.ts `makeTravelFor`). payrollMin/flexMin
+ * are what the outside minutes are worth after factor, cap and routing.
+ */
+export type TravelMinutes = {
+  inScheduleMin: number;
+  outsideMin: number;
+  payrollMin?: number;
+  flexMin?: number;
+};
+
+/** `DayEvaluation.travel`: all four numbers, 0 when there is no travel. */
+export type DayTravel = Required<TravelMinutes>;
 
 export type DayContext = {
   sessions: Session[];
@@ -66,8 +78,9 @@ export type DayContext = {
   lockedMonths?: Record<string, LockedMonth>;
   dayAdjustments?: Record<string, DayAdjustment>;
   /**
-   * Travel hook for PR 8 (travel time). Whatever it returns is passed through in
-   * `travel`; it does not affect flexDelta yet — PR 8 owns those rules.
+   * Travel time (travel.ts). Whatever it returns is passed through in `travel`.
+   * `flexMin` is added to flexDelta on every day that counts; `inScheduleMin` and
+   * `payrollMin` never are (see evaluateDay).
    */
   travelFor?: (date: string, cfg: DayConfig) => TravelMinutes | undefined;
 };
@@ -78,7 +91,7 @@ export type DayEvaluation = {
   workedMin: number; // counted work (per schedule for unconfirmed/confirmed days)
   breakMin: number;
   absence: { flexMin: number; excusedMin: number };
-  travel: TravelMinutes;
+  travel: DayTravel;
   flexDelta: number;
   explanation: string[]; // Swedish, one line each ("Så räknades dagen")
 };
@@ -308,9 +321,11 @@ export function evaluateDay(
   const scheduled = normMin > 0;
   const abs = absenceForDay(ctx.absences, date, cfg);
   const t = ctx.travelFor?.(date, cfg);
-  const travel = {
+  const travel: DayTravel = {
     inScheduleMin: finiteOr0(t?.inScheduleMin),
     outsideMin: finiteOr0(t?.outsideMin),
+    payrollMin: finiteOr0(t?.payrollMin),
+    flexMin: finiteOr0(t?.flexMin),
   };
 
   // Schedule and absence lines come first.
@@ -454,6 +469,32 @@ export function evaluateDay(
     );
   }
 
+  // Travel (Restid). Inside the schedule it is worked time that the schedule/punch already
+  // covers, so it is only explained, never added (adding it would count it twice).
+  // Outside: only the flex-routed minutes change the bank, and only on a day that counts —
+  // not before the flex start, not inside an imported opening balance and not while ongoing. Payroll never touches flex.
+  const counts = !beforeStart && !inOpeningBalance && status !== "ongoing";
+  if (counts) flexDelta += travel.flexMin;
+  if (travel.inScheduleMin > 0) {
+    say(`Restid inom schemat ${fmtDuration(travel.inScheduleMin)} – ingår i arbetstiden`);
+  }
+  if (travel.outsideMin > 0) {
+    const out = fmtDuration(travel.outsideMin);
+    if (travel.flexMin > 0) {
+      say(
+        counts
+          ? `Restid utanför schemat ${out} → flex +${fmtDuration(travel.flexMin)}`
+          : `Restid utanför schemat ${out} → flex (räknas inte den här dagen)`,
+      );
+    } else if (travel.payrollMin > 0) {
+      const paid =
+        travel.payrollMin === travel.outsideMin ? "" : ` ${fmtDuration(travel.payrollMin)}`;
+      say(`Restid utanför schemat ${out} → lön${paid}`);
+    } else {
+      say(`Restid utanför schemat ${out} → räknas inte`);
+    }
+  }
+
   return result(status, workedMin, breakMin, flexDelta);
 }
 
@@ -464,8 +505,10 @@ export function evaluateDay(
  */
 export function liveDayDelta(ev: DayEvaluation): number {
   if (ev.status === "ongoing" || ev.status === "missing") {
-    if (ev.workedMin === 0) return 0;
-    return ev.workedMin - (ev.normMin - ev.absence.excusedMin);
+    // A missing day still gets its travel flex (evaluateDay adds it); an ongoing day does not.
+    const travelFlex = ev.status === "missing" ? ev.travel.flexMin : 0;
+    if (ev.workedMin === 0) return travelFlex;
+    return ev.workedMin - (ev.normMin - ev.absence.excusedMin) + travelFlex;
   }
   return ev.flexDelta;
 }

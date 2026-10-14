@@ -68,6 +68,7 @@ export function readImportUndo(store: Store | null = defaultStore()): ImportUndo
         flexBaseMinutes: s.flexBaseMinutes,
         flexBaseDate: typeof s.flexBaseDate === "string" ? s.flexBaseDate : undefined,
         vacation: s.vacation && typeof s.vacation === "object" ? s.vacation : undefined,
+        travel: Array.isArray(s.travel) ? s.travel : undefined,
       },
     };
   } catch {

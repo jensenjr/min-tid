@@ -6,6 +6,7 @@ import { ABSENCE_LABEL, absenceForDay } from "./absence";
 import {
   type DayContext,
   type DayStatus,
+  type DayTravel,
   evaluateDay,
   fmtDuration,
   fmtSignedDuration,
@@ -62,6 +63,7 @@ export type ReportRow = {
   workedMin: number;
   breakMin: number;
   flexDelta: number;
+  travel: DayTravel; // Restid: inside/outside the schedule, payroll and flex minutes
   start?: string; // "HH:MM"
   end?: string;
   timeSource: TimeSource;
@@ -77,6 +79,11 @@ export type ReportTotals = {
   workedDays: number;
   missingDays: string[]; // punch mode: nothing registered
   unconfirmedDays: string[]; // schedule mode: counted per schedule, not yet confirmed
+  /**
+   * Restid over the period. totalMin = inScheduleMin + outsideMin (night-excluded minutes
+   * are in neither). payrollMin is what goes to payroll; flexMin is already inside flexMin above.
+   */
+  travel: DayTravel & { totalMin: number };
 };
 
 export type AbsenceTotal = {
@@ -106,6 +113,7 @@ export function buildReport(ctx: DayContext, start: string, end: string): Report
     workedDays: 0,
     missingDays: [],
     unconfirmedDays: [],
+    travel: { inScheduleMin: 0, outsideMin: 0, payrollMin: 0, flexMin: 0, totalMin: 0 },
   };
   const absByCat = new Map<AbsenceCategory, AbsenceTotal>();
   // Freeze the clock so every day sees the same "now".
@@ -166,7 +174,9 @@ export function buildReport(ctx: DayContext, start: string, end: string): Report
       absByCat.set(a.category, t);
     }
 
-    const include = ev.status !== "off" || ev.workedMin > 0 || absences.length > 0 || !!adj;
+    const hasTravel = ev.travel.inScheduleMin + ev.travel.outsideMin > 0;
+    const include =
+      ev.status !== "off" || ev.workedMin > 0 || absences.length > 0 || !!adj || hasTravel;
     if (!include) continue;
 
     const expectedMin = Math.max(0, ev.normMin - ev.absence.excusedMin);
@@ -178,6 +188,7 @@ export function buildReport(ctx: DayContext, start: string, end: string): Report
       workedMin: ev.workedMin,
       breakMin: ev.breakMin,
       flexDelta: ev.flexDelta,
+      travel: ev.travel,
       start: startHm,
       end: endHm,
       timeSource,
@@ -189,9 +200,14 @@ export function buildReport(ctx: DayContext, start: string, end: string): Report
     if (ev.status !== "off" || ev.workedMin > 0) {
       totals.workedMin += ev.workedMin;
       if (ev.status !== "ongoing") totals.expectedMin += expectedMin;
-      totals.flexMin += ev.flexDelta;
       if (ev.workedMin > 0) totals.workedDays += 1;
     }
+    totals.flexMin += ev.flexDelta; // a day off can carry travel flex
+    totals.travel.inScheduleMin += ev.travel.inScheduleMin;
+    totals.travel.outsideMin += ev.travel.outsideMin;
+    totals.travel.payrollMin += ev.travel.payrollMin;
+    totals.travel.flexMin += ev.travel.flexMin;
+    totals.travel.totalMin += ev.travel.inScheduleMin + ev.travel.outsideMin;
     if (ev.status === "missing") totals.missingDays.push(date);
     if (ev.status === "unconfirmed") totals.unconfirmedDays.push(date);
   }
@@ -249,6 +265,8 @@ export function buildCsv(report: Report): string {
     "Arbetad (h)",
     "Norm (min)",
     "Flex (min)",
+    "Restid (min)",
+    "Restid till lön (min)",
     "Frånvaro",
     "Anteckning",
   ];
@@ -264,6 +282,8 @@ export function buildCsv(report: Report): string {
     hours(r.workedMin),
     String(r.expectedMin),
     String(r.flexDelta),
+    String(r.travel.inScheduleMin + r.travel.outsideMin),
+    String(r.travel.payrollMin),
     r.absences.map((a) => `${a.label}${a.fullDay ? "" : ` ${fmtDuration(a.minutes)}`}`).join(", "),
     r.note ?? "",
   ]);
@@ -274,6 +294,16 @@ export function buildCsv(report: Report): string {
 }
 
 // ─── Share text ───────────────────────────────────────────────
+/** "Restid: 3 h (1 h under arbetstid, 2 h utanför) · till lön 2 h · till flex 0 min" */
+export function travelSummaryLine(t: ReportTotals["travel"]): string {
+  const parts = [
+    `Restid: ${fmtDuration(t.totalMin)} (${fmtDuration(t.inScheduleMin)} under arbetstid, ${fmtDuration(t.outsideMin)} utanför)`,
+  ];
+  if (t.payrollMin > 0) parts.push(`till lön ${fmtDuration(t.payrollMin)}`);
+  if (t.flexMin > 0) parts.push(`till flex ${fmtDuration(t.flexMin)}`);
+  return parts.join(" · ");
+}
+
 export function buildShareText(
   report: Report,
   opts: {
@@ -330,6 +360,9 @@ export function buildShareText(
       } else {
         lines.push(`  ${label}`);
       }
+      if (r.travel.inScheduleMin + r.travel.outsideMin > 0) {
+        lines.push(`    Restid ${fmtDuration(r.travel.inScheduleMin + r.travel.outsideMin)}`);
+      }
       for (const a of r.absences) {
         lines.push(`    ${a.label}${a.fullDay ? " (hel dag)" : ` ${fmtDuration(a.minutes)}`}`);
       }
@@ -342,6 +375,10 @@ export function buildShareText(
     lines.push(
       `Total: ${fmtDuration(totals.workedMin)} · flex ${fmtSignedDuration(totals.flexMin)}`,
     );
+  }
+
+  if (totals.travel.totalMin > 0) {
+    lines.push(travelSummaryLine(totals.travel));
   }
 
   const periodExpenses = opts.expenses
