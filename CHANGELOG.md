@@ -138,6 +138,7 @@ _Nothing yet._
 - **Dina egna data rörs aldrig i demon.** Demon läser och skriver inte dina vanliga data, pratar aldrig med servern och synken är avstängd ("Synk och säkerhet" förklarar det). Importen är avstängd. "Avsluta demo" tar dig tillbaka till din egen app precis som du lämnade den.
 - **Välkomstskärmen** har en länk "Titta runt i en demo först".
 - **Tydligare första start.** Schemavalet i introduktionen pekar på rätt plats (Mer → Schema & rapportläge). Kalendern visar inte längre dagar före din första registrering som "Ledig · 8 h".
+- **Rapporten räknar inte dagar före flexstart.** Börjar du mitt i en månad visar Rapport bara dagarna från din första registrering, inte hela månaden som arbetad enligt schema.
 
 #### Internt
 

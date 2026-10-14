@@ -255,3 +255,18 @@ describe("buildReport and flexBaseDate", () => {
     expect(plain.totals.flexMin).toBe(90);
   });
 });
+
+describe("buildReport before the flex start", () => {
+  it("does not count unregistered schedule-mode days before trackingStartDate as worked", () => {
+    // Mid-month starter: tracking starts Monday 2026-10-12, schedule mode, nothing registered.
+    const c = ctx({ reportingMode: "schedule", trackingStartDate: "2026-10-12" });
+    const before = evaluateDay("2026-10-08", c);
+    expect(before).toMatchObject({ status: "off", workedMin: 0, breakMin: 0, flexDelta: 0 });
+
+    const r = buildReport(c, "2026-10-01", "2026-10-14");
+    // Only 12, 13 and 14 Oct (after 17:00 → unconfirmed) are inside flex tracking.
+    expect(r.totals.workedMin).toBe(3 * 480);
+    expect(r.totals.expectedMin).toBe(3 * 480);
+    expect(r.rows.map((row) => row.date)).toEqual(["2026-10-12", "2026-10-13", "2026-10-14"]);
+  });
+});

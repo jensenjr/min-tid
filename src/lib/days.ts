@@ -458,8 +458,17 @@ export function evaluateDay(
   const inOpeningBalance = !beforeStart && !!ctx.flexBaseDate && date <= ctx.flexBaseDate;
   if (beforeStart || inOpeningBalance) {
     flexDelta = 0;
-    if (status === "missing" || status === "unconfirmed" || (status === "ongoing" && !open.length))
+    if (
+      status === "missing" ||
+      status === "unconfirmed" ||
+      (status === "ongoing" && !open.length)
+    ) {
+      // Nothing registered: "worked per schedule" was only an assumption for flex, so a
+      // day outside flex tracking must not show up as worked time in reports either.
       status = "off";
+      workedMin = 0;
+      breakMin = 0;
+    }
     say(
       inOpeningBalance
         ? `Ingår i importerat flexsaldo per ${ctx.flexBaseDate}`
