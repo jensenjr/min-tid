@@ -3,6 +3,7 @@ WORKDIR /app
 
 # Build frontend
 COPY package*.json ./
+COPY vendor ./vendor
 RUN npm ci
 COPY . .
 RUN npm run build
