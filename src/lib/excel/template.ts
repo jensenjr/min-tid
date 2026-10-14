@@ -4,8 +4,8 @@
 // SheetJS Community can't write data validations, cell styles or comments, so the file in
 // docs/min-tid-importmall.xlsx is embedded as-is (templateData.ts, a lazy chunk) instead of
 // being rebuilt sheet by sheet. A test compares the embedded bytes with the docs copy.
-export const TEMPLATE_FILENAME = "min-tid-importmall.xlsx";
-export const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+export { TEMPLATE_FILENAME, XLSX_MIME } from "./lists";
 
 export async function buildTemplate(): Promise<Uint8Array> {
   const { TEMPLATE_BASE64 } = await import("./templateData");

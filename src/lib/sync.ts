@@ -45,6 +45,8 @@ export interface SyncState {
   absences: unknown[];
   expenses: unknown[];
   flexBaseMinutes: number;
+  flexBaseDate?: string; // the flex balance is at the END of this day (Excel import)
+  vacation?: unknown; // VacationSettings (incl. the imported opening balance)
   trackingStartDate?: string;
   scheduleExceptions?: unknown;
   autoLunchThresholdMin?: unknown; // minutes; one session longer than this gets the schedule lunch

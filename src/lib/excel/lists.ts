@@ -4,6 +4,8 @@
 import type { AbsenceCategory, ExpenseCategory } from "../types";
 
 export const TEMPLATE_VERSION = 1;
+export const TEMPLATE_FILENAME = "min-tid-importmall.xlsx";
+export const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 export const SHEETS = {
   instructions: "Instruktioner",

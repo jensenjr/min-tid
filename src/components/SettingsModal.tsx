@@ -30,6 +30,7 @@ export default function SettingsModal({
   onDisconnectSync,
   onDeleteSyncAccount,
   onOpenAutomation,
+  onOpenImport,
 }: {
   open: boolean;
   initialName: string;
@@ -50,6 +51,8 @@ export default function SettingsModal({
   onDisconnectSync: () => void;
   onDeleteSyncAccount: () => void;
   onOpenAutomation: () => void;
+  /** Temporary entry point; PR 5 moves it into More → Importera från Excel. */
+  onOpenImport: () => void;
 }) {
   const [name, setName] = useState(initialName);
   const [department, setDepartment] = useState(initialDepartment ?? "");
@@ -280,6 +283,37 @@ export default function SettingsModal({
             <div className="font-bold text-[13px]">Automatisera in/ut-checkning</div>
             <div className="text-[11px] text-[#9c7c5c] font-medium">
               QR-koder, NFC-taggar och WiFi via Genvägar
+            </div>
+          </div>
+        </button>
+
+        {/* Temporary entry point (PR 5 moves it into More) */}
+        <button
+          onClick={onOpenImport}
+          style={{
+            width: "100%",
+            padding: "13px 16px",
+            borderRadius: "14px",
+            border: "1.5px solid #ece6df",
+            fontSize: "14px",
+            outline: "none",
+            background: "#fdf6ee",
+            fontWeight: 600,
+            color: "#2d1717",
+            marginBottom: "16px",
+            boxSizing: "border-box",
+            textAlign: "left",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+          }}
+        >
+          <span>📥</span>
+          <div>
+            <div className="font-bold text-[13px]">Importera från Excel</div>
+            <div className="text-[11px] text-[#9c7c5c] font-medium">
+              Hämta mallen och läs in din historik
             </div>
           </div>
         </button>

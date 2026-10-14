@@ -92,7 +92,7 @@ export function parseNumberCell(v: CellValue): Parsed<number> {
   if (typeof v === "string") {
     const cleaned = v
       .trim()
-      .replace(/[\s ]/g, "")
+      .replace(/\s/g, "") // \s also covers the non-breaking space used as a thousands separator
       .replace(/(kr|sek|h|tim|km|min)$/i, "")
       .replace("−", "-")
       .replace(",", ".");
