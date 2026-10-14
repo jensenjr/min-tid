@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import Onboarding, { type OnboardingResult, WeekScheduleEditor } from "./Onboarding";
+import Onboarding, { type OnboardingResult } from "./Onboarding";
+import ScheduleEditorModal from "./schedule/ScheduleEditorModal";
 import AbsenceModal, {
   type AbsenceEntry,
   type AbsenceCategory,
@@ -44,14 +45,18 @@ import {
 import {
   type WeekSchedule,
   type DayConfig,
+  type ScheduleSource,
+  type SchedulePeriod,
   DEFAULT_SCHEDULE,
-  dayKeyOf,
   netDayMin,
   shiftMinutes,
-  weeklyNetMin,
+  weeklyNetMinFor,
   fmtMin,
-  migrateNormHours,
-  migrateSchedule,
+  migrateSchedules,
+  mergePeriods,
+  parsePeriods,
+  periodFromWeek,
+  legacyScheduleOf,
   getEffectiveDayConfig,
 } from "../lib/schedule";
 import {
@@ -68,7 +73,12 @@ import {
   computeTodayDelta,
   computeWeeklyFlexBreakdown,
 } from "../lib/flex";
-import type { Session, ScheduleException, AppState as StorageShape } from "../lib/types";
+import type {
+  Session,
+  ScheduleException,
+  ReportingMode,
+  AppState as StorageShape,
+} from "../lib/types";
 
 // ─── Constants ────────────────────────────────────────────────
 const STORAGE_KEY = "punchclock_v2";
@@ -125,7 +135,7 @@ function groupByDate(sessions: Session[]) {
 
 function computeWeekNet(
   sessions: Session[],
-  schedule: WeekSchedule,
+  schedule: ScheduleSource,
   exceptions: Record<string, ScheduleException> = {},
 ): number {
   const byDate = groupByDate(sessions);
@@ -231,13 +241,12 @@ function buildShareText(
   absences: AbsenceEntry[],
   expenses: ExpenseEntry[],
   name: string,
-  schedule: WeekSchedule,
+  schedule: ScheduleSource,
   periodStart: string,
   periodEnd: string,
   periodLabel: string,
   exceptions: Record<string, ScheduleException> = {},
 ) {
-  const wNorm = weeklyNetMin(schedule);
   const completed = sessions.filter((s) => s.checkOut !== null);
   const inRange = (d: string) => d >= periodStart && d <= periodEnd;
 
@@ -272,6 +281,7 @@ function buildShareText(
     const wSessions = wDates.flatMap((d) => byDate[d] ?? []);
     const wNet = computeWeekNet(wSessions, schedule, exceptions);
     grandNet += wNet;
+    const wNorm = weeklyNetMinFor(schedule, wDates[0]);
     const diff = wNet - wNorm;
     const diffStr = diff >= 0 ? `+${fmtMin(diff)}` : `−${fmtMin(Math.abs(diff))}`;
     lines.push(`── ${weekRangeLabel(wMon)} ──`);
@@ -340,7 +350,7 @@ function buildShareText(
 function buildCsvExport(
   sessions: Session[],
   absences: AbsenceEntry[],
-  schedule: WeekSchedule,
+  schedule: ScheduleSource,
   periodStart: string,
   periodEnd: string,
   exceptions: Record<string, ScheduleException> = {},
@@ -419,19 +429,14 @@ function downloadCsv(content: string, filename: string) {
 }
 
 // ─── Storage ──────────────────────────────────────────────────
+function isReportingMode(v: unknown): v is ReportingMode {
+  return v === "schedule" || v === "punch";
+}
+
 function load(): StorageShape {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     const p = raw ? JSON.parse(raw) : {};
-    let schedule: WeekSchedule;
-    if (p.schedule) {
-      // Migrate old gross+lunch model → net model
-      schedule = migrateSchedule(p.schedule as Record<string, unknown>);
-    } else if (p.normHours) {
-      schedule = migrateNormHours(p.normHours as number);
-    } else {
-      schedule = DEFAULT_SCHEDULE;
-    }
     // Derive trackingStartDate for existing users who don't have it yet:
     // use the earliest session date, so historic flex isn't blown up by missing days.
     let trackingStartDate: string | undefined = p.trackingStartDate;
@@ -441,9 +446,19 @@ function load(): StorageShape {
         .sort();
       trackingStartDate = dates[0];
     }
+    // `schedules` is the source of truth. An older state with only `schedule` (or the
+    // oldest `normHours`) becomes one period valid from the tracking start date.
+    const schedules = migrateSchedules({
+      schedules: p.schedules,
+      schedule: p.schedule,
+      normHours: p.normHours,
+      trackingStartDate,
+    });
     return {
       name: p.name ?? "",
-      schedule,
+      schedule: legacyScheduleOf(schedules, ymdLocal(new Date())),
+      schedules,
+      reportingMode: isReportingMode(p.reportingMode) ? p.reportingMode : undefined,
       department: p.department,
       onboardingDone: p.onboardingDone ?? false,
       sessions: p.sessions ?? [],
@@ -462,6 +477,7 @@ function load(): StorageShape {
     return {
       name: "",
       schedule: DEFAULT_SCHEDULE,
+      schedules: migrateSchedules({}),
       onboardingDone: false,
       sessions: [],
       absences: [],
@@ -502,6 +518,12 @@ function mergeSyncState(server: SyncState, local: SyncState): SyncState {
     name: local.name || server.name,
     department: local.department ?? server.department,
     schedule: local.schedule ?? server.schedule,
+    // Schedule periods: union by validFrom, local wins on a collision.
+    schedules: mergePeriods(
+      parsePeriods(server.schedules) ?? [],
+      parsePeriods(local.schedules) ?? [],
+    ),
+    reportingMode: local.reportingMode ?? server.reportingMode,
     flexBaseMinutes: local.flexBaseMinutes,
     trackingStartDate,
     sessions: mergeById(
@@ -627,7 +649,8 @@ export default function PunchClock() {
   const boot = bootRef.current;
 
   const [name, setName] = useState(boot.name);
-  const [schedule, setSchedule] = useState<WeekSchedule>(boot.schedule);
+  const [schedules, setSchedules] = useState<SchedulePeriod[]>(boot.schedules);
+  const [reportingMode, setReportingMode] = useState<ReportingMode | undefined>(boot.reportingMode);
   const [department, setDepartment] = useState<string | undefined>(boot.department);
   const [onboardingDone, setOnboardingDone] = useState(boot.onboardingDone);
   const [sessions, setSessions] = useState<Session[]>(boot.sessions);
@@ -808,9 +831,14 @@ export default function PunchClock() {
     suppressPushRef.current = !opts.push;
     setName(s.name ?? "");
     setDepartment(s.department);
-    setSchedule(
-      s.schedule ? migrateSchedule(s.schedule as Record<string, unknown>) : DEFAULT_SCHEDULE,
+    setSchedules(
+      migrateSchedules({
+        schedules: s.schedules,
+        schedule: s.schedule,
+        trackingStartDate: s.trackingStartDate,
+      }),
     );
+    setReportingMode(isReportingMode(s.reportingMode) ? s.reportingMode : undefined);
     setSessions((s.sessions ?? []) as Session[]);
     setAbsences((s.absences ?? []) as AbsenceEntry[]);
     setExpenses((s.expenses ?? []) as ExpenseEntry[]);
@@ -916,9 +944,12 @@ export default function PunchClock() {
 
   // Persist locally on every change, then push (once we know what the server holds).
   useEffect(() => {
+    const legacySchedule = legacyScheduleOf(schedules, ymdLocal(new Date()));
     save({
       name,
-      schedule,
+      schedule: legacySchedule,
+      schedules,
+      reportingMode,
       department,
       onboardingDone,
       sessions,
@@ -930,7 +961,9 @@ export default function PunchClock() {
     });
     stateRef.current = {
       name,
-      schedule,
+      schedule: legacySchedule,
+      schedules,
+      reportingMode,
       department,
       sessions,
       absences,
@@ -948,7 +981,8 @@ export default function PunchClock() {
     pushSoon();
   }, [
     name,
-    schedule,
+    schedules,
+    reportingMode,
     department,
     onboardingDone,
     sessions,
@@ -987,13 +1021,12 @@ export default function PunchClock() {
     return () => window.removeEventListener("pagehide", flush);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const weeklyNorm = weeklyNetMin(schedule);
   const activeSession = sessions.find((s) => !s.checkOut);
   const todaySessions = sessions.filter(
     (s) => new Date(s.checkIn).toISOString().slice(0, 10) === todayStr(),
   );
   const todayDate = todayStr();
-  const { net: todayNet } = computeDayMinutes(todaySessions, todayDate, schedule);
+  const { net: todayNet } = computeDayMinutes(todaySessions, todayDate, schedules);
   void todayNet;
   const isIn = !!activeSession;
 
@@ -1158,7 +1191,7 @@ export default function PunchClock() {
       });
     } else {
       setName(result.name);
-      setSchedule(result.schedule);
+      setSchedules([periodFromWeek(result.schedule)]);
       setDepartment(result.department);
     }
     setOnboardingDone(true);
@@ -1211,7 +1244,7 @@ export default function PunchClock() {
     setSyncToken(token);
     adoptRestoredState(state, rev, {
       fallbackName: name,
-      fallbackSchedule: schedule,
+      fallbackSchedule: legacyScheduleOf(schedules, ymdLocal(new Date())),
       fallbackDepartment: department,
     });
     setSyncModal(false);
@@ -1283,7 +1316,7 @@ export default function PunchClock() {
         absences,
         expenses,
         name,
-        schedule,
+        schedules,
         start,
         end,
         label,
@@ -1296,14 +1329,14 @@ export default function PunchClock() {
   function downloadReportCsv() {
     const { start, end, fileLabel } = reportPeriod();
     downloadCsv(
-      buildCsvExport(sessions, absences, schedule, start, end, scheduleExceptions),
+      buildCsvExport(sessions, absences, schedules, start, end, scheduleExceptions),
       `tidrapport-${fileLabel}.csv`,
     );
   }
 
   async function shareReportFile() {
     const { start, end, fileLabel } = reportPeriod();
-    const csv = buildCsvExport(sessions, absences, schedule, start, end, scheduleExceptions);
+    const csv = buildCsvExport(sessions, absences, schedules, start, end, scheduleExceptions);
     const file = new File([csv], `tidrapport-${fileLabel}.csv`, { type: "text/csv" });
     const nav = navigator as Navigator & { canShare?: (d?: ShareData) => boolean };
     if (nav.canShare && nav.canShare({ files: [file] })) {
@@ -1344,7 +1377,7 @@ export default function PunchClock() {
   const flexPastTotal = computeFlexMinutes(
     sessions,
     absences,
-    schedule,
+    schedules,
     trackingStartDate,
     undefined,
     undefined,
@@ -1353,7 +1386,7 @@ export default function PunchClock() {
   const flexPastMonth = computeFlexMinutes(
     sessions,
     absences,
-    schedule,
+    schedules,
     trackingStartDate,
     monthStartStr,
     todayDate,
@@ -1362,7 +1395,7 @@ export default function PunchClock() {
   const flexPastWeek = computeFlexMinutes(
     sessions,
     absences,
-    schedule,
+    schedules,
     trackingStartDate,
     weekStartStr,
     todayDate,
@@ -1371,7 +1404,7 @@ export default function PunchClock() {
   const todayCommitted = computeTodayContribution(
     sessions,
     absences,
-    schedule,
+    schedules,
     todayDate,
     trackingStartDate,
     scheduleExceptions,
@@ -1381,7 +1414,7 @@ export default function PunchClock() {
   const flexWeek = flexPastWeek + todayCommitted;
 
   const liveMs = activeSession ? now() - activeSession.checkIn : 0;
-  const todayCfg = getEffectiveDayConfig(todayDate, schedule, scheduleExceptions);
+  const todayCfg = getEffectiveDayConfig(todayDate, schedules, scheduleExceptions);
   const liveNetRaw =
     todaySessions.reduce((a, s) => a + ((s.checkOut ?? now()) - s.checkIn), 0) / 60000;
   const liveNet = Math.max(0, liveNetRaw - (todayCfg.active ? todayCfg.lunchMinutes : 0));
@@ -1416,7 +1449,7 @@ export default function PunchClock() {
   let lateScheduledEndMs: number | undefined;
   if (activeSession) {
     const ciDate = ymdLocal(new Date(activeSession.checkIn));
-    const ciCfg = getEffectiveDayConfig(ciDate, schedule, scheduleExceptions);
+    const ciCfg = getEffectiveDayConfig(ciDate, schedules, scheduleExceptions);
     if (ciCfg.active) {
       const ms = new Date(`${ciDate}T${ciCfg.endTime}`).getTime();
       if (ms > activeSession.checkIn && ms <= now()) lateScheduledEndMs = ms;
@@ -1818,7 +1851,7 @@ export default function PunchClock() {
                   <CalendarView
                     sessions={sessions}
                     absences={absences}
-                    schedule={schedule}
+                    schedule={schedules}
                     scheduleExceptions={scheduleExceptions}
                     selectedDate={calendarSelectedDate}
                     onSelectDate={(d) => setCalendarSelectedDate((prev) => (prev === d ? null : d))}
@@ -1832,13 +1865,13 @@ export default function PunchClock() {
                       const dayAbsences = getAbsencesForDate(absences, calendarSelectedDate);
                       const dayCfg = getEffectiveDayConfig(
                         calendarSelectedDate,
-                        schedule,
+                        schedules,
                         scheduleExceptions,
                       );
                       const { net: dayNet } = computeDayMinutes(
                         daySessions,
                         calendarSelectedDate,
-                        schedule,
+                        schedules,
                         scheduleExceptions,
                       );
                       const scheduledMin = netDayMin(dayCfg);
@@ -2026,8 +2059,9 @@ export default function PunchClock() {
                           .sort((a, b) => b[0].localeCompare(a[0]))
                           .map(([wMon, wDates]) => {
                             const wSessions = wDates.flatMap((d) => byDate[d] ?? []);
-                            const wNet = computeWeekNet(wSessions, schedule, scheduleExceptions);
+                            const wNet = computeWeekNet(wSessions, schedules, scheduleExceptions);
                             const isCurrentWeek = wMon === currentWeekKey;
+                            const weeklyNorm = weeklyNetMinFor(schedules, wDates[0]);
                             const meetsNorm = wNet >= weeklyNorm;
                             const diff = wNet - weeklyNorm;
                             const sortedDates = [...wDates].sort((a, b) => b.localeCompare(a));
@@ -2081,7 +2115,7 @@ export default function PunchClock() {
                                   const { net: dayNet } = computeDayMinutes(
                                     daySessions,
                                     date,
-                                    schedule,
+                                    schedules,
                                     scheduleExceptions,
                                   );
                                   const dayException = scheduleExceptions[date];
@@ -2633,7 +2667,7 @@ export default function PunchClock() {
 
       {addModal && (
         <SessionModal
-          schedule={schedule}
+          schedule={schedules}
           existingSessions={sessions}
           onClose={() => setAddModal(false)}
           onSave={(s) => {
@@ -2649,7 +2683,7 @@ export default function PunchClock() {
 
       {addForDate && (
         <SessionModal
-          schedule={schedule}
+          schedule={schedules}
           defaultDate={addForDate}
           existingSessions={sessions}
           onClose={() => setAddForDate(null)}
@@ -2666,7 +2700,7 @@ export default function PunchClock() {
 
       {editSession && (
         <SessionModal
-          schedule={schedule}
+          schedule={schedules}
           session={editSession}
           onClose={() => setEditSession(null)}
           onSave={handleSaveEdit}
@@ -2676,7 +2710,7 @@ export default function PunchClock() {
       <AbsenceModal
         open={absenceModal || absenceForDate !== null}
         initialDate={absenceForDate ?? undefined}
-        schedule={schedule}
+        schedule={schedules}
         onClose={() => {
           setAbsenceModal(false);
           setAbsenceForDate(null);
@@ -2696,10 +2730,12 @@ export default function PunchClock() {
 
       <ScheduleEditorModal
         open={scheduleModal}
-        schedule={schedule}
+        schedules={schedules}
+        reportingMode={reportingMode}
         onClose={() => setScheduleModal(false)}
-        onSave={(s) => {
-          setSchedule(s);
+        onSave={(next, mode) => {
+          setSchedules(next);
+          if (mode) setReportingMode(mode);
           setScheduleModal(false);
         }}
       />
@@ -2749,7 +2785,7 @@ export default function PunchClock() {
         weeks={computeWeeklyFlexBreakdown(
           sessions,
           absences,
-          schedule,
+          schedules,
           trackingStartDate,
           12,
           todayCommitted,
@@ -2773,7 +2809,7 @@ export default function PunchClock() {
       {exceptionModal && (
         <DayExceptionModal
           dateStr={exceptionModal}
-          schedule={schedule}
+          schedule={schedules}
           current={scheduleExceptions[exceptionModal] ?? null}
           onClose={() => setExceptionModal(null)}
           onSave={(exc) => handleSaveException(exceptionModal, exc)}
@@ -3198,7 +3234,7 @@ function SessionModal({
 }: {
   session?: Session;
   defaultDate?: string;
-  schedule: WeekSchedule;
+  schedule: ScheduleSource;
   existingSessions?: Session[];
   onClose: () => void;
   onSave: (s: Session) => void;
@@ -3206,7 +3242,7 @@ function SessionModal({
 }) {
   const isEdit = !!session;
   const initDate = session ? ymdLocal(new Date(session.checkIn)) : (defaultDate ?? todayStr());
-  const initCfg = schedule[dayKeyOf(new Date(initDate + "T12:00:00"))];
+  const initCfg = getEffectiveDayConfig(initDate, schedule);
 
   // Pre-fill times from schedule when adding a new session
   const initStart = session
@@ -3239,7 +3275,7 @@ function SessionModal({
   const [note, setNote] = useState(session?.note ?? "");
   const [err, setErr] = useState("");
 
-  const dayCfg = schedule[dayKeyOf(new Date(date + "T12:00:00"))];
+  const dayCfg = getEffectiveDayConfig(date, schedule);
   const scheduledMins = netDayMin(dayCfg);
 
   const presetPcts = [100, 75, 50, 25] as const;
@@ -3264,7 +3300,7 @@ function SessionModal({
     const existDates = new Set((existingSessions ?? []).map((s) => ymdLocal(new Date(s.checkIn))));
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
       const dateStr = ymdLocal(d);
-      const cfg = schedule[dayKeyOf(d)];
+      const cfg = getEffectiveDayConfig(dateStr, schedule);
       const netSched = netDayMin(cfg);
       if (!cfg.active || netSched <= 0) {
         skippedInactive++;
@@ -3596,87 +3632,6 @@ function Label({ children }: { children: React.ReactNode }) {
   );
 }
 
-// ─── Schedule Editor Modal ─────────────────────────────────────
-function ScheduleEditorModal({
-  open,
-  schedule,
-  onClose,
-  onSave,
-}: {
-  open: boolean;
-  schedule: WeekSchedule;
-  onClose: () => void;
-  onSave: (s: WeekSchedule) => void;
-}) {
-  const [draft, setDraft] = useState<WeekSchedule>(schedule);
-
-  // Reset draft when modal opens with new schedule
-  const prevOpen = useRef(false);
-  useEffect(() => {
-    if (open && !prevOpen.current) setDraft(schedule);
-    prevOpen.current = open;
-  }, [open, schedule]);
-
-  if (!open) return null;
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center pc-overlay"
-      style={{ background: "rgba(45,23,23,0.55)" }}
-      onClick={onClose}
-    >
-      <div
-        className="pc-sheet bg-white w-full max-w-[480px] rounded-t-[28px] px-5 pt-6 overflow-y-auto"
-        style={{
-          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)",
-          maxHeight: "92dvh",
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="w-10 h-1 bg-pc-line rounded-full mx-auto mb-5" />
-        <div className="font-extrabold text-[22px] tracking-tight mb-1">Planera dagar</div>
-        <div className="text-[13px] text-pc-muted mb-6">
-          Ange arbetstider och lunch per dag. Norm/vecka:{" "}
-          <span className="font-bold text-pc-orange-deep">{fmtMin(weeklyNetMin(draft))}</span>
-        </div>
-
-        <WeekScheduleEditor schedule={draft} onChange={setDraft} />
-
-        <div className="grid grid-cols-2 gap-3 mt-6">
-          <button
-            onClick={onClose}
-            style={{
-              padding: "15px",
-              borderRadius: "16px",
-              background: "#fdf6ee",
-              border: "1.5px solid #ece6df",
-              fontWeight: 700,
-              fontSize: "15px",
-              color: "#2d1717",
-            }}
-          >
-            Avbryt
-          </button>
-          <button
-            onClick={() => onSave(draft)}
-            style={{
-              padding: "15px",
-              borderRadius: "16px",
-              background: "#ff5f00",
-              color: "white",
-              fontWeight: 700,
-              fontSize: "15px",
-              boxShadow: "0 8px 20px -8px rgba(255,95,0,0.6)",
-            }}
-          >
-            Spara
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Calendar View ────────────────────────────────────────────
 function CalendarView({
   sessions,
@@ -3688,7 +3643,7 @@ function CalendarView({
 }: {
   sessions: Session[];
   absences: AbsenceEntry[];
-  schedule: WeekSchedule;
+  schedule: ScheduleSource;
   scheduleExceptions: Record<string, ScheduleException>;
   selectedDate?: string | null;
   onSelectDate?: (date: string) => void;
@@ -3869,12 +3824,12 @@ function DayExceptionModal({
   onSave,
 }: {
   dateStr: string;
-  schedule: WeekSchedule;
+  schedule: ScheduleSource;
   current: ScheduleException | null;
   onClose: () => void;
   onSave: (exc: ScheduleException | null) => void;
 }) {
-  const baseCfg = schedule[dayKeyOf(new Date(dateStr + "T12:00:00"))];
+  const baseCfg = getEffectiveDayConfig(dateStr, schedule);
   const [endTime, setEndTime] = useState(current?.endTime ?? baseCfg.endTime);
   const [lunchMinutes, setLunchMinutes] = useState(
     current?.lunchMinutes !== undefined
