@@ -39,7 +39,7 @@ TanStack Router with file-based routes. There is one real route:
 
 ### State management
 
-`PunchClock.tsx` owns all runtime state (sessions, absences, expenses, name, schedule, view). It loads from `localStorage` on mount and saves on every state change via a `useEffect`. There is no external state library.
+`PunchClock.tsx` (the shell) owns all runtime state (sessions, absences, expenses, name, schedules, day-status state, view). It loads from `localStorage` on mount and saves on every state change via a `useEffect`. There is no external state library.
 
 ```
 localStorage["punchclock_v2"] = {
@@ -70,6 +70,48 @@ The bottom nav is **not** `fixed bottom-0` — that breaks on mobile Safari when
 - `<main>`: `flex-1 min-h-0 overflow-y-auto`
 
 This keeps the nav anchored to the visible viewport bottom while only the main area scrolls. Don't reintroduce `min-h-screen` + `fixed bottom-0`.
+
+### Navigation & views (PR 5)
+
+Bottom nav: **Idag / Kalender / Rapport / Mer**. `PunchClock.tsx` is the shell: state, `load()`/`save()`, the sync engine, every modal/sheet, the toast and the nav. What a tab shows is a view in `src/views/` that receives data and callbacks as props (no view owns persisted state):
+
+| View           | Shows                                                                                                                                                                                                                                                                               |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Today.tsx`    | Schedule mode: "Enligt schema ✓" / "Justera dag" / "Frånvaro", "Du kan gå kl. HH:MM". Punch mode (or any open session): the punch clock. Both: flex card, today's entries, `AttendCard`                                                                                             |
+| `Calendar.tsx` | Month grid coloured by `DayStatus` (missing = red ring, unconfirmed = grey ring, locked month = lock icon), a list mode, "Bekräfta <månad>" / "Lås upp månaden". Tap a day → `DaySheet` with the entries and the `explanation` lines under "Så räknades dagen"                      |
+| `Report.tsx`   | Period (month or range), totals, absences by category, expenses (add/delete), export: text share, CSV, plus the slots below                                                                                                                                                         |
+| `More.tsx`     | Profile, Schema & rapportläge, Frånvaroregler, Synk och säkerhet (`SyncSecuritySheet`, keeps the green "Krypterad på enheten · AES-256" status), Automatisering, Om appen, plus the slots below. Every old entry point (the gear, "Planera dagar", automation, sync) lives here now |
+
+The mode shown is `resolvedMode = reportingMode ?? resolveReportingMode({ sessions })`. Everything a view shows about a day comes from one `DayContext` (`flexCtx`): `evaluateDay`, `computeFlex`, `buildReport`. Views never compute flex or norm math.
+
+**Day actions.** Views call `DayActions` (`src/views/types.ts`): `enligtSchema`, `undoSchema`, `adjust`, `absence`, `addTime`, `editSession`, `deleteSession`, `deleteAbsence`, `editException`, `confirmMonth`, `unlockMonth`, `removeAdjustment`. The shell implements them and is the only place that blocks, stores and anchors.
+
+**Locked months.** Every edit of a day (adjust, "Enligt schema", add/edit/delete a session, absences, shortened day) is blocked when `isDayLocked(date)` is true: toast "Månaden är låst…", disabled buttons, and "Lås upp månaden" on Today, in the calendar and in the day sheet (`unlockMonth` writes the audit entry). "Bekräfta <månad>" and "Lås upp" both go through `ConfirmSheet`. **Decision: live punching today stays allowed in a locked month** (check-in/out, URL actions, late punch-out): a punch records time as it happens, `evaluateDay` already lets registered days keep their real values in a locked month, and blocking the clock for the rest of a month that was confirmed early (from the 25th) would make the app unusable. Manual edits stay blocked. `SessionModal` also skips locked and adjusted days in "Flera dagar".
+
+**Flex anchor.** Schedule-mode users never punch, so `trackingStartDate` is set by the first registration (Enligt schema, adjustment, confirmed month, added time, absence), at onboarding completion when the mode is "schedule", and when the schedule editor switches to "schedule" (`nextTrackingStart`: set only when missing, never moved).
+
+**"Att åtgärda"** (`AttendCard`, list from `buildAttend` in `src/lib/attend.ts`): missing days (punch) or unconfirmed days (schedule) — the latest 5 plus "Visa alla (N)" — each with "Enligt schema" / "Justera" / "Frånvaro"; receipts to attach (expenses with `hasReceipt` in unlocked months, last 62 days); open sessions past `lateThresholdMs`; from the 25th the prompt "Bekräfta <månad>" (disabled while punch-mode days are missing; calls `confirmMonth`).
+
+**"Justera dag"** (`AdjustDaySheet`): start, end, rast (Auto / 0 / 30 / 45 / 60 / free), note, a live preview (`evaluateDay` with the hypothetical adjustment) and the `travelSlot`. Saving writes `dayAdjustments[date]`; an empty rast follows the lunch rule.
+
+**Report.** `buildReport(ctx, start, end)` (`src/lib/report.ts`) is one row per day from `evaluateDay`; `buildCsv` and `buildShareText` are built from it, so CSV, share text and the flex card agree (the old per-session export is gone). "Flera dagar" in `SessionModal` is `planFill` (`src/lib/fill.ts`): a 100 % day saves the shift with the schedule lunch as `breakMinutes`; 25/50/75 % days save exactly the net time with `breakMinutes: 0`, so they cannot gain the lunch back.
+
+**Wave 3 integration slots** (each renders nothing until filled; all are declared in one block in `PunchClock.tsx` next to the JSX, so another PR wires in with one line):
+
+```ts
+// src/views/types.ts
+type Slot<T> = ReactNode | ((p: T) => ReactNode);
+type ReportSlotContext = ReportPeriod & { report: Report }; // { start, end, label, fileLabel, report }
+ReportSlots = { travel?: Slot<ReportSlotContext>;      // PR 8 — the "Restid" row
+                vacation?: Slot<ReportSlotContext>;    // PR 7 — "Semester: 17 av 25 dagar kvar"
+                excelExport?: Slot<ReportSlotContext> } // PR 6 — the "Exportera Excel" button
+MoreSlots   = { travelRules?: ReactNode;               // PR 8 — "Restidsregler"
+                vacation?: ReactNode;                  // PR 7 — "Semester"
+                excelImport?: ReactNode }              // PR 6 — "Importera från Excel"
+// <More slots={moreSlots}/>, <Report slots={reportSlots}/>, <AdjustDaySheet travelSlot={adjustTravelSlot}/>
+```
+
+More slots take a `<MoreRow icon title subtitle onClick/>` (from `components/ui.tsx`) plus whatever sheet it opens. `AdjustDaySheet` takes `travelSlot?: React.ReactNode` (PR 8 mounts `<TravelTimeEditor date={adjustDate} />`).
 
 ### Schedule data model (`src/lib/schedule.ts`)
 
@@ -142,26 +184,33 @@ computeFlex(ctx, { from?, to? }) → { minutes, missingDays, unconfirmedDays } /
 
 **Persisted fields** (all optional on `AppState`, defaulted by `load()` via `migrateDayStatusState`, synced via `SyncState`): `reportingMode`, `autoLunchThresholdMin` (300), `confirmedDays`, `lockedMonths`, `dayAdjustments` (`{ date, start?, end?, breakMin?, note? }`), `auditLog`, plus `Session.breakMinutes`. Dirty-sync merge (`mergeDayStatusState`): confirmed days and locked months are a union, adjustments a union by date (local wins), the audit log a union by `at` + action, sorted.
 
-**Flex card** (PunchClock): total = `flexBaseMinutes + computeFlex(ctx).minutes`; "Veckan" / "Månaden" = `computeFlex` over the local week / month (today included once settled); "Idag" = `liveDayDelta(evaluateDay(today))` (worked − expected while the day is open, display only); "Visa veckor" = `computeWeeklyFlex(ctx, 12)` with local Monday keys. Next to the balance: "· N dagar saknas" (punch) or "· N ej bekräftade" (schedule).
+**Flex card** (`views/Today.tsx`, figures from the shell): total = `flexBaseMinutes + computeFlex(ctx).minutes`; "Veckan" / "Månaden" = `computeFlex` over the local week / month (today included once settled); "Idag" = `liveDayDelta(evaluateDay(today))` (worked − expected while the day is open, display only); "Visa veckor" = `computeWeeklyFlex(ctx, 12)` with local Monday keys. Next to the balance: "· N dagar saknas" (punch) or "· N ej bekräftade" (schedule).
 
 **Old API** (`computeFlexMinutes`, `computeTodayContribution`, `computeTodayDelta`, `computeWeeklyFlexBreakdown`) are thin wrappers over the above in punch mode with no confirmations; `computeFlexMinutes` still covers past days only. Prefer `computeFlex` / `evaluateDay` in new code.
 
 ### Components
 
-| File                     | Responsibility                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PunchClock.tsx`         | Main app shell — clock, history, expenses, share views; all inline sub-components. `SessionModal` ("Lägg till tid") supports single-day time entry and a "Flera dagar" mode that fills a date range with a percentage (100/75/50/25) of each scheduled day's net, skipping inactive/weekend days and days that already have a session. The "Dela" tab is a report builder: choose a month or a custom date range, then `buildShareText`/`buildCsvExport` generate a text + CSV report for that exact `[start, end]` window |
-| `Onboarding.tsx`         | First-run flow with welcome → info/login → choice → schedule → sync. Exports `WeekScheduleEditor` used by both onboarding and the "Planera dagar" modal                                                                                                                                                                                                                                                                                                                                                                    |
-| `SettingsModal.tsx`      | Bottom sheet for editing name + department, controlling sync (activate / disconnect), opening the automation sheet, and showing app version                                                                                                                                                                                                                                                                                                                                                                                |
-| `AbsenceModal.tsx`       | Bottom sheet for logging absence entries (VAB, semester, etc.)                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `ExpenseModal.tsx`       | Bottom sheet for logging expense entries (milersättning with km, kost, etc.)                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `SyncModal.tsx`          | Bottom sheet for setting up sync on an existing device (create code or restore) — collects username + secret                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `FlexBreakdownModal.tsx` | Bottom sheet showing total flex + the last 12 weeks of flex broken down individually                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| `LatePunchoutModal.tsx`  | Bottom sheet that intercepts punch-outs after a 4+ hour active session — offers "use now", a custom end-time picker, or cancel                                                                                                                                                                                                                                                                                                                                                                                             |
-| `AutomationModal.tsx`    | Bottom sheet ("Automatisera in/ut-checkning", opened from settings) — QR codes (via `uqr`), printable office signs, iOS Shortcuts recipes for WiFi/NFC punching, install-to-home-screen instructions                                                                                                                                                                                                                                                                                                                       |
-| `src/lib/schedule.ts`    | Pure schedule types, constants, calculations, and localStorage migration                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `src/lib/sync.ts`        | Thin fetch wrapper for all sync API calls; passes `username` + `secret`                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `src/lib/actions.ts`     | URL actions (`?action=in\|out\|toggle&source=…`): parse-and-strip from the address bar, build trigger URLs, 2-min dedupe window                                                                                                                                                                                                                                                                                                                                                                                            |
+| File                                                               | Responsibility                                                                                                                                                                                                                    |
+| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PunchClock.tsx`                                                   | Shell — state, persistence (`load`/`save`), sync engine, all modals and sheets, toast, bottom nav (Idag / Kalender / Rapport / Mer) and the wave 3 slot block. See "Navigation & views"                                           |
+| `src/views/{Today,Calendar,Report,More}.tsx`                       | The four tabs; props only, no persisted state. Contracts (`DayActions`, `ReportSlots`, `MoreSlots`) in `src/views/types.ts`                                                                                                       |
+| `AdjustDaySheet.tsx`                                               | "Justera dag": start, end, rast, note, live preview, `travelSlot`                                                                                                                                                                 |
+| `AttendCard.tsx`                                                   | "Att åtgärda": missing/unconfirmed days (latest 5 + "Visa alla"), receipts, long sessions, "Bekräfta <månad>" from the 25th                                                                                                       |
+| `DaySheet.tsx`                                                     | Calendar day: entries, quick actions, "Så räknades dagen" (`evaluateDay` explanation), lock + "Lås upp månaden"                                                                                                                   |
+| `SessionModal.tsx`, `DayExceptionModal.tsx`                        | "Lägg till tid" / "Redigera pass" (incl. "Flera dagar" via `planFill`) and "Ändra schema för dag"; moved out of PunchClock                                                                                                        |
+| `ConfirmSheet.tsx`, `SyncSecuritySheet.tsx`, `ui.tsx`, `dayUi.tsx` | Confirm/unlock month sheet; "Synk och säkerhet" (green encryption status, routes to SyncModal/SettingsModal); shared presentational pieces (icons, `Sheet`, `MoreRow`, `MonthPicker`, `SessionRow`, status chip, schedule banner) |
+| `src/lib/{attend,report,fill,today,format}.ts`                     | Pure, tested helpers: attention list, per-day report/CSV/share text, multi-day fill, leave time + flex anchor, Swedish formatting                                                                                                 |
+| `Onboarding.tsx`                                                   | First-run flow with welcome → info/login → choice → schedule → sync. Exports `WeekScheduleEditor` used by both onboarding and the "Planera dagar" modal                                                                           |
+| `SettingsModal.tsx`                                                | Bottom sheet for editing name + department, controlling sync (activate / disconnect), opening the automation sheet, and showing app version                                                                                       |
+| `AbsenceModal.tsx`                                                 | Bottom sheet for logging absence entries (VAB, semester, etc.)                                                                                                                                                                    |
+| `ExpenseModal.tsx`                                                 | Bottom sheet for logging expense entries (milersättning with km, kost, etc.)                                                                                                                                                      |
+| `SyncModal.tsx`                                                    | Bottom sheet for setting up sync on an existing device (create code or restore) — collects username + secret                                                                                                                      |
+| `FlexBreakdownModal.tsx`                                           | Bottom sheet showing total flex + the last 12 weeks of flex broken down individually                                                                                                                                              |
+| `LatePunchoutModal.tsx`                                            | Bottom sheet that intercepts punch-outs after a 4+ hour active session — offers "use now", a custom end-time picker, or cancel                                                                                                    |
+| `AutomationModal.tsx`                                              | Bottom sheet ("Automatisera in/ut-checkning", opened from settings) — QR codes (via `uqr`), printable office signs, iOS Shortcuts recipes for WiFi/NFC punching, install-to-home-screen instructions                              |
+| `src/lib/schedule.ts`                                              | Pure schedule types, constants, calculations, and localStorage migration                                                                                                                                                          |
+| `src/lib/sync.ts`                                                  | Thin fetch wrapper for all sync API calls; passes `username` + `secret`                                                                                                                                                           |
+| `src/lib/actions.ts`                                               | URL actions (`?action=in\|out\|toggle&source=…`): parse-and-strip from the address bar, build trigger URLs, 2-min dedupe window                                                                                                   |
 
 ### URL actions & automation
 
@@ -351,14 +400,14 @@ overwrites the server before it has read it. Edits made while offline stay `dirt
 next successful pull. A `pagehide` listener flushes a pending push.
 
 `syncStatus` (`"idle" | "syncing" | "pulling" | "ok" | "error"`) plus `syncError` drive the status
-card in `SettingsModal`.
+card in `SettingsModal` and the "Synk och säkerhet" sheet in Mer.
 
 **Key invariants:**
 
 - `onboardingDone` is never synced — it is always set to `true` on the local device after any onboarding path completes.
 - Persisted state is read **synchronously** into `useState` initializers via `load()` (a `bootRef`), not in an effect. Loading in an effect let the save effect fire once with empty defaults first.
 - Restore paths (`SyncModal`, onboarding login/restore) call `adoptRestoredState()`, which sets the revision, clears `dirty`, and replaces local state. If the server has **no** state, the UI now says so instead of silently keeping the local data.
-- "Koppla från här" only drops the local token. Deleting the account is a separate, explicitly confirmed action ("Radera synk-konto").
+- "Koppla från här" drops the local token **and the device key** (`syncForgetDeviceKey()`). Deleting the account is a separate, explicitly confirmed action ("Radera synk-konto").
 
 ### Surfacing sync failures
 

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { type ScheduleSource, getEffectiveDayConfig, netDayMin } from "../lib/schedule";
+import { todayLocal } from "../lib/dates";
 
 export type AbsenceCategory =
   | "sjuk"
@@ -42,7 +43,7 @@ const CATEGORIES = Object.entries(ABSENCE_META) as [
 ][];
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  return todayLocal();
 }
 
 export default function AbsenceModal({
