@@ -43,6 +43,26 @@ All notable changes to **min-tid** are recorded here. Format loosely follows [Ke
 - `schedule.ts` har nya typer (`ScheduleRotation`, `SchedulePeriod`, `ScheduleSource`) och funktioner för perioder och rotation (`periodFor`, `toPeriods`, `appendPeriod`, `mergePeriods`, `migrateSchedules`, `weeksBetween`, `mondayOfStr` m.fl.). `getEffectiveDayConfig` behåller sin signatur men tar även en lista av perioder; ett vanligt veckoschema fungerar som förut. Veckomatematiken är datumsträngsbaserad och opåverkad av sommartid.
 - "Planera dagar" ligger nu i `src/components/schedule/`. Nya tester i `src/lib/__tests__/schedule.test.ts` (varannan vecka, fyraveckorsrotation, datum före ankaret, periodbyte mitt i veckan, migrering och rundtur).
 
+### Rätt flexberäkning, dagstatus och rapportläge (PR 3)
+
+- **Ditt flexsaldo räknas om och siffran kan ändras.** Fyra fel i beräkningen är rättade och hela historiken räknas om med de nya reglerna, så saldot kan bli högre (oftast) eller lägre än förut:
+  - **En arbetsdag utan registrering drog en hel dag.** En schemalagd dag där du varken stämplat eller lagt in frånvaro gav tidigare −8 h. Nu påverkar den inte saldot. Den räknas i stället som saknad och visas bredvid saldot, till exempel ”· 2 dagar saknas”, så att du kan fylla i den.
+  - **Heldag flexledigt drogs två gånger.** En heldag flex på en 8-timmarsdag gav −16 h. Nu dras dagens norm en gång (−8 h). Flex i timmar drar just de timmarna.
+  - **Lunch drogs även när du stämplat ut över lunch.** Schemats lunch dras nu bara när dagen har ett enda pass som är längre än 5 timmar. Har du stämplat ut och in under dagen räknas tiden precis som den är, och ett kort pass (5 timmar eller kortare) får ingen lunch dragen. Det gäller också historiken och veckosummorna.
+  - **Pass mellan midnatt och 02:00 hamnade på fel dag.** Ett pass som börjar 00:30 räknades till dagen innan. Nu räknas alla dagar och veckor efter svensk tid. Veckorna under ”Visa veckor” och i historiken började tidigare på en söndag i rubriken – nu börjar de på måndag.
+- **Har du lagt in ett startsaldo** för att väga upp de gamla felen kan du behöva justera det igen.
+- **Dagar som fyllts i med ”Flera dagar” på 25 % eller 50 %** räknas nu utan lunchavdrag (passen är 5 timmar eller kortare), vilket ger upp till 1 timme mer per sådan dag.
+- **Frånvaro på en ledig dag räknas inte.** Semester eller flex som sträcker sig över en helg drar bara de schemalagda dagarna. Frånvaro kan aldrig dra mer än dagens norm.
+- **Rapportläget gör nu skillnad.** Med ”Stämpla” är en dag utan registrering saknad (”· N dagar saknas”). Med ”Enligt schema” räknas den som arbetad enligt schemat och visas som ej bekräftad (”· N ej bekräftade”) tills du bekräftar den. Flexsaldot påverkas inte av valet. Du som redan har stämplat behåller ”Stämpla”; nya användare börjar med ”Enligt schema”.
+- **Idag blir inte rött på morgonen.** Dagens resultat räknas in i saldot när du stämplat ut, registrerat dagen eller när schemats arbetsdag är slut – aldrig innan. Framtida dagar räknas aldrig.
+
+#### Internt
+
+- Ny kärna: `evaluateDay(date, ctx)` i `src/lib/days.ts` ger status (`missing`, `unconfirmed`, `ongoing`, `reported`, `absent`, `partial`, `off`), norm, arbetad tid, rast, frånvaro, restid (krok för PR 8), flexdiff och en förklaring på svenska rad för rad. `computeFlex` i `flex.ts` summerar dagarna och listar saknade och ej bekräftade dagar; de gamla funktionerna finns kvar som tunna omslag. Frånvaroreglerna ligger i `absence.ts`.
+- `src/lib/confirm.ts`: bekräftade dagar, låsta månader (`confirmMonth`, `unlockMonth`, `isDayLocked`) och en granskningslogg. Gränssnittet för att bekräfta och låsa kommer i ett senare steg.
+- Nya, valfria fält som sparas och synkas: `reportingMode` (sparas nu alltid), `autoLunchThresholdMin` (300), `confirmedDays`, `lockedMonths`, `dayAdjustments`, `auditLog` och `breakMinutes` på pass. Äldre data laddas utan förlust.
+- `todayLocal()` och `weekKey()` använder lokalt datum. De tidigare förväntat felande testerna är nu vanliga tester, plus nya fall för glömda dagar, halvdagsfrånvaro, helgarbete, helgdag, frånvaro över helg, låst månad och sommartidsnätter.
+
 ## [1.0.0-beta.12] — 2026-08-26
 
 ### Added
