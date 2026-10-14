@@ -19,6 +19,7 @@ import {
   type SyncState,
   SYNC_PHONE_KEY,
 } from "../lib/sync";
+import RecoveryKeySheet from "./RecoveryKeySheet";
 
 export type OnboardingResult = {
   name: string;
@@ -1165,6 +1166,7 @@ function SyncStep({
     return (
       <Screen>
         <StepDots current={3} total={3} />
+        <RecoveryKeySheet />
         <h2 className="text-[22px] font-extrabold tracking-tight text-pc-ink mb-1 text-center">
           Återhämtningsnummer
         </h2>

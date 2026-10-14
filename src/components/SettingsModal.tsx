@@ -436,6 +436,14 @@ export default function SettingsModal({
                         Skicka fellogg
                       </a>
                     </div>
+                    {explain.relogin && (
+                      <button
+                        onClick={onSetupSync}
+                        className="w-full mt-2 py-[11px] rounded-[12px] bg-[#b91c1c] text-white text-[13px] font-bold"
+                      >
+                        Logga in igen
+                      </button>
+                    )}
                     <div className="text-[10px] mt-2 text-center" style={{ color: "#9f1239" }}>
                       Felloggen mejlas till {SUPPORT_EMAIL} — den innehåller tidpunkt, felkod och
                       enhet, aldrig din synk-kod.

@@ -29,6 +29,12 @@ export type SyncErrorExplanation = {
   fixes: string[];
   /** True when switching network is the primary suggestion. */
   networkBlocked: boolean;
+  /**
+   * True when the fix is to log in to sync again on this device (expired session, no
+   * encryption key on the device, secret changed elsewhere, cloud copy won't decrypt).
+   * The settings sheet then offers "Logga in igen", which keeps and merges local data.
+   */
+  relogin: boolean;
 };
 
 export function explainSyncError(f: SyncFailure | null): SyncErrorExplanation {
@@ -41,6 +47,7 @@ export function explainSyncError(f: SyncFailure | null): SyncErrorExplanation {
         "Dina stämplingar sparas lokalt och laddas upp automatiskt när nätet är tillbaka.",
       ],
       networkBlocked: false,
+      relogin: false,
     };
   }
 
@@ -61,18 +68,54 @@ export function explainSyncError(f: SyncFailure | null): SyncErrorExplanation {
         "Fortsätter det på alla nät: skicka felloggen så kan vi kolla servern.",
       ],
       networkBlocked: true,
+      relogin: false,
     };
   }
 
+  // 401: the session expired (30 days) — or, since sync became end-to-end encrypted,
+  // this device has a session but no encryption key (it last synced with an older build).
   if (status === 401) {
     return {
-      headline: "Synk-sessionen har gått ut",
-      cause: "Servern känner inte längre igen den här enheten. Inloggningen är 30 dagar.",
+      headline: "Logga in igen för att synka",
+      cause:
+        "Den här enheten behöver logga in på synken igen — antingen har inloggningen gått ut (den gäller i 30 dagar), eller så saknar enheten nyckeln sedan synken blev krypterad.",
       fixes: [
-        "Öppna synk-inställningarna och logga in igen med ditt användarnamn och din synk-kod.",
-        "Dina lokala data ligger kvar — inget försvinner av att logga in på nytt.",
+        "Tryck ”Logga in igen” och ange ditt användarnamn och din synk-kod.",
+        "Dina lokala data ligger kvar — de slås ihop med molnet när du loggat in.",
       ],
       networkBlocked: false,
+      relogin: true,
+    };
+  }
+
+  // 409: the secret (and with it the encryption key) was changed on another device.
+  // Pre-encryption clients also get 409s from the server, but never run this code.
+  if (status === 409) {
+    return {
+      headline: "Synk-koden har bytts",
+      cause:
+        "Synk-koden har bytts på en annan enhet. Datan i molnet är krypterad med den nya koden, så den här enheten kan varken läsa eller skriva den.",
+      fixes: [
+        "Tryck ”Logga in igen” och ange den nya synk-koden.",
+        "Dina lokala data ligger kvar — de slås ihop med molnet när du loggat in.",
+      ],
+      networkBlocked: false,
+      relogin: true,
+    };
+  }
+
+  // 422: the envelope does not decrypt with this device's key (damaged or foreign).
+  if (status === 422) {
+    return {
+      headline: "Molnkopian kunde inte låsas upp",
+      cause:
+        "Den krypterade datan i molnet gick inte att dekryptera med nyckeln på den här enheten. Den kan ha skadats, eller krypterats med en annan nyckel.",
+      fixes: [
+        "Tryck ”Logga in igen” och ange din synk-kod.",
+        "Kvarstår det: skicka felloggen. Dina lokala data ligger kvar.",
+      ],
+      networkBlocked: false,
+      relogin: true,
     };
   }
 
@@ -86,6 +129,7 @@ export function explainSyncError(f: SyncFailure | null): SyncErrorExplanation {
         "Kvarstår det: skicka felloggen, det är ett serverfel och inget du kan lösa i appen.",
       ],
       networkBlocked: false,
+      relogin: false,
     };
   }
 
@@ -98,6 +142,7 @@ export function explainSyncError(f: SyncFailure | null): SyncErrorExplanation {
         "Kvarstår det: skicka felloggen så kan vi titta på servern.",
       ],
       networkBlocked: false,
+      relogin: false,
     };
   }
 
@@ -112,6 +157,7 @@ export function explainSyncError(f: SyncFailure | null): SyncErrorExplanation {
       "Kvarstår det: skicka felloggen.",
     ],
     networkBlocked: false,
+    relogin: false,
   };
 }
 
