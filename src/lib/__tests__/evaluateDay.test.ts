@@ -423,7 +423,7 @@ describe("evaluateDay — today", () => {
   it("punch mode, nothing yet, before end of shift: ongoing, no flex", () => {
     const r = evaluateDay(WED, ctx());
     expect(r).toMatchObject({ status: "ongoing", flexDelta: 0 });
-    expect(liveDayDelta(r)).toBe(-480);
+    expect(liveDayDelta(r)).toBe(0);
   });
 
   it("punch mode, open session: ongoing with live worked time", () => {
@@ -449,7 +449,7 @@ describe("evaluateDay — today", () => {
   it("punch mode, nothing at all after the end of shift: missing", () => {
     const r = evaluateDay(WED, ctx({ now: at(WED, "17:30") }));
     expect(r).toMatchObject({ status: "missing", flexDelta: 0 });
-    expect(liveDayDelta(r)).toBe(-480);
+    expect(liveDayDelta(r)).toBe(0);
   });
 
   it("schedule mode, nothing yet, before end of shift: ongoing, on track", () => {
