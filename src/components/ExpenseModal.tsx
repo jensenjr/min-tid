@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { todayLocal } from "../lib/dates";
 
 export type ExpenseCategory =
   | "milersattning"
@@ -36,7 +37,7 @@ const CATEGORIES = Object.entries(EXPENSE_META) as [
 ][];
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  return todayLocal();
 }
 
 export default function ExpenseModal({

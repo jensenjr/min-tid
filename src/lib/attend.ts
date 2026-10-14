@@ -3,7 +3,7 @@
 import { type DayConfig, addDaysStr, shiftMinutes } from "./schedule";
 import { isYmd, monthRange, ymdLocal } from "./dates";
 import { type DayContext } from "./days";
-import { computeFlex } from "./flex";
+import { type FlexResult, computeFlex } from "./flex";
 import { isMonthLocked } from "./confirm";
 import type { ExpenseEntry, ReportingMode, Session } from "./types";
 
@@ -44,10 +44,12 @@ export function buildAttend(input: {
   cfgFor: (date: string) => DayConfig;
   today: string;
   now: number;
+  /** computeFlex(ctx) when the caller already has it, to avoid folding twice. */
+  flexAll?: FlexResult;
 }): AttendSummary {
   const { ctx, expenses, cfgFor, today, now } = input;
   const flexCtx: DayContext = { ...ctx, today, now };
-  const all = computeFlex(flexCtx);
+  const all = input.flexAll ?? computeFlex(flexCtx);
   const dayKind: ReportingMode = ctx.reportingMode;
   const days = [...(dayKind === "punch" ? all.missingDays : all.unconfirmedDays)].sort((a, b) =>
     b.localeCompare(a),
