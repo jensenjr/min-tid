@@ -4,6 +4,7 @@ import { type DayEvaluation, fmtDuration, fmtSignedDuration } from "../lib/days"
 import { fmtDateLabel } from "../lib/format";
 import type { DayAdjustment } from "../lib/types";
 import { Label, Sheet } from "./ui";
+import TimeField from "./TimeField";
 
 const BREAK_PRESETS = [0, 30, 45, 60];
 
@@ -115,26 +116,25 @@ export default function AdjustDaySheet({
       <div className="grid grid-cols-2 gap-3">
         <div className="min-w-0">
           <Label>Start</Label>
-          <input
-            type="time"
+          <TimeField
+            label="Start"
             value={start}
-            onChange={(e) => {
-              setStart(e.target.value);
+            onChange={(v) => {
+              setStart(v);
               setErr("");
             }}
-            className="pc-input"
           />
         </div>
         <div className="min-w-0">
           <Label>Slut</Label>
-          <input
-            type="time"
+          <TimeField
+            label="Slut"
             value={end}
-            onChange={(e) => {
-              setEnd(e.target.value);
+            defaultHour={17}
+            onChange={(v) => {
+              setEnd(v);
               setErr("");
             }}
-            className="pc-input"
           />
         </div>
       </div>

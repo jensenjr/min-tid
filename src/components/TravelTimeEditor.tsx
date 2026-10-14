@@ -4,6 +4,7 @@
 import { useState } from "react";
 import type { DayConfig } from "../lib/schedule";
 import { fmtDuration } from "../lib/days";
+import TimeField from "./TimeField";
 import {
   isDurationOnly,
   isTravelTime,
@@ -222,22 +223,20 @@ export default function TravelTimeEditor({
             <div className="grid grid-cols-2 gap-2 mb-3">
               <div>
                 <div className={LABEL}>Från</div>
-                <input
-                  type="time"
-                  step={300}
+                <TimeField
+                  label="Restid från"
                   value={draft.from}
-                  onChange={(e) => setDraft({ ...draft, from: e.target.value })}
-                  className="pc-input"
+                  defaultHour={7}
+                  onChange={(v) => setDraft({ ...draft, from: v })}
                 />
               </div>
               <div>
                 <div className={LABEL}>Till</div>
-                <input
-                  type="time"
-                  step={300}
+                <TimeField
+                  label="Restid till"
                   value={draft.to}
-                  onChange={(e) => setDraft({ ...draft, to: e.target.value })}
-                  className="pc-input"
+                  defaultHour={17}
+                  onChange={(v) => setDraft({ ...draft, to: v })}
                 />
               </div>
             </div>

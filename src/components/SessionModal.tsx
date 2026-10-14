@@ -5,6 +5,7 @@ import { fmtDur } from "../lib/format";
 import type { Session } from "../lib/types";
 import { type DayBlock, fillSessions, planFill } from "../lib/fill";
 import { Label } from "./ui";
+import TimeField from "./TimeField";
 
 // ─── Session Modal ─────────────────────────────────────────────
 // "Lägg till tid" (single day or "Flera dagar") and "Redigera pass".
@@ -212,23 +213,19 @@ export default function SessionModal({
               </div>
             )}
             <Label>Starttid</Label>
-            <input
-              type="time"
-              value={startTime}
-              onChange={(e) => setStartTime(e.target.value)}
-              className="pc-input"
-            />
+            <TimeField label="Starttid" value={startTime} onChange={setStartTime} />
             <Label>
               Sluttid{" "}
               <span className="normal-case font-medium tracking-normal">
                 (valfri — lämna tom om pågående)
               </span>
             </Label>
-            <input
-              type="time"
+            <TimeField
+              label="Sluttid"
               value={endTime}
-              onChange={(e) => setEndTime(e.target.value)}
-              className="pc-input"
+              onChange={setEndTime}
+              placeholder="Pågående"
+              defaultHour={17}
               style={{ marginBottom: endTime ? "8px" : "16px" }}
             />
             {endTime && (
