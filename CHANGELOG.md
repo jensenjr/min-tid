@@ -81,12 +81,12 @@ All notable changes to **min-tid** are recorded here. Format loosely follows [Ke
 
 ### Excel-import och Excel-export (PR 6)
 
-- **Importera från Excel.** Under Inställningar finns nu "Importera från Excel". Du hämtar en färdig mall (flikarna Pass, Frånvaro, Utlägg, Restid och Saldon, med rullistor för typer), fyller i din historik och läser in filen. Före importen ser du en förhandsgranskning med antal rader och eventuella fel med flik och radnummer — rader med fel hoppas över, resten importeras. Filen läses bara i din webbläsare och skickas inte någonstans.
+- **Importera från Excel.** Under Mer → Data finns nu "Importera från Excel". Du hämtar en färdig mall (flikarna Pass, Frånvaro, Utlägg, Restid och Saldon, med rullistor för typer), fyller i din historik och läser in filen. Före importen ser du en förhandsgranskning med antal rader och eventuella fel med flik och radnummer — rader med fel hoppas över, resten importeras. Filen läses bara i din webbläsare och skickas inte någonstans.
 - **Dubbletter och exempelrader.** Ett pass med samma datum och starttid som redan finns hoppas över och räknas separat, så du kan importera samma fil igen utan att få allt dubbelt. Exempelraderna i mallen ("EXEMPEL – skriv över eller radera") hoppas över.
 - **Historiken räknas som bekräftad.** Importerade dagar markeras som bekräftade, och flex räknas från den tidigaste importerade dagen om den är tidigare än din nuvarande start. Rader i en låst månad importeras inte.
 - **Ingångssaldon.** Fyller du i fliken Saldon sätts ditt flexsaldo till det värdet per det datumet, och appen räknar vidare från dagen efter. Semesterdagar kvar och sparade dagar sparas som ingångsvärden för semestersaldot.
 - **Ångra senaste import.** Innan importen sparas en kopia på den här enheten. "Ångra senaste import" återställer pass, frånvaro, utlägg, flexsaldo och bekräftade dagar till hur de var — ändringar du gjort efter importen går då också förlorade, och appen varnar för det först.
-- **Exportera Excel.** Under Dela finns "Exportera Excel" för vald rapportperiod, med samma flikar som importmallen plus en sammanfattning (arbetad tid, flex, saldo, utlägg, dagar som saknas) och en dag-för-dag-lista som visar hur varje dag räknades. Filen kan läsas in igen i appen.
+- **Exportera Excel.** I Rapport finns "Exportera Excel" för vald rapportperiod, med samma flikar som importmallen plus en sammanfattning (arbetad tid, flex, saldo, utlägg, dagar som saknas) och en dag-för-dag-lista som visar hur varje dag räknades. Filen kan läsas in igen i appen.
 - Restider i mallen läses in och visas i förhandsgranskningen, men sparas först när restidsstödet finns.
 
 #### Internt
