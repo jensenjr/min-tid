@@ -282,7 +282,7 @@ export function applyImportPlan(plan: ImportPlan, state: ImportableState): Impor
   patch.sessions = [...state.sessions, ...plan.sessions].sort((a, b) => a.checkIn - b.checkIn);
   patch.absences = [...state.absences, ...plan.absences];
   patch.expenses = [...state.expenses, ...plan.expenses];
-  patch.travel = [...(state.travel ?? []), ...plan.travel.map(toTravelEntry)];
+  patch.travel = [...(state.travel ?? []), ...(plan.travel ?? []).map(toTravelEntry)];
   patch.confirmedDays = confirmedDays;
   patch.trackingStartDate = plan.trackingStartDate ?? state.trackingStartDate;
 
