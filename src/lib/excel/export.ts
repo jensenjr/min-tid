@@ -155,7 +155,7 @@ export function buildReportSheets(
     const cfg = getEffectiveDayConfig(d, state.schedules, state.scheduleExceptions);
     const beforeBase = !!state.flexBaseDate && d <= state.flexBaseDate;
     const flexDelta = beforeBase ? 0 : ev.flexDelta;
-    if (ev.status === "reported" || ev.status === "partial" || ev.status === "ongoing") {
+    if (ev.status === "reported" || ev.status === "partial") {
       workedMin += ev.workedMin;
     }
     normMin += ev.normMin;
