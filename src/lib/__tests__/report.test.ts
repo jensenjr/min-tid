@@ -234,3 +234,24 @@ describe("labels", () => {
     }
   });
 });
+
+describe("buildReport and flexBaseDate", () => {
+  it("the report's flex total equals computeFlex for a period spanning flexBaseDate", () => {
+    const c = ctx({
+      sessions: [
+        session("2026-10-05", "08:00", "18:00"), // +60, inside the opening balance
+        session("2026-10-06", "08:00", "18:00"), // +60, the balance date itself: inside
+        session("2026-10-07", "08:00", "17:30"), // +30, counts
+        session("2026-10-08", "08:00", "16:00"), // −60, counts
+      ],
+      flexBaseDate: "2026-10-06",
+    });
+    const report = buildReport(c, "2026-10-01", "2026-10-14");
+    const fold = computeFlex(c, { from: "2026-10-01", to: "2026-10-14" }).minutes;
+    expect(report.totals.flexMin).toBe(fold);
+    expect(fold).toBe(-30);
+    // without the date the same period would count the first two days as well
+    const plain = buildReport({ ...c, flexBaseDate: undefined }, "2026-10-01", "2026-10-14");
+    expect(plain.totals.flexMin).toBe(90);
+  });
+});

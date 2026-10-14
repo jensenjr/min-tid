@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type ReactNode } from "react";
+import { lazy, Suspense, useState, useEffect, useRef, type ReactNode } from "react";
 import Onboarding, { type OnboardingResult } from "./Onboarding";
 import ScheduleEditorModal from "./schedule/ScheduleEditorModal";
 import AbsenceModal, { type AbsenceEntry } from "./AbsenceModal";
@@ -13,7 +13,9 @@ import DayExceptionModal from "./DayExceptionModal";
 import AdjustDaySheet from "./AdjustDaySheet";
 import ConfirmSheet from "./ConfirmSheet";
 import { ScheduleBanner } from "./dayUi";
-import { NavIcon } from "./ui";
+import { MoreRow, NavIcon } from "./ui";
+// Loaded on first open: keeps the Excel import code out of the main bundle.
+const ImportModal = lazy(() => import("./ImportModal"));
 import Today from "../views/Today";
 import Calendar from "../views/Calendar";
 import Report from "../views/Report";
@@ -59,7 +61,7 @@ import {
   legacyScheduleOf,
   getEffectiveDayConfig,
 } from "../lib/schedule";
-import { ymdLocal, todayLocal as todayStr, getWeekMonday } from "../lib/dates";
+import { ymdLocal, todayLocal as todayStr, getWeekMonday, isYmd } from "../lib/dates";
 import {
   evaluateDay,
   liveDayDelta,
@@ -88,8 +90,10 @@ import type {
   AuditEntry,
   DayAdjustment,
   LockedMonth,
+  VacationSettings,
   AppState as StorageShape,
 } from "../lib/types";
+import type { ImportPatch } from "../lib/excel/plan";
 
 // ─── Constants ────────────────────────────────────────────────
 const STORAGE_KEY = "punchclock_v2";
@@ -129,6 +133,8 @@ function load(): StorageShape {
       absences: p.absences ?? [],
       expenses: p.expenses ?? [],
       flexBaseMinutes: typeof p.flexBaseMinutes === "number" ? p.flexBaseMinutes : 0,
+      flexBaseDate: isYmd(p.flexBaseDate) ? p.flexBaseDate : undefined,
+      vacation: p.vacation && typeof p.vacation === "object" ? p.vacation : undefined,
       trackingStartDate,
       scheduleExceptions:
         p.scheduleExceptions &&
@@ -193,6 +199,8 @@ function mergeSyncState(server: SyncState, local: SyncState): SyncState {
     ),
     reportingMode: local.reportingMode ?? server.reportingMode,
     flexBaseMinutes: local.flexBaseMinutes,
+    flexBaseDate: local.flexBaseDate,
+    vacation: local.vacation ?? server.vacation,
     trackingStartDate,
     sessions: mergeById(
       (server.sessions ?? []) as Session[],
@@ -261,6 +269,10 @@ export default function PunchClock() {
   const [expenses, setExpenses] = useState<ExpenseEntry[]>(boot.expenses ?? []);
   const [expenseModal, setExpenseModal] = useState(false);
   const [flexBaseMinutes, setFlexBaseMinutes] = useState(boot.flexBaseMinutes ?? 0);
+  // The balance above is at the END of this day (Excel import "Saldon"); flex accrues after it.
+  const [flexBaseDate, setFlexBaseDate] = useState<string | undefined>(boot.flexBaseDate);
+  const [vacation, setVacation] = useState<VacationSettings | undefined>(boot.vacation);
+  const [importModal, setImportModal] = useState(false);
   const [trackingStartDate, setTrackingStartDate] = useState<string | undefined>(
     boot.trackingStartDate,
   );
@@ -430,6 +442,10 @@ export default function PunchClock() {
     setAbsences((s.absences ?? []) as AbsenceEntry[]);
     setExpenses((s.expenses ?? []) as ExpenseEntry[]);
     setFlexBaseMinutes(typeof s.flexBaseMinutes === "number" ? s.flexBaseMinutes : 0);
+    setFlexBaseDate(isYmd(s.flexBaseDate) ? s.flexBaseDate : undefined);
+    setVacation(
+      s.vacation && typeof s.vacation === "object" ? (s.vacation as VacationSettings) : undefined,
+    );
     setTrackingStartDate(s.trackingStartDate);
     setScheduleExceptions(
       s.scheduleExceptions &&
@@ -543,6 +559,8 @@ export default function PunchClock() {
       absences,
       expenses,
       flexBaseMinutes,
+      flexBaseDate,
+      vacation,
       trackingStartDate,
       scheduleExceptions,
       autoLunchThresholdMin,
@@ -561,6 +579,8 @@ export default function PunchClock() {
       absences,
       expenses,
       flexBaseMinutes,
+      flexBaseDate,
+      vacation,
       trackingStartDate,
       scheduleExceptions,
       autoLunchThresholdMin,
@@ -586,6 +606,8 @@ export default function PunchClock() {
     absences,
     expenses,
     flexBaseMinutes,
+    flexBaseDate,
+    vacation,
     trackingStartDate,
     scheduleExceptions,
     autoLunchThresholdMin,
@@ -960,6 +982,46 @@ export default function PunchClock() {
     setSyncStatus("ok");
   }
 
+  // Excel import / undo (ImportModal): the patch sets every field it carries.
+  function handleImportApply(patch: ImportPatch) {
+    setSessions(patch.sessions);
+    setAbsences(patch.absences);
+    setExpenses(patch.expenses);
+    setConfirmedDays(patch.confirmedDays);
+    setTrackingStartDate(patch.trackingStartDate);
+    setFlexBaseMinutes(patch.flexBaseMinutes);
+    setFlexBaseDate(patch.flexBaseDate);
+    setVacation(patch.vacation);
+  }
+
+  // Excel export of a report period (SheetJS loads on demand).
+  async function downloadReportXlsx(start: string, end: string) {
+    const { buildReportWorkbook, exportFilename, downloadBytes, XLSX_MIME } =
+      await import("../lib/excel/export");
+    const bytes = await buildReportWorkbook(
+      {
+        name,
+        department,
+        sessions,
+        absences,
+        expenses,
+        schedules,
+        scheduleExceptions,
+        reportingMode: resolvedMode,
+        trackingStartDate,
+        autoLunchThresholdMin,
+        confirmedDays,
+        lockedMonths,
+        dayAdjustments,
+        flexBaseMinutes,
+        flexBaseDate,
+      },
+      start,
+      end,
+    );
+    downloadBytes(bytes, exportFilename(start, end), XLSX_MIME);
+  }
+
   function handleSettingsSave(result: { name: string; department?: string }) {
     setName(result.name);
     setDepartment(result.department);
@@ -1040,6 +1102,7 @@ export default function PunchClock() {
     confirmedDays,
     lockedMonths,
     dayAdjustments,
+    flexBaseDate,
   };
   const flexAll = computeFlex(flexCtx);
   const flexTotal = flexBaseMinutes + flexAll.minutes;
@@ -1135,8 +1198,27 @@ export default function PunchClock() {
   //   reportSlots.vacation    = (p) => <… />            (PR 7, "Semester: 17 av 25 dagar kvar")
   //   reportSlots.travel      = (p) => <… />            (PR 8, "Restid" row)
   //   adjustTravelSlot        = <TravelTimeEditor date={adjustDate} />  (PR 8, in "Justera dag")
-  const moreSlots: MoreSlots = {};
-  const reportSlots: ReportSlots = {};
+  const moreSlots: MoreSlots = {
+    excelImport: (
+      <MoreRow
+        icon="📥"
+        title="Importera från Excel"
+        subtitle="Hämta mallen och läs in din historik"
+        onClick={() => setImportModal(true)}
+      />
+    ),
+  };
+  const reportSlots: ReportSlots = {
+    excelExport: (p) => (
+      <button
+        type="button"
+        onClick={() => void downloadReportXlsx(p.start, p.end)}
+        className="pc-press w-full py-4 rounded-[18px] bg-white border border-pc-line text-pc-ink font-bold text-[15px]"
+      >
+        Exportera Excel
+      </button>
+    ),
+  };
   const adjustTravelSlot: ReactNode = null;
 
   const banners = (
@@ -1515,6 +1597,27 @@ export default function PunchClock() {
           setAutomationModal(true);
         }}
       />
+
+      {importModal && (
+        <Suspense fallback={null}>
+          <ImportModal
+            open
+            onClose={() => setImportModal(false)}
+            state={{
+              sessions,
+              absences,
+              expenses,
+              confirmedDays,
+              lockedMonths,
+              trackingStartDate,
+              flexBaseMinutes,
+              flexBaseDate,
+              vacation,
+            }}
+            onApply={handleImportApply}
+          />
+        </Suspense>
+      )}
 
       <SyncModal
         open={syncModal}

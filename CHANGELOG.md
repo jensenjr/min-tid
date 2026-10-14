@@ -79,6 +79,21 @@ All notable changes to **min-tid** are recorded here. Format loosely follows [Ke
 - `PunchClock.tsx` är nu skalet (tillstånd, lagring, synk, navigation). Flikarna ligger i `src/views/`, och det som listas under "Att åtgärda", rapportraderna, flerdagsfyllningen och "du kan gå kl." är rena, testade funktioner i `src/lib/` (`attend`, `report`, `fill`, `today`, `format`).
 - Platser för kommande delar finns färdiga: `ReportSlots`, `MoreSlots` och `AdjustDaySheet`s `travelSlot` (dokumenterade i CLAUDE.md).
 
+### Excel-import och Excel-export (PR 6)
+
+- **Importera från Excel.** Under Mer → Data finns nu "Importera från Excel". Du hämtar en färdig mall (flikarna Pass, Frånvaro, Utlägg, Restid och Saldon, med rullistor för typer), fyller i din historik och läser in filen. Före importen ser du en förhandsgranskning med antal rader och eventuella fel med flik och radnummer — rader med fel hoppas över, resten importeras. Filen läses bara i din webbläsare och skickas inte någonstans.
+- **Dubbletter och exempelrader.** Ett pass med samma datum och starttid som redan finns hoppas över och räknas separat, så du kan importera samma fil igen utan att få allt dubbelt. Exempelraderna i mallen ("EXEMPEL – skriv över eller radera") hoppas över.
+- **Historiken räknas som bekräftad.** Importerade dagar markeras som bekräftade, och flex räknas från den tidigaste importerade dagen om den är tidigare än din nuvarande start. Rader i en låst månad importeras inte.
+- **Ingångssaldon.** Fyller du i fliken Saldon sätts ditt flexsaldo till det värdet per det datumet, och appen räknar vidare från dagen efter. Semesterdagar kvar och sparade dagar sparas som ingångsvärden för semestersaldot.
+- **Ångra senaste import.** Innan importen sparas en kopia på den här enheten. "Ångra senaste import" återställer pass, frånvaro, utlägg, flexsaldo och bekräftade dagar till hur de var — ändringar du gjort efter importen går då också förlorade, och appen varnar för det först.
+- **Exportera Excel.** I Rapport finns "Exportera Excel" för vald rapportperiod, med samma flikar som importmallen plus en sammanfattning (arbetad tid, flex, saldo, utlägg, dagar som saknas) och en dag-för-dag-lista som visar hur varje dag räknades. Filen kan läsas in igen i appen.
+- Restider i mallen läses in och visas i förhandsgranskningen, men sparas först när restidsstödet finns.
+
+#### Internt
+
+- Nytt `src/lib/excel/` (parser, importplan, ångra-kopia, export, mall) och `src/components/ImportModal.tsx`. SheetJS 0.20.3 ligger som `vendor/xlsx-0.20.3.tgz` (inte npm-paketet `xlsx`) och laddas först när du importerar eller exporterar, så startbunten växer knappt.
+- Nytt `AppState.flexBaseDate`: `flexBaseMinutes` gäller i slutet av det datumet och `evaluateDay` ger flex 0 för det datumet och tidigare dagar, så flexkortet, rapporten och kalendern alltid är överens. Fältet följer med i sparande och synk, liksom `vacation` (ingångssaldo för semester).
+
 ## [1.0.0-beta.12] — 2026-08-26
 
 ### Added

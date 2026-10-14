@@ -472,3 +472,45 @@ describe("computeWeeklyFlex", () => {
     expect(computeWeeklyFlex(ctx({ trackingStartDate: undefined }), 10)).toEqual([]);
   });
 });
+
+describe("computeFlex with flexBaseDate (opening balance)", () => {
+  // The balance is at the END of flexBaseDate, so only later days accrue.
+  const MON_PAST = "2026-03-02";
+
+  it("accrues only from the day after flexBaseDate", () => {
+    const sessions = [
+      session(MON_PAST, "08:00", "18:00"), // +60, covered by the balance
+      session("2026-03-03", "08:00", "18:00"), // +60, the base day itself: covered
+      session("2026-03-04", "08:00", "17:30"), // +30, counts
+    ];
+    expect(computeFlex(ctx({ sessions })).minutes).toBe(150);
+    expect(computeFlex(ctx({ sessions, flexBaseDate: "2026-03-03" })).minutes).toBe(30);
+  });
+
+  it("does not list missing days on or before the base date", () => {
+    const r = computeFlex(ctx({ flexBaseDate: "2026-03-05" }));
+    expect(r.missingDays).toEqual(["2026-03-06", MON, TUE]);
+  });
+
+  it("is ignored when it is before trackingStartDate", () => {
+    const sessions = [session(MON_PAST, "08:00", "18:00")];
+    const base = computeFlex(ctx({ sessions })).minutes;
+    expect(computeFlex(ctx({ sessions, flexBaseDate: "2026-01-01" })).minutes).toBe(base);
+  });
+
+  it("clamps ranges that start before the base date", () => {
+    const sessions = [
+      session("2026-03-03", "08:00", "18:00"),
+      session("2026-03-04", "08:00", "17:30"),
+    ];
+    const r = computeFlex(ctx({ sessions, flexBaseDate: "2026-03-03" }), {
+      from: MON_PAST,
+      to: "2026-03-06",
+    });
+    expect(r.minutes).toBe(30);
+  });
+
+  it("a base date in the future accrues nothing", () => {
+    expect(computeFlex(ctx({ flexBaseDate: "2026-03-20" })).minutes).toBe(0);
+  });
+});
