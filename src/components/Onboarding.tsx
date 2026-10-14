@@ -413,6 +413,13 @@ export default function Onboarding({ onComplete }: { onComplete: (r: OnboardingR
               <path d="M9 18l6-6-6-6" />
             </svg>
           </button>
+
+          <a
+            href="?demo=1"
+            className="block text-center text-[13px] font-bold text-pc-muted underline pt-2"
+          >
+            Titta runt i en demo först
+          </a>
         </div>
       </Screen>
     );
@@ -505,7 +512,7 @@ export default function Onboarding({ onComplete }: { onComplete: (r: OnboardingR
           Vill du sätta ditt schema?
         </h2>
         <p className="text-[13px] text-pc-muted mb-7 text-center leading-relaxed">
-          Du kan alltid ändra det senare via inställningarna.
+          Du kan alltid ändra det senare under Mer → Schema & rapportläge.
         </p>
 
         <div className="w-full space-y-3">

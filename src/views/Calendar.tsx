@@ -37,6 +37,16 @@ function monthCells(year: number, month: number): string[] {
   return cells;
 }
 
+/**
+ * evaluateDay reads a day before the flex start (or inside an imported opening balance) as
+ * "off" but still reports the schedule's hours as workedMin. Nothing was registered there, so
+ * the calendar shows no hours and no list row for it (a new user would otherwise see a month
+ * of "Ledig · 8 h" before the day they started).
+ */
+function forCalendar(ev: DayEvaluation): DayEvaluation {
+  return ev.status === "off" && ev.workedMin > 0 ? { ...ev, workedMin: 0 } : ev;
+}
+
 /** The ring a day gets: red = missing (punch), grey = unconfirmed (schedule). */
 function ringClass(status: DayEvaluation["status"]): string {
   if (status === "missing") return "ring-2 ring-red-400";
@@ -80,11 +90,11 @@ export default function Calendar({ ctx, actions }: { ctx: DayContext; actions: D
 
   const cells = monthCells(year, month);
   const evs = new Map<string, DayEvaluation>();
-  for (const d of cells) evs.set(d, evaluateDay(d, ctx, { explain: false }));
+  for (const d of cells) evs.set(d, forCalendar(evaluateDay(d, ctx, { explain: false })));
 
   const listDays: string[] = [];
   for (let d = last < todayS ? last : todayS; d >= first; d = addDaysStr(d, -1)) {
-    const ev = evs.get(d) ?? evaluateDay(d, ctx, { explain: false });
+    const ev = evs.get(d) ?? forCalendar(evaluateDay(d, ctx, { explain: false }));
     const hasEntries = ev.normMin > 0 && getAbsencesForDate(ctx.absences, d).length > 0;
     if (ev.status !== "off" || ev.workedMin > 0 || hasEntries) listDays.push(d);
   }
@@ -256,7 +266,7 @@ export default function Calendar({ ctx, actions }: { ctx: DayContext; actions: D
         ) : (
           <div className="-mx-1">
             {listDays.map((d) => {
-              const ev = evs.get(d) ?? evaluateDay(d, ctx, { explain: false });
+              const ev = evs.get(d) ?? forCalendar(evaluateDay(d, ctx, { explain: false }));
               const abs = ev.normMin > 0 ? getAbsencesForDate(ctx.absences, d) : [];
               return (
                 <button

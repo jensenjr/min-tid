@@ -1750,12 +1750,15 @@ export default function PunchClock() {
         </Suspense>
       )}
 
-      <SyncModal
-        open={syncModal}
-        onClose={() => setSyncModal(false)}
-        onToken={handleSyncToken}
-        onRestore={handleSyncRestore}
-      />
+      {/* Demo never mounts the sync UI (RecoveryKeySheet would open the IndexedDB key store). */}
+      {!demo && (
+        <SyncModal
+          open={syncModal}
+          onClose={() => setSyncModal(false)}
+          onToken={handleSyncToken}
+          onRestore={handleSyncRestore}
+        />
+      )}
 
       <FlexBreakdownModal
         open={flexBreakdownOpen}
