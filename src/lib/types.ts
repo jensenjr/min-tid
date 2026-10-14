@@ -1,5 +1,5 @@
 // Shared data types for the time/flex logic. Pure type module — no runtime code.
-import type { WeekSchedule } from "./schedule";
+import type { WeekSchedule, SchedulePeriod } from "./schedule";
 import type { ActionSource } from "./actions";
 import type { AbsenceEntry } from "../components/AbsenceModal";
 import type { ExpenseEntry } from "../components/ExpenseModal";
@@ -33,10 +33,16 @@ export type ScheduleException = {
   note?: string;
 };
 
+// How a day gets its hours: "schedule" = the schedule is the report (Enligt schema),
+// "punch" = the user clocks in/out (Stämpla). Undefined = not chosen yet.
+export type ReportingMode = "schedule" | "punch";
+
 // Shape persisted in localStorage under `punchclock_v2`.
 export type AppState = {
   name: string;
-  schedule: WeekSchedule;
+  schedule: WeekSchedule; // legacy: week 1 of the period valid today (kept for rollback to older builds)
+  schedules: SchedulePeriod[]; // schedule periods sorted by validFrom — the source of truth
+  reportingMode?: ReportingMode;
   department?: string;
   onboardingDone: boolean;
   sessions: Session[];
