@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { type ScheduleSource, getEffectiveDayConfig, netDayMin } from "../lib/schedule";
+import { type VacationState, vacationWarning } from "../lib/vacation";
 import { todayLocal } from "../lib/dates";
 
 export type AbsenceCategory =
@@ -50,12 +51,15 @@ export default function AbsenceModal({
   open,
   initialDate,
   schedule,
+  vacationState,
   onClose,
   onSave,
 }: {
   open: boolean;
   initialDate?: string;
   schedule?: ScheduleSource;
+  /** Absences, schedules, exceptions and vacation settings; enables the (non-blocking) semester warning. */
+  vacationState?: VacationState;
   onClose: () => void;
   onSave: (entry: AbsenceEntry) => void;
 }) {
@@ -92,6 +96,20 @@ export default function AbsenceModal({
   }
 
   if (!open) return null;
+
+  // Non-blocking: warn when this semester would exceed the vacation balance.
+  const parsedHours = parseFloat(manualHours);
+  const vacWarning =
+    vacationState && category === "semester" && startDate && endDate && endDate >= startDate
+      ? vacationWarning(vacationState, {
+          id: "draft",
+          category,
+          startDate,
+          endDate,
+          hours: fullDay || isNaN(parsedHours) || parsedHours <= 0 ? undefined : parsedHours,
+          manual: true,
+        })
+      : null;
 
   function handleSave() {
     if (!startDate) {
@@ -351,6 +369,11 @@ export default function AbsenceModal({
           }}
         />
 
+        {vacWarning && (
+          <div className="text-pc-orange-deep text-[13px] mb-3 font-semibold">
+            ⚠️ {vacWarning} Du kan spara ändå.
+          </div>
+        )}
         {err && <div className="text-red-600 text-[13px] mb-3 font-semibold">{err}</div>}
 
         <div className="grid grid-cols-2 gap-3">

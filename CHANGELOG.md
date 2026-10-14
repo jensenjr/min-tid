@@ -94,6 +94,15 @@ All notable changes to **min-tid** are recorded here. Format loosely follows [Ke
 - Nytt `src/lib/excel/` (parser, importplan, ångra-kopia, export, mall) och `src/components/ImportModal.tsx`. SheetJS 0.20.3 ligger som `vendor/xlsx-0.20.3.tgz` (inte npm-paketet `xlsx`) och laddas först när du importerar eller exporterar, så startbunten växer knappt.
 - Nytt `AppState.flexBaseDate`: `flexBaseMinutes` gäller i slutet av det datumet och `evaluateDay` ger flex 0 för det datumet och tidigare dagar, så flexkortet, rapporten och kalendern alltid är överens. Fältet följer med i sparande och synk, liksom `vacation` (ingångssaldo för semester).
 
+### Semestersaldo (PR 7)
+
+- **”Semester: 17 av 25 dagar kvar”.** Ett nytt kort visar hur många semesterdagar du har kvar under semesteråret (som standard 1 april – 31 mars, 25 dagar). Sparade dagar visas separat (”+ 5 sparade”).
+- **Rätt dagar dras.** En semesterperiod drar en dag för varje dag du enligt schemat skulle ha arbetat. Helger, röda dagar (helgdag) och lediga dagar i ett roterande schema drar ingenting.
+- **Halva dagar.** Slå på ”Tillåt halva semesterdagar” om du tar semester på deltid; annars räknas en semesterdag med färre timmar ändå som en hel dag (det står i kortet).
+- **Planerad semester räknas.** Semester längre fram dras direkt från saldot, och kortet varnar om du planerat mer än du har.
+- **Ingående saldo.** Under ”Ändra” kan du ange dagar kvar och sparade dagar per ett visst datum; bara semester efter det datumet dras därefter.
+- Inställningarna följer med i synken och äldre data läses in oförändrat.
+
 ## [1.0.0-beta.12] — 2026-08-26
 
 ### Added

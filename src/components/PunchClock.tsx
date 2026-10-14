@@ -13,7 +13,7 @@ import DayExceptionModal from "./DayExceptionModal";
 import AdjustDaySheet from "./AdjustDaySheet";
 import ConfirmSheet from "./ConfirmSheet";
 import { ScheduleBanner } from "./dayUi";
-import { MoreRow, NavIcon } from "./ui";
+import { MoreRow, NavIcon, Sheet } from "./ui";
 // Loaded on first open: keeps the Excel import code out of the main bundle.
 const ImportModal = lazy(() => import("./ImportModal"));
 import Today from "../views/Today";
@@ -71,6 +71,8 @@ import {
   type DayContext,
 } from "../lib/days";
 import { computeFlex, computeWeeklyFlex } from "../lib/flex";
+import { parseVacation, vacationBalance, vacationLine } from "../lib/vacation";
+import VacationCard from "./VacationCard";
 import {
   confirmDay,
   confirmMonth,
@@ -134,7 +136,7 @@ function load(): StorageShape {
       expenses: p.expenses ?? [],
       flexBaseMinutes: typeof p.flexBaseMinutes === "number" ? p.flexBaseMinutes : 0,
       flexBaseDate: isYmd(p.flexBaseDate) ? p.flexBaseDate : undefined,
-      vacation: p.vacation && typeof p.vacation === "object" ? p.vacation : undefined,
+      vacation: parseVacation(p.vacation),
       trackingStartDate,
       scheduleExceptions:
         p.scheduleExceptions &&
@@ -200,7 +202,7 @@ function mergeSyncState(server: SyncState, local: SyncState): SyncState {
     reportingMode: local.reportingMode ?? server.reportingMode,
     flexBaseMinutes: local.flexBaseMinutes,
     flexBaseDate: local.flexBaseDate,
-    vacation: local.vacation ?? server.vacation,
+    vacation: parseVacation(local.vacation) ?? parseVacation(server.vacation),
     trackingStartDate,
     sessions: mergeById(
       (server.sessions ?? []) as Session[],
@@ -251,6 +253,8 @@ export default function PunchClock() {
     boot.dayAdjustments ?? {},
   );
   const [auditLog, setAuditLog] = useState<AuditEntry[]>(boot.auditLog ?? []);
+  const [vacation, setVacation] = useState<VacationSettings | undefined>(boot.vacation);
+  const [vacationSheet, setVacationSheet] = useState(false);
   const [department, setDepartment] = useState<string | undefined>(boot.department);
   const [onboardingDone, setOnboardingDone] = useState(boot.onboardingDone);
   const [sessions, setSessions] = useState<Session[]>(boot.sessions);
@@ -271,7 +275,6 @@ export default function PunchClock() {
   const [flexBaseMinutes, setFlexBaseMinutes] = useState(boot.flexBaseMinutes ?? 0);
   // The balance above is at the END of this day (Excel import "Saldon"); flex accrues after it.
   const [flexBaseDate, setFlexBaseDate] = useState<string | undefined>(boot.flexBaseDate);
-  const [vacation, setVacation] = useState<VacationSettings | undefined>(boot.vacation);
   const [importModal, setImportModal] = useState(false);
   const [trackingStartDate, setTrackingStartDate] = useState<string | undefined>(
     boot.trackingStartDate,
@@ -443,9 +446,7 @@ export default function PunchClock() {
     setExpenses((s.expenses ?? []) as ExpenseEntry[]);
     setFlexBaseMinutes(typeof s.flexBaseMinutes === "number" ? s.flexBaseMinutes : 0);
     setFlexBaseDate(isYmd(s.flexBaseDate) ? s.flexBaseDate : undefined);
-    setVacation(
-      s.vacation && typeof s.vacation === "object" ? (s.vacation as VacationSettings) : undefined,
-    );
+    setVacation(parseVacation(s.vacation));
     setTrackingStartDate(s.trackingStartDate);
     setScheduleExceptions(
       s.scheduleExceptions &&
@@ -1198,6 +1199,7 @@ export default function PunchClock() {
   //   reportSlots.vacation    = (p) => <… />            (PR 7, "Semester: 17 av 25 dagar kvar")
   //   reportSlots.travel      = (p) => <… />            (PR 8, "Restid" row)
   //   adjustTravelSlot        = <TravelTimeEditor date={adjustDate} />  (PR 8, in "Justera dag")
+  const vacationState = { absences, schedules, scheduleExceptions, vacation };
   const moreSlots: MoreSlots = {
     excelImport: (
       <MoreRow
@@ -1205,6 +1207,14 @@ export default function PunchClock() {
         title="Importera från Excel"
         subtitle="Hämta mallen och läs in din historik"
         onClick={() => setImportModal(true)}
+      />
+    ),
+    vacation: (
+      <MoreRow
+        icon="🌴"
+        title="Semester"
+        subtitle={vacationLine(vacationBalance(vacationState, todayDate))}
+        onClick={() => setVacationSheet(true)}
       />
     ),
   };
@@ -1217,6 +1227,9 @@ export default function PunchClock() {
       >
         Exportera Excel
       </button>
+    ),
+    vacation: (
+      <VacationCard compact state={vacationState} today={todayDate} onChange={setVacation} />
     ),
   };
   const adjustTravelSlot: ReactNode = null;
@@ -1515,10 +1528,15 @@ export default function PunchClock() {
         />
       )}
 
+      <Sheet open={vacationSheet} onClose={() => setVacationSheet(false)} title="Semester">
+        <VacationCard bare state={vacationState} today={todayDate} onChange={setVacation} />
+      </Sheet>
+
       <AbsenceModal
         open={absenceModal || absenceForDate !== null}
         initialDate={absenceForDate ?? undefined}
         schedule={schedules}
+        vacationState={vacationState}
         onClose={() => {
           setAbsenceModal(false);
           setAbsenceForDate(null);

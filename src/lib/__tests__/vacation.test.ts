@@ -15,6 +15,7 @@ import {
 } from "../vacation";
 import type { VacationSettings } from "../types";
 import { absence } from "./helpers";
+import { applyImportPlan, type ImportPlan, type ImportableState } from "../excel/plan";
 
 const FULL: SchedulePeriod[] = [
   { validFrom: "2000-01-01", anchorMonday: "2026-06-01", rotation: { weeks: [DEFAULT_SCHEDULE] } },
@@ -272,5 +273,36 @@ describe("parseVacation / formatting", () => {
     expect(fmtDays(17)).toBe("17");
     expect(fmtDays(16.5)).toBe("16,5");
     expect(fmtDays(-2)).toBe("-2");
+  });
+});
+
+describe("Excel import opening balance", () => {
+  it("shows up in vacationBalance with defaults filled by resolveVacation", () => {
+    const state = {
+      sessions: [],
+      absences: [absence("semester", "2026-03-02", "2026-03-03")],
+      expenses: [],
+      confirmedDays: {},
+      lockedMonths: {},
+      trackingStartDate: undefined,
+      flexBaseMinutes: 0,
+      flexBaseDate: undefined,
+      vacation: undefined,
+    } as ImportableState;
+    const plan = {
+      sessions: [],
+      absences: [],
+      expenses: [],
+      confirmedDays: [],
+      balances: { asOf: "2026-02-28", vacationDaysLeft: 14, savedVacationDays: 5 },
+    } as unknown as ImportPlan;
+    const patch = applyImportPlan(plan, state);
+    expect(patch.vacation).toEqual({
+      ...DEFAULT_VACATION,
+      opening: { asOf: "2026-02-28", daysLeft: 14, savedDays: 5 },
+    });
+    // 2026-03-10 is in the vacation year 2025-04-01..2026-03-31; only 2-3 March count.
+    const b = vacationBalance(st(state.absences, { vacation: patch.vacation }), "2026-03-10");
+    expect(b).toMatchObject({ left: 12, saved: 5, fromOpening: true });
   });
 });
