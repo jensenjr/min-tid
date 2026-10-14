@@ -181,18 +181,27 @@ Tailwind CSS v4 with custom `pc-*` design tokens defined in `src/styles.css`. Ke
 
 ### Overview
 
-A minimal Express + Node.js server. No database — state is stored in a single JSON file (`data.json`). Users are identified by a username paired with a bcrypt-hashed secret; no e-mail or other personal identifiers are stored.
+A minimal Express + Node.js server. No database — state is stored in a single JSON file (`data.json`). Users are identified by a username paired with a bcrypt-hashed credential; no e-mail or other personal identifiers are stored (a phone number only if the user adds one for SMS recovery).
 
-**Zero native dependencies.** All packages are pure JavaScript (`express`, `bcryptjs`, `jsonwebtoken`). This is intentional: native C++ modules (like `better-sqlite3`) fail to compile in Nixpacks/Alpine environments.
+**Sync is end-to-end encrypted.** The server stores and returns only ciphertext (`{ v: 1, iv, ct }`) and never sees the secret or the encryption key. See "End-to-end encryption" below.
+
+**Zero native dependencies.** All packages are pure JavaScript (`express`, `bcryptjs`, `jsonwebtoken`). This is intentional: native C++ modules (like `better-sqlite3`) fail to compile in Nixpacks/Alpine environments. The crypto is Node's / the browser's built-in Web Crypto.
 
 ### Files
 
-| File                       | Purpose                                                                                                                                           |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `server/index.js`          | Express app — all routes, JSON store logic, and 60-day inactive-account cleanup                                                                   |
-| `server/package.json`      | Server dependencies                                                                                                                               |
-| `server/package-lock.json` | **Must be committed.** Required for `npm ci` in Docker/Nixpacks. If missing, builds fail with `EUSAGE`. Regenerate with `npm run server:install`. |
-| `server/data.json`         | Runtime data file — gitignored, created automatically on first write                                                                              |
+| File                                                                  | Purpose                                                                                                                                                                                                       |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `server/index.js`                                                     | Express glue: routes, JSON store (atomic temp-file + rename writes; refuses to start on an unparsable `data.json`), SMS/OTP, 60-day cleanup, body-free error handler                                          |
+| `server/core.js`                                                      | All account/sync **policy** (register, login, salt, sync GET/PUT, secret change/migration, recovered session). Pure: no express/bcrypt/jwt imports — `index.js` injects them, root vitest imports it directly |
+| `server/__tests__/core.test.js`                                       | Policy tests against `core.js` with fake bcrypt/jwt                                                                                                                                                           |
+| `server/__tests__/protocol.test.js`                                   | End-to-end: the real client (`src/lib/sync.ts`) against `core.js` through a fake `fetch`, one key store per simulated device                                                                                  |
+| `src/lib/crypto.ts`                                                   | Web Crypto only: `deriveKeys`, `encryptState` / `decryptState`, recovery key generate/normalize/format, `unwrapEncKey`                                                                                        |
+| `src/lib/keyStore.ts`                                                 | Device key + not-yet-acknowledged recovery key in IndexedDB (`min-tid-sync` / `keys`), with an in-memory fallback                                                                                             |
+| `src/lib/sync.ts`                                                     | Client API. Same exported signatures as before encryption; derives keys, encrypts, decrypts, migrates and re-keys internally                                                                                  |
+| `src/components/SyncModal.tsx`, `src/components/RecoveryKeySheet.tsx` | Sync setup / restore / re-login / SMS recovery UI; the one-time recovery-key sheet                                                                                                                            |
+| `server/package.json`                                                 | Server dependencies                                                                                                                                                                                           |
+| `server/package-lock.json`                                            | **Must be committed.** Required for `npm ci` in Docker/Nixpacks. If missing, builds fail with `EUSAGE`. Regenerate with `npm run server:install`.                                                             |
+| `server/data.json`                                                    | Runtime data file — gitignored, created automatically on first write                                                                                                                                          |
 
 ### Data model
 
@@ -200,21 +209,49 @@ A minimal Express + Node.js server. No database — state is stored in a single 
 data.json = {
   users: {
     "<username_lower>": {
-      id:           "<uuid>",
-      username:     "<original-case username>",
-      secretHash:   "<bcrypt>",
-      state:        <StorageShape without onboardingDone> | null,
-      stateUpdatedAt: <ms>,        // revision marker — bumped on every PUT /api/sync
-      createdAt:    <ms>,
-      lastActivity: <ms>
+      id:             "<uuid>",
+      username:       "<original-case username>",
+      secretHash:     "<bcrypt(authKey)>",   // legacy accounts: bcrypt(secret)
+      encrypted:      true,                  // absent on legacy (pre-encryption) accounts
+      salt:           "<base64, 16 bytes>",  // PBKDF2 salt; also identifies the current key
+      state:          { v: 1, iv, ct } | null, // legacy accounts: plaintext StorageShape | null
+      stateUpdatedAt: <ms>,                  // revision marker — strictly increasing, bumped on every state write
+      recovery:       { v: 1, wrappedKey, updatedAt } | null, // AES-KW(encKey) under the recovery key
+      phone?:         "+46…",               // only if added for SMS recovery
+      createdAt:      <ms>,
+      lastActivity:   <ms>
     }
   }
 }
 ```
 
 - The map key is the lowercased username, enforcing case-insensitive uniqueness (`carl` blocks another `carl` but `carl2` is fine).
-- `lastActivity` is updated on every login and every `PUT /api/sync`.
-- Usernames must match `^[a-zA-Z0-9_-]{3,20}$`. Validation lives in both server (`isValidUsername` in `server/index.js`) and client (regex in `SyncModal.tsx` + `Onboarding.tsx`).
+- `lastActivity` is updated on every login, SMS recovery, secret change and `PUT /api/sync`.
+- Usernames must match `^[a-zA-Z0-9_-]{3,20}$`. Validation lives in both server (`isValidUsername` in `server/core.js`) and client (regex in `SyncModal.tsx` + `Onboarding.tsx`).
+- Invariants enforced in `core.js`: an encrypted account only ever holds an envelope (or null); a legacy account never holds an envelope (an old client would adopt it as its state and wipe its data); no `await` sits between reading a record and writing it back.
+
+### End-to-end encryption
+
+```
+secret ──PBKDF2-SHA256, 600 000 iterations, per-account salt──► master
+master ──HKDF "min-tid/v1/auth"──► authKey   32 bytes, sent base64, server bcrypts it
+master ──HKDF "min-tid/v1/enc" ──► encKey    AES-GCM-256, non-extractable, IndexedDB only
+state  ──AES-GCM(encKey, fresh 12-byte IV, AAD "min-tid/v1/state")──► { v: 1, iv, ct }
+recovery key (24 Crockford base32 = 120 bits) ──HKDF──► AES-KW key ──wraps──► encKey
+```
+
+- **Salt.** `GET /api/auth/salt?username=` returns the account's salt, or a fresh random salt for an unused name (which `register` then commits and returns). For a legacy account it returns `encrypted: false` plus a fresh salt for the migration.
+- **Protocol marker.** Encrypting clients send `X-Sync-Protocol: 2` on every request. Requests without it are pre-encryption builds: on an encrypted account they get **409 `NEEDS_UPDATE`** ("Uppdatera appen…") and never see or overwrite ciphertext. Legacy accounts keep working for them until migrated. Old clients can no longer register.
+- **Key id.** The salt identifies the key. `PUT /api/sync` sends `{ state: envelope, salt }`; a salt that is not the account's current one gets **409 `KEY_CHANGED`**, and `syncPull` compares the returned salt before decrypting. That is what stops a device still on an old secret from overwriting data with ciphertext nobody else can read.
+- **Extractability.** `wrapKey` needs an extractable key, but the stored encKey must not be. `deriveKeys` keeps the (non-extractable) HKDF base key in a closure; `wrapEncKey(recoveryKey)` derives a short-lived extractable twin, wraps it inside Web Crypto and drops it. Raw key bytes never enter JS memory. The recovery KEK is never stored.
+- **Migration (legacy account).** `syncLogin` sees `encrypted: false`, logs in once with the raw secret, derives keys, mints a recovery key and calls `PUT /api/auth/secret { authKey, salt, state: envelope, recovery, baseRev }` — **one atomic write** replaces the hash, sets `encrypted`, stores the envelope (deleting the plaintext) and the wrapped key. `baseRev` must equal `stateUpdatedAt` or the server answers 409 `CONFLICT`; the client re-reads and retries (an old client may push mid-migration).
+- **Secret change** (`syncChangeSecret`): pull + decrypt with the device key, derive a new key from a new salt, re-encrypt, mint a **new** recovery key (the old one stops working — the device cannot re-wrap without the recovery key, and the stored encKey is non-extractable), same atomic `PUT /api/auth/secret`. Other devices then get `KEY_CHANGED` until they log in with the new secret.
+- **SMS recovery** restores the account (a token), not the data. `syncRecoverConfirm` → `syncRecoverUnlock(recoveryKey)` (unwraps the old encKey, decrypts in memory) → `syncRecoverComplete(newSecret)` re-keys under a new secret. Without the recovery key, `syncRecoverComplete` refuses (`RECOVERY_KEY_REQUIRED`) unless the user explicitly chose `discardCloudData` ("Börja om"), which sends `discardState: true`; the server never drops an existing state without that flag. Nothing silently leaves undecryptable ciphertext behind.
+- **Recovery key display.** Every flow that mints one stores it as "pending" in IndexedDB (tagged with the salt) before the request; `RecoveryKeySheet` shows it while it matches the device key's salt, with "Skriv ut / kopiera" and a required checkbox, and deletes it on "Klar". `SyncModal` keeps the sheet mounted even while closed, so a key minted from Settings (secret change) or a restore pops up too; onboarding mounts it on the step after "Skapa konto".
+- **Device without a key** (token from a pre-encryption build, or IndexedDB cleared): `syncPush` / `syncPull` throw `SyncApiError` 401 `NO_KEY` before any request. Nothing local is touched.
+- `sync.ts` runs every key-touching operation through one queue, so a push never encrypts with a key a concurrent secret change is about to retire. Test hook: `__setSyncTestHooks({ keyStore, iterations })` (production never calls it; a test pins the 600 000 default).
+
+**Threat model.** The server (or a stolen `data.json`) sees usernames, timestamps, sizes, phone numbers, bcrypt(authKey), salts, wrapped keys and ciphertext — enough for an offline guess at PBKDF2-600k cost per guess, so a weak 6-character secret is the weakest link. It cannot read or undetectably alter data (AES-GCM). A stolen 30-day token lets an attacker overwrite or re-key the account (as before) but not read it.
 
 ### 60-day inactivity cleanup
 
@@ -226,15 +263,20 @@ data.json = {
 
 ### API endpoints
 
-| Method | Path                 | Auth       | Description                                                                                           |
-| ------ | -------------------- | ---------- | ----------------------------------------------------------------------------------------------------- |
-| POST   | `/api/auth/register` | none       | Body: `{ username, secret }`. Hash secret, create user, return JWT. 409 if username taken.            |
-| POST   | `/api/auth/login`    | none       | Body: `{ username, secret }`. Verify, update `lastActivity`, return JWT + stored state + `updatedAt`. |
-| GET    | `/api/sync`          | Bearer JWT | Return `{ state, updatedAt }` — `updatedAt` is the revision the client compares against               |
-| PUT    | `/api/sync`          | Bearer JWT | Replace stored state, bump `stateUpdatedAt`, update `lastActivity`; returns `{ ok, updatedAt }`       |
-| DELETE | `/api/account`       | Bearer JWT | Delete user record                                                                                    |
+| Method | Path                        | Auth       | Description                                                                                                                                                                                                       |
+| ------ | --------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/api/auth/salt?username=`  | none       | `{ salt, encrypted }` — see "End-to-end encryption"                                                                                                                                                               |
+| POST   | `/api/auth/register`        | none       | `{ username, authKey, salt, recovery: { v: 1, wrappedKey } }` → `{ userId, token, salt }`. 409 if taken; 409 `NEEDS_UPDATE` for a raw `secret`                                                                    |
+| POST   | `/api/auth/login`           | none       | `{ username, authKey }` (legacy accounts: `{ username, secret }`) → `{ userId, username, token, state, updatedAt, encrypted, salt? }`. Raw secret on an encrypted account → 409 (`NEEDS_UPDATE` / `USE_AUTH_KEY`) |
+| GET    | `/api/sync`                 | Bearer JWT | `{ state, updatedAt, encrypted, salt? }`; the envelope is returned untouched, and only to protocol-2 clients (else 409 `NEEDS_UPDATE`)                                                                            |
+| PUT    | `/api/sync`                 | Bearer JWT | Encrypted: `{ state: { v, iv, ct }, salt }` only (409 `KEY_CHANGED` on a stale salt, 400 on a malformed envelope). Legacy: `{ state }` from old clients only. → `{ ok, updatedAt }`                               |
+| PUT    | `/api/auth/secret`          | Bearer JWT | `{ authKey, salt, state, recovery, baseRev, discardState? }` → atomic migration / secret change / post-SMS reset; 409 `CONFLICT` on a stale `baseRev`. Legacy accounts also accept `{ newSecret }`                |
+| POST   | `/api/auth/recover/confirm` | SMS code   | → `{ userId, username, token, state, updatedAt, encrypted, salt?, recovery? }`; encrypted account + old client → 409                                                                                              |
+| DELETE | `/api/account`              | Bearer JWT | Delete user record                                                                                                                                                                                                |
 
-Login errors are deliberately ambiguous ("Fel användarnamn eller synk-kod") so the existence of a username can't be probed.
+Phone endpoints (`/api/auth/phone`, `/phone/verify`, `/recover/request`) are unchanged. Login errors are deliberately ambiguous ("Fel användarnamn eller synk-kod") and an unknown username costs a bcrypt compare like a known one. Registration does reveal that a name is taken (by design — you need to know to pick another).
+
+**Never log request bodies** — they carry auth keys, ciphertext and phone numbers. `core.js` has no logging at all; `index.js` replaces Express's default error handler (which would print a JSON parse error including a body excerpt) and logs only method, path and error name for 5xx. The one remaining log of user data is the dev-only SMS fallback (`[sms] … would send to <phone>: <code>` when 46elks credentials are missing).
 
 ### Environment variables
 
@@ -263,7 +305,8 @@ State lives in refs so timers and event listeners never act on a stale closure:
 **Pull** (`pullNow`) runs on mount with a token, on `visibilitychange`/`focus`/`online`, and from
 the "Hämta nu" button in settings:
 
-1. `GET /api/sync` → `{ state, updatedAt }`.
+1. `syncPull` → `GET /api/sync`, decrypted inside `sync.ts` → `{ state, updatedAt }`
+   (`syncPush` likewise encrypts; PunchClock never sees ciphertext).
 2. `state === null` → the account has never been written; this device seeds it (`pushSoon(0)`).
 3. `updatedAt === syncRevRef` → nothing new; only a queued dirty push is sent.
 4. Otherwise, if the device is **clean** → adopt the server state wholesale (so deletions made on
@@ -292,13 +335,15 @@ app keeps working offline, so nothing looks wrong until weeks of hours are missi
 the other device. The motivating case: a corporate WiFi serves the static app fine but
 its proxy answers **403 on `/api`**.
 
-- `SyncApiError` (`src/lib/sync.ts`) carries `status` / `path` / `method`. `status === 0`
-  means the request never got a response (offline, DNS/TLS, captive portal, filtering) —
-  `fetch` only rejects in that case.
+- `SyncApiError` (`src/lib/sync.ts`) carries `status` / `path` / `method` and an optional
+  `code`. `status === 0` means the request never got a response (offline, DNS/TLS, captive
+  portal, filtering) — `fetch` only rejects in that case. Encryption adds three statuses a
+  proxy never produces: **401 `NO_KEY`** (token but no key on this device), **409
+  `KEY_CHANGED`** (secret changed elsewhere), **422 `DECRYPT_FAILED`** (cloud copy won't decrypt).
 - `src/lib/syncDiagnostics.ts` owns everything user-facing about a failure:
-  `explainSyncError()` maps a `SyncFailure` to `{ headline, cause, fixes[], networkBlocked }`
-  in plain Swedish (403/407/451/0 → "byt nät"; 401 → logga in igen; 405 → deploy pågår;
-  5xx → serverfel), a rolling 10-entry log in `localStorage["sync_error_log"]`, and
+  `explainSyncError()` maps a `SyncFailure` to `{ headline, cause, fixes[], networkBlocked, relogin }`
+  in plain Swedish (403/407/451/0 → "byt nät"; 401/409/422 → logga in igen, `relogin: true`;
+  405 → deploy pågår; 5xx → serverfel), a rolling 10-entry log in `localStorage["sync_error_log"]`, and
   `buildSyncReportMailto()` which composes the felanmälan to `christian@krut.it`
   (subject `mintid sync error kl HH:MM`). **The report never includes the JWT or the secret.**
 - `PunchClock.noteSyncFailure()` is the single funnel: every failed pull/push records the
@@ -311,6 +356,11 @@ its proxy answers **403 on `/api`**.
   troubleshooting panel and scrolls `#sync-help` into view. The panel holds the cause, the
   numbered fixes, a reassurance line driven by the `dirty` flag, "Försök igen" (`onPullNow`)
   and "Skicka fellogg" (the mailto).
+- When `relogin` is true the panel also shows **"Logga in igen"** (`onSetupSync`). It opens
+  `SyncModal` while a token is still set, which puts it in re-login mode: the username is
+  fixed to `sync_username`, and success goes through `onToken` (not `onRestore`), so
+  `handleSyncToken` marks the device dirty and the next pull **merges** local edits into
+  the cloud copy instead of replacing them. ("Koppla från" + "Återställ" would replace.)
 
 ### Debugging 405 errors
 

@@ -5,6 +5,7 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import fs from "node:fs";
+import { createCore, PROTOCOL_HEADER, PROTOCOL_VERSION } from "./core.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -15,27 +16,42 @@ const PROD = process.env.NODE_ENV === "production";
 const BCRYPT_ROUNDS = 12;
 const INACTIVE_MS = 60 * 24 * 60 * 60 * 1000; // 60 days
 
+// Never log request bodies: they carry auth keys, ciphertext and phone numbers.
+// Nothing in this file or core.js prints req.body, and the error handler below
+// replaces Express's default one (which would print a JSON parse error, body excerpt
+// included).
+
 // ─── JSON store ───────────────────────────────────────────────
-// Shape: { users: { [username_lower]: { id, username, secretHash, state, stateUpdatedAt, createdAt, lastActivity } } }
+// Shape: see "Data model" in CLAUDE.md. Encrypted accounts hold only { v, iv, ct }.
 
 function readStore() {
+  let raw;
   try {
-    return JSON.parse(fs.readFileSync(DATA_PATH, "utf8"));
-  } catch {
-    return { users: {} };
+    raw = fs.readFileSync(DATA_PATH, "utf8");
+  } catch (e) {
+    if (e.code === "ENOENT") return { users: {} };
+    throw e;
   }
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed.users === "object" && parsed.users !== null) return parsed;
+  } catch {
+    /* fall through */
+  }
+  // Starting empty would overwrite every account on the next write. Refuse instead.
+  console.error(`[store] ${DATA_PATH} is not valid JSON — refusing to start. Restore a backup.`);
+  process.exit(1);
 }
 
+/** Write to a temp file and rename over the original, so a crash never leaves half a file. */
 function writeStore(s) {
   fs.mkdirSync(path.dirname(DATA_PATH), { recursive: true });
-  fs.writeFileSync(DATA_PATH, JSON.stringify(s), "utf8");
+  const tmp = `${DATA_PATH}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(s), "utf8");
+  fs.renameSync(tmp, DATA_PATH);
 }
 
-let store = readStore();
-
-function findByUsername(username) {
-  return store.users[username.toLowerCase()] ?? null;
-}
+const store = readStore();
 
 function findEntry(userId) {
   return Object.entries(store.users).find(([, u]) => u.id === userId) ?? null;
@@ -73,6 +89,14 @@ function cleanupInactive() {
 // Run cleanup on startup and every 24 hours
 cleanupInactive();
 setInterval(cleanupInactive, 24 * 60 * 60 * 1000);
+
+const core = createCore({
+  store,
+  persist: () => writeStore(store),
+  hashSecret: (s) => bcrypt.hash(s, BCRYPT_ROUNDS),
+  compareSecret: (s, h) => bcrypt.compare(s, h),
+  signToken: (userId) => jwt.sign({ userId }, JWT_SECRET, { expiresIn: "30d" }),
+});
 
 // ─── Phone lookup ─────────────────────────────────────────────
 function findByPhone(phone) {
@@ -182,72 +206,43 @@ setInterval(
   15 * 60 * 1000,
 );
 
-// ─── Username validation ──────────────────────────────────────
-function isValidUsername(u) {
-  return typeof u === "string" && /^[a-zA-Z0-9_-]{3,20}$/.test(u);
-}
-
 // ─── App ──────────────────────────────────────────────────────
 const app = express();
-app.use(express.json({ limit: "4mb" }));
+// Envelopes are base64 (+33 %) of the JSON state, so allow more than the plaintext needed.
+app.use(express.json({ limit: "8mb" }));
 
 if (PROD) {
   const dist = path.join(__dirname, "../dist");
   app.use(express.static(dist));
 }
 
-// ─── POST /api/auth/register  { username, secret }  →  { userId, token }
-app.post("/api/auth/register", async (req, res) => {
-  const { username, secret } = req.body ?? {};
-  if (!isValidUsername(username)) {
-    return res
-      .status(400)
-      .json({ error: "Användarnamnet måste vara 3–20 tecken (a–z, 0–9, _ eller -)." });
-  }
-  if (typeof secret !== "string" || secret.length < 6) {
-    return res.status(400).json({ error: "Synk-koden måste vara minst 6 tecken." });
-  }
-  const key = username.toLowerCase();
-  if (findByUsername(key)) {
-    return res
-      .status(409)
-      .json({ error: `Användarnamnet "${username}" är redan taget. Välj ett annat.` });
-  }
-  const secretHash = await bcrypt.hash(secret, BCRYPT_ROUNDS);
-  const userId = crypto.randomUUID();
-  const now = Date.now();
-  upsert(key, { id: userId, username, secretHash, state: null, createdAt: now, lastActivity: now });
-  const token = jwt.sign({ userId }, JWT_SECRET, { expiresIn: "30d" });
-  res.json({ userId, token });
+/** Express 4 does not catch rejected promises; route them to the error handler. */
+const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+const send = (res, r) => res.status(r.status).json(r.body);
+/** True for clients that encrypt (they send X-Sync-Protocol: 2 on every request). */
+const isE2E = (req) => req.get(PROTOCOL_HEADER) === PROTOCOL_VERSION;
+
+// ─── GET /api/auth/salt?username=  →  { salt, encrypted }
+app.get("/api/auth/salt", (req, res) => {
+  send(res, core.salt({ username: req.query.username }));
 });
 
-// ─── POST /api/auth/login  { username, secret }  →  { userId, token, state }
-app.post("/api/auth/login", async (req, res) => {
-  const { username, secret } = req.body ?? {};
-  if (!isValidUsername(username)) {
-    return res.status(400).json({ error: "Ange ett giltigt användarnamn." });
-  }
-  if (typeof secret !== "string" || !secret) {
-    return res.status(400).json({ error: "Ange din synk-kod." });
-  }
-  const user = findByUsername(username);
-  if (!user) {
-    await bcrypt.compare(secret, "$2a$12$invalidhashpaddingtomatchcost000000000000000000000000000");
-    return res.status(401).json({ error: "Fel användarnamn eller synk-kod." });
-  }
-  const valid = await bcrypt.compare(secret, user.secretHash);
-  if (!valid) return res.status(401).json({ error: "Fel användarnamn eller synk-kod." });
-  // Update lastActivity on login
-  const key = username.toLowerCase();
-  upsert(key, { ...user, lastActivity: Date.now() });
-  const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: "30d" });
-  res.json({
-    userId: user.id,
-    token,
-    state: user.state ?? null,
-    updatedAt: user.stateUpdatedAt ?? 0,
-  });
-});
+// ─── POST /api/auth/register  { username, authKey, salt, recovery }  →  { userId, token, salt }
+app.post(
+  "/api/auth/register",
+  wrap(async (req, res) => {
+    send(res, await core.register({ body: req.body, e2e: isE2E(req) }));
+  }),
+);
+
+// ─── POST /api/auth/login  { username, authKey } (legacy: { username, secret })
+//     →  { userId, username, token, state, updatedAt, encrypted, salt? }
+app.post(
+  "/api/auth/login",
+  wrap(async (req, res) => {
+    send(res, await core.login({ body: req.body, e2e: isE2E(req) }));
+  }),
+);
 
 // ─── Auth middleware ──────────────────────────────────────────
 function auth(req, res, next) {
@@ -261,24 +256,17 @@ function auth(req, res, next) {
   }
 }
 
-// ─── GET /api/sync  →  { state, updatedAt }
+// ─── GET /api/sync  →  { state, updatedAt, encrypted, salt? }
 // updatedAt is the revision marker: the client stores it after every pull/push and
 // compares it on the next pull to detect "another device wrote after me".
+// Encrypted accounts: the envelope is returned untouched, and only to encrypting clients.
 app.get("/api/sync", auth, (req, res) => {
-  const entry = findEntry(req.userId);
-  if (!entry) return res.status(404).json({ error: "Användare inte hittad." });
-  res.json({ state: entry[1].state ?? null, updatedAt: entry[1].stateUpdatedAt ?? 0 });
+  send(res, core.syncGet({ userId: req.userId, e2e: isE2E(req) }));
 });
 
-// ─── PUT /api/sync  { state }  →  { ok, updatedAt }
+// ─── PUT /api/sync  { state: { v, iv, ct }, salt }  (legacy: { state })  →  { ok, updatedAt }
 app.put("/api/sync", auth, (req, res) => {
-  const { state } = req.body ?? {};
-  if (!state || typeof state !== "object") return res.status(400).json({ error: "Ogiltig data." });
-  const entry = findEntry(req.userId);
-  if (!entry) return res.status(404).json({ error: "Användare inte hittad." });
-  const now = Date.now();
-  upsert(entry[0], { ...entry[1], state, stateUpdatedAt: now, lastActivity: now });
-  res.json({ ok: true, updatedAt: now });
+  send(res, core.syncPut({ userId: req.userId, e2e: isE2E(req), body: req.body }));
 });
 
 // ─── DELETE /api/account  →  { ok }
@@ -287,42 +275,45 @@ app.delete("/api/account", auth, (req, res) => {
   res.json({ ok: true });
 });
 
-// ─── PUT /api/auth/secret  { newSecret }  →  { ok }
-app.put("/api/auth/secret", auth, async (req, res) => {
-  const { newSecret } = req.body ?? {};
-  if (typeof newSecret !== "string" || newSecret.length < 6) {
-    return res.status(400).json({ error: "Den nya synk-koden måste vara minst 6 tecken." });
-  }
-  const entry = findEntry(req.userId);
-  if (!entry) return res.status(404).json({ error: "Användare inte hittad." });
-  const secretHash = await bcrypt.hash(newSecret, BCRYPT_ROUNDS);
-  upsert(entry[0], { ...entry[1], secretHash, lastActivity: Date.now() });
-  res.json({ ok: true });
-});
+// ─── PUT /api/auth/secret  { authKey, salt, state, recovery, baseRev, discardState? }
+//     (legacy accounts, old clients: { newSecret })  →  { ok, updatedAt }
+// Migration, secret change and post-SMS reset all go through here, atomically.
+app.put(
+  "/api/auth/secret",
+  auth,
+  wrap(async (req, res) => {
+    send(res, await core.changeSecret({ userId: req.userId, e2e: isE2E(req), body: req.body }));
+  }),
+);
 
 // ─── POST /api/auth/phone  { phone }  →  { ok }  (requires auth — sends OTP)
-app.post("/api/auth/phone", auth, async (req, res) => {
-  let { phone } = req.body ?? {};
-  if (typeof phone !== "string" || !phone.trim())
-    return res.status(400).json({ error: "Ange ett mobilnummer." });
-  phone = toE164Swedish(phone.trim());
-  if (!/^\+\d{8,15}$/.test(phone)) return res.status(400).json({ error: "Ogiltigt mobilnummer." });
-  const rl = checkRateLimit(phone);
-  if (!rl.ok) return res.status(429).json({ error: rl.reason });
-  const code = storeOtp(phone, req.userId);
-  try {
-    await sendSms(phone, `Din verifieringskod för min-tid: ${code}`);
-    recordSend(phone);
-    res.json({ ok: true });
-  } catch (e) {
-    otpStore.delete(phone);
-    console.error("[sms]", e.message);
-    res.status(502).json({ error: "Kunde inte skicka SMS. Försök igen." });
-  }
-});
+app.post(
+  "/api/auth/phone",
+  auth,
+  wrap(async (req, res) => {
+    let { phone } = req.body ?? {};
+    if (typeof phone !== "string" || !phone.trim())
+      return res.status(400).json({ error: "Ange ett mobilnummer." });
+    phone = toE164Swedish(phone.trim());
+    if (!/^\+\d{8,15}$/.test(phone))
+      return res.status(400).json({ error: "Ogiltigt mobilnummer." });
+    const rl = checkRateLimit(phone);
+    if (!rl.ok) return res.status(429).json({ error: rl.reason });
+    const code = storeOtp(phone, req.userId);
+    try {
+      await sendSms(phone, `Din verifieringskod för min-tid: ${code}`);
+      recordSend(phone);
+      res.json({ ok: true });
+    } catch (e) {
+      otpStore.delete(phone);
+      console.error("[sms]", e.message);
+      res.status(502).json({ error: "Kunde inte skicka SMS. Försök igen." });
+    }
+  }),
+);
 
 // ─── POST /api/auth/phone/verify  { phone, code }  →  { ok }  (requires auth)
-app.post("/api/auth/phone/verify", auth, async (req, res) => {
+app.post("/api/auth/phone/verify", auth, (req, res) => {
   let { phone, code } = req.body ?? {};
   if (typeof phone !== "string" || typeof code !== "string")
     return res.status(400).json({ error: "Ange telefonnummer och kod." });
@@ -338,57 +329,70 @@ app.post("/api/auth/phone/verify", auth, async (req, res) => {
 });
 
 // ─── POST /api/auth/recover/request  { phone }  →  { ok }  (no auth — sends recovery OTP)
-app.post("/api/auth/recover/request", async (req, res) => {
-  let { phone } = req.body ?? {};
-  if (typeof phone !== "string" || !phone.trim())
-    return res.status(400).json({ error: "Ange ett mobilnummer." });
-  phone = toE164Swedish(phone.trim());
-  if (!/^\+\d{8,15}$/.test(phone)) return res.status(400).json({ error: "Ogiltigt mobilnummer." });
-  const rl = checkRateLimit(phone);
-  if (!rl.ok) return res.status(429).json({ error: rl.reason });
-  const userEntry = findByPhone(phone);
-  if (!userEntry) {
-    // Deliberately vague — don't reveal registration status
-    await new Promise((r) => setTimeout(r, 300));
-    return res.json({ ok: true });
-  }
-  const code = storeOtp(phone, userEntry[1].id);
-  try {
-    await sendSms(phone, `Din återhämtningskod för min-tid: ${code}`);
-    recordSend(phone);
-    res.json({ ok: true });
-  } catch (e) {
-    otpStore.delete(phone);
-    console.error("[sms]", e.message);
-    res.status(502).json({ error: "Kunde inte skicka SMS. Försök igen." });
-  }
-});
+app.post(
+  "/api/auth/recover/request",
+  wrap(async (req, res) => {
+    let { phone } = req.body ?? {};
+    if (typeof phone !== "string" || !phone.trim())
+      return res.status(400).json({ error: "Ange ett mobilnummer." });
+    phone = toE164Swedish(phone.trim());
+    if (!/^\+\d{8,15}$/.test(phone))
+      return res.status(400).json({ error: "Ogiltigt mobilnummer." });
+    const rl = checkRateLimit(phone);
+    if (!rl.ok) return res.status(429).json({ error: rl.reason });
+    const userEntry = findByPhone(phone);
+    if (!userEntry) {
+      // Deliberately vague — don't reveal registration status
+      await new Promise((r) => setTimeout(r, 300));
+      return res.json({ ok: true });
+    }
+    const code = storeOtp(phone, userEntry[1].id);
+    try {
+      await sendSms(phone, `Din återhämtningskod för min-tid: ${code}`);
+      recordSend(phone);
+      res.json({ ok: true });
+    } catch (e) {
+      otpStore.delete(phone);
+      console.error("[sms]", e.message);
+      res.status(502).json({ error: "Kunde inte skicka SMS. Försök igen." });
+    }
+  }),
+);
 
-// ─── POST /api/auth/recover/confirm  { phone, code }  →  { username, token, state }
-app.post("/api/auth/recover/confirm", async (req, res) => {
+// ─── POST /api/auth/recover/confirm  { phone, code }
+//     →  { userId, username, token, state, updatedAt, encrypted, salt?, recovery? }
+// The SMS code restores the account. For an encrypted account the data stays locked
+// until the client unwraps the key with the user's recovery key.
+app.post("/api/auth/recover/confirm", (req, res) => {
   let { phone, code } = req.body ?? {};
   if (typeof phone !== "string" || typeof code !== "string")
     return res.status(400).json({ error: "Ange telefonnummer och kod." });
   phone = toE164Swedish(phone.trim());
   const result = verifyOtp(phone, code.trim());
   if (!result.ok) return res.status(400).json({ error: result.reason });
-  const entry = findEntry(result.userId);
-  if (!entry) return res.status(404).json({ error: "Kontot hittades inte." });
-  const user = entry[1];
-  upsert(entry[0], { ...user, lastActivity: Date.now() });
-  const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: "30d" });
-  res.json({
-    username: user.username,
-    token,
-    state: user.state ?? null,
-    updatedAt: user.stateUpdatedAt ?? 0,
-  });
+  send(res, core.recoveredSession({ userId: result.userId, e2e: isE2E(req) }));
 });
 
 if (PROD) {
   const dist = path.join(__dirname, "../dist");
   app.get("*", (_, res) => res.sendFile(path.join(dist, "index.html")));
 }
+
+// Last: replaces Express's default handler, which logs the error (for a malformed JSON
+// body that includes an excerpt of the body). Log the route and the error name only.
+// Express recognises an error handler by its four parameters, so `_next` must stay.
+app.use((err, req, res, _next) => {
+  const status = Number.isInteger(err?.status) && err.status >= 400 ? err.status : 500;
+  if (status >= 500) console.error(`[api] ${req.method} ${req.path} failed: ${err?.name}`);
+  res.status(status).json({
+    error:
+      status === 413
+        ? "För mycket data att synka på en gång."
+        : status < 500
+          ? "Ogiltig förfrågan."
+          : "Serverfel. Försök igen om en stund.",
+  });
+});
 
 app.listen(PORT, () => {
   console.log(`min-tid server :${PORT} (${PROD ? "production" : "development"})`);

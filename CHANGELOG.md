@@ -16,6 +16,21 @@ All notable changes to **min-tid** are recorded here. Format loosely follows [Ke
 - Tids- och flexberäkningarna ligger nu i egna, testade moduler under `src/lib/` (`dates`, `days`, `flex`, `schedule`, `types`) i stället för inuti `PunchClock.tsx`. Ingen förändring i hur appen beter sig eller ser ut.
 - Tester pinnar nuvarande beteende, inklusive fyra kända fel som dokumenteras som förväntade fel och rättas i ett senare steg.
 
+### Krypterad synk (PR 2)
+
+- **Synken krypteras nu på enheten.** Tider, frånvaro, utlägg, namn och schema krypteras med AES-256 innan de lämnar telefonen eller datorn. Servern lagrar bara krypterad data och kan inte läsa den — nyckeln tas fram ur din synk-kod och lämnar aldrig enheten. Synk-rutan visar en grön rad ”Krypterad på enheten · AES-256” och förklarar kort vad servern ser och inte ser.
+- **Återställningsnyckel.** När du skapar ett synk-konto (eller när ett befintligt konto krypteras) får du en återställningsnyckel på 24 tecken. Den visas en gång, kan skrivas ut eller kopieras, och du bekräftar att du sparat den. SMS-återställning ger dig tillbaka kontot — men dina data låses bara upp med återställningsnyckeln. Saknar du nyckeln kan du välja att börja om med den här enhetens data.
+- **Befintliga konton krypteras automatiskt** första gången du loggar in med den nya versionen. Inget försvinner: datan krypteras och den okrypterade kopian på servern raderas.
+- **Byter du synk-kod** krypteras molnkopian om och du får en ny återställningsnyckel (den gamla slutar gälla). Dina andra enheter ber dig logga in igen med den nya koden innan de synkar vidare.
+- **”Logga in igen”** finns direkt i felsökningsrutan när enheten behöver en ny inloggning — efter uppdateringen, när synk-koden bytts på en annan enhet eller när inloggningen gått ut. Lokala ändringar ligger kvar och slås ihop med molnet.
+- **Äldre versioner av appen** får ett tydligt besked om att uppdatera i stället för att läsa eller skriva över den krypterade datan.
+
+#### Internt
+
+- Nytt `src/lib/crypto.ts` (Web Crypto: PBKDF2-SHA256 600 000 varv → HKDF → `authKey` + icke-exporterbar AES-GCM-nyckel, kuvert `{ v: 1, iv, ct }`, återställningsnyckel med AES-KW) och `src/lib/keyStore.ts` (nyckeln sparas i IndexedDB, aldrig i localStorage). `sync.ts` behåller sina funktionssignaturer och sköter kryptering, migrering och nyckelbyte internt.
+- Servern: ny `server/core.js` med all konto- och synkpolicy (testbar utan serverberoenden), `GET /api/auth/salt`, atomiska skrivningar av `data.json`, vägrar starta på en trasig `data.json` i stället för att tömma den, och loggar aldrig request-bodies.
+- Rättat: en inloggning eller ett kodbyte som pågick samtidigt som en annan enhet synkade kunde skriva tillbaka en gammal kopia av kontot.
+
 ## [1.0.0-beta.12] — 2026-08-26
 
 ### Added
