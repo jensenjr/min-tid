@@ -18,13 +18,7 @@
 import { addDaysStr } from "../schedule";
 import { hmLocal, todayLocal, ymdLocal } from "../dates";
 import { confirmDay, isDayLocked } from "../confirm";
-import type {
-  AbsenceEntry,
-  AppState,
-  ExpenseEntry,
-  Session,
-  VacationSettings,
-} from "../types";
+import type { AbsenceEntry, AppState, ExpenseEntry, Session, VacationSettings } from "../types";
 import type { ParsedBalances, ParsedWorkbook, RowIssue, TravelImport } from "./parse";
 import { SHEETS } from "./lists";
 

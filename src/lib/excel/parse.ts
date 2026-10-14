@@ -482,7 +482,10 @@ function parseBalances(XLSX: XLSXLib, wb: WorkBook, sheetName: string, ctx: Ctx)
   const values: Partial<Record<keyof typeof L, { v: CellValue; row: number }>> = {};
 
   // Vertical: label in column A, value in column B.
+  const labels = new Set<string>(Object.values(L));
   for (const { row, cells } of rows) {
+    // A heading row (the names side by side) belongs to the horizontal layout below.
+    if (labels.has(labelKey(cells[1]))) continue;
     const label = labelKey(cells[0]);
     for (const k of Object.keys(L) as (keyof typeof L)[]) {
       if (label === L[k] && !values[k]) values[k] = { v: cells[1] ?? null, row };

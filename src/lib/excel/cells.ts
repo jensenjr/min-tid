@@ -139,3 +139,15 @@ export function localTimeExists(ymd: string, hm: string): boolean {
   const ts = new Date(localTimestamp(ymd, hm));
   return `${pad2(ts.getHours())}:${pad2(ts.getMinutes())}` === hm;
 }
+
+/** "YYYY-MM-DD" → Excel serial day number (1900 date system). */
+export function ymdToSerial(ymd: string): number {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return Math.round(Date.UTC(y, m - 1, d) / 86_400_000) + 25569;
+}
+
+/** "HH:MM" → fraction of a day. */
+export function hmToFraction(hm: string): number {
+  const [h, m] = hm.split(":").map(Number);
+  return (h * 60 + m) / 1440;
+}

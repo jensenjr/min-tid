@@ -61,8 +61,10 @@ export function readImportUndo(store: Store | null = defaultStore()): ImportUndo
         sessions: s.sessions,
         absences: s.absences,
         expenses: s.expenses,
-        confirmedDays: s.confirmedDays && typeof s.confirmedDays === "object" ? s.confirmedDays : {},
-        trackingStartDate: typeof s.trackingStartDate === "string" ? s.trackingStartDate : undefined,
+        confirmedDays:
+          s.confirmedDays && typeof s.confirmedDays === "object" ? s.confirmedDays : {},
+        trackingStartDate:
+          typeof s.trackingStartDate === "string" ? s.trackingStartDate : undefined,
         flexBaseMinutes: s.flexBaseMinutes,
         flexBaseDate: typeof s.flexBaseDate === "string" ? s.flexBaseDate : undefined,
         vacation: s.vacation && typeof s.vacation === "object" ? s.vacation : undefined,
