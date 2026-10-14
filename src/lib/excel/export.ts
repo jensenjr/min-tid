@@ -41,6 +41,9 @@ import {
 } from "./lists";
 
 /** A cell: plain text/number, or a number with an Excel number format (dates, times). */
+export { downloadBytes } from "./download";
+export { XLSX_MIME } from "./lists";
+
 export type ExportCell = string | number | null | { v: number; z: string };
 export type ExportSheet = {
   name: string;
