@@ -1,4 +1,19 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type CSSProperties } from "react";
+import TimeField from "./TimeField";
+
+const END_FIELD: CSSProperties = {
+  width: "100%",
+  minWidth: 0,
+  boxSizing: "border-box",
+  padding: "13px 14px",
+  borderRadius: "14px",
+  border: "1.5px solid #ece6df",
+  fontSize: "16px",
+  outline: "none",
+  background: "#fdf6ee",
+  fontWeight: 600,
+  color: "#2d1717",
+};
 
 type Session = {
   id: string;
@@ -19,7 +34,7 @@ function fmtDur(minutes: number): string {
   return h > 0 ? `${h}h ${m}min` : `${m}min`;
 }
 
-// "YYYY-MM-DDTHH:mm" in local time (datetime-local input format)
+// "YYYY-MM-DDTHH:mm" in local time (date part + TimeField part)
 function toLocalInput(ms: number): string {
   const d = new Date(ms);
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -27,7 +42,7 @@ function toLocalInput(ms: number): string {
 }
 
 function fromLocalInput(value: string): number {
-  // datetime-local has no timezone — interpret as local time.
+  // No timezone in the string — interpret as local time.
   const [date, time] = value.split("T");
   const [y, mo, d] = date.split("-").map(Number);
   const [h, mi] = time.split(":").map(Number);
@@ -175,24 +190,26 @@ export default function LatePunchoutModal({
             <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-2">
               Sluttid
             </div>
-            <input
-              type="datetime-local"
-              value={customEnd}
-              onChange={(e) => setCustomEnd(e.target.value)}
-              style={{
-                width: "100%",
-                boxSizing: "border-box",
-                padding: "13px 16px",
-                borderRadius: "14px",
-                border: "1.5px solid #ece6df",
-                fontSize: "16px",
-                outline: "none",
-                background: "#fdf6ee",
-                fontWeight: 600,
-                color: "#2d1717",
-                marginBottom: "10px",
-              }}
-            />
+            <div className="grid grid-cols-[1.4fr_1fr] gap-2" style={{ marginBottom: "10px" }}>
+              <input
+                type="date"
+                aria-label="Datum för sluttid"
+                value={customEnd.split("T")[0]}
+                onChange={(e) => {
+                  if (e.target.value) setCustomEnd(`${e.target.value}T${customEnd.split("T")[1]}`);
+                }}
+                style={END_FIELD}
+              />
+              <TimeField
+                label="Sluttid"
+                value={customEnd.split("T")[1]}
+                onChange={(v) => {
+                  if (v) setCustomEnd(`${customEnd.split("T")[0]}T${v}`);
+                }}
+                className=""
+                style={END_FIELD}
+              />
+            </div>
 
             <div className="bg-pc-apricot rounded-2xl px-4 py-3 mb-3">
               <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-1">

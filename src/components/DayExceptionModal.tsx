@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { type ScheduleSource, getEffectiveDayConfig } from "../lib/schedule";
 import type { ScheduleException } from "../lib/types";
+import TimeField from "./TimeField";
 
 // ─── Day Exception Modal ───────────────────────────────────────
 // Bottom sheet for overriding the effective schedule of a single calendar date.
@@ -85,14 +86,14 @@ export default function DayExceptionModal({
         <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-2">
           Ny sluttid
         </div>
-        <input
-          type="time"
+        <TimeField
+          label="Ny sluttid"
           value={endTime}
-          onChange={(e) => {
-            setEndTime(e.target.value);
+          defaultHour={15}
+          onChange={(v) => {
+            setEndTime(v);
             setErr("");
           }}
-          className="pc-input"
         />
 
         <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-2">

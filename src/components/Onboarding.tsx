@@ -20,6 +20,7 @@ import {
   SYNC_PHONE_KEY,
 } from "../lib/sync";
 import RecoveryKeySheet from "./RecoveryKeySheet";
+import TimeField from "./TimeField";
 
 export type OnboardingResult = {
   name: string;
@@ -33,7 +34,7 @@ export type OnboardingResult = {
 
 type Step = "welcome" | "login" | "info" | "choice" | "schedule" | "sync";
 
-// ─── TimePicker — hour or minute select snapping to 5-min ─────
+// ─── TimePicker — compact TimeField (own 5-min picker, no OS wheels) ─────
 function TimePicker({
   value,
   onChange,
@@ -43,67 +44,24 @@ function TimePicker({
   onChange: (v: string) => void;
   disabled?: boolean;
 }) {
-  const [hStr, mStr] = value.split(":");
-  const h = parseInt(hStr) || 0;
-  const m = (Math.round((parseInt(mStr) || 0) / 5) * 5) % 60;
-
-  const sel: React.CSSProperties = {
-    padding: "5px 0",
-    borderRadius: "10px",
-    border: "1.5px solid #ece6df",
-    fontSize: "15px",
-    fontWeight: 700,
-    color: disabled ? "#c4b0a0" : "#2d1717",
-    background: disabled ? "#f5f0ea" : "#fdf6ee",
-    outline: "none",
-    appearance: "none",
-    textAlign: "center",
-    width: "42px",
-    cursor: disabled ? "default" : "pointer",
-  };
-
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "1px" }}>
-      <select
-        value={h}
-        onChange={(e) =>
-          onChange(`${String(+e.target.value).padStart(2, "0")}:${String(m).padStart(2, "0")}`)
-        }
-        disabled={disabled}
-        style={sel}
-      >
-        {Array.from({ length: 24 }, (_, i) => (
-          <option key={i} value={i}>
-            {String(i).padStart(2, "0")}
-          </option>
-        ))}
-      </select>
-      <span
-        style={{
-          fontWeight: 800,
-          fontSize: "16px",
-          color: disabled ? "#c4b0a0" : "#2d1717",
-          userSelect: "none",
-          padding: "0 1px",
-        }}
-      >
-        :
-      </span>
-      <select
-        value={m}
-        onChange={(e) =>
-          onChange(`${String(h).padStart(2, "0")}:${String(+e.target.value).padStart(2, "0")}`)
-        }
-        disabled={disabled}
-        style={sel}
-      >
-        {Array.from({ length: 12 }, (_, i) => i * 5).map((min) => (
-          <option key={min} value={min}>
-            {String(min).padStart(2, "0")}
-          </option>
-        ))}
-      </select>
-    </div>
+    <TimeField
+      value={value}
+      onChange={onChange}
+      disabled={disabled}
+      className=""
+      style={{
+        padding: "5px 0",
+        borderRadius: "10px",
+        border: "1.5px solid #ece6df",
+        fontSize: "15px",
+        fontWeight: 700,
+        color: disabled ? "#c4b0a0" : "#2d1717",
+        background: disabled ? "#f5f0ea" : "#fdf6ee",
+        textAlign: "center",
+        width: "68px",
+      }}
+    />
   );
 }
 
