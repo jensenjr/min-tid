@@ -13,13 +13,7 @@ const QR_TABS: { action: PunchAction; label: string }[] = [
   { action: "toggle", label: "Växla" },
 ];
 
-export default function AutomationModal({
-  open,
-  onClose,
-}: {
-  open: boolean;
-  onClose: () => void;
-}) {
+export default function AutomationModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [qrAction, setQrAction] = useState<PunchAction>("in");
   const [copied, setCopied] = useState<string | null>(null);
 
@@ -36,8 +30,10 @@ export default function AutomationModal({
     try {
       await navigator.clipboard.writeText(text);
       setCopied(key);
-      setTimeout(() => setCopied(c => (c === key ? null : c)), 2000);
-    } catch { /* ignore */ }
+      setTimeout(() => setCopied((c) => (c === key ? null : c)), 2000);
+    } catch {
+      /* ignore */
+    }
   }
 
   function printSigns() {
@@ -73,15 +69,15 @@ export default function AutomationModal({
           animation: "pcSheet 0.32s cubic-bezier(0.32,0.72,0,1)",
           maxHeight: "92dvh",
         }}
-        onClick={e => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
       >
         <div className="w-10 h-1 bg-pc-line rounded-full mx-auto mb-5" />
 
         <div className="font-extrabold text-[22px] tracking-tight mb-1">Automatisering</div>
         <div className="text-[13px] text-pc-muted mb-6">
-          Stämpla utan att öppna appen — via QR-kod, NFC-tagg eller automatiskt när du
-          ansluter till kontorets WiFi. Allt bygger på vanliga länkar, så det fungerar
-          direkt med iPhones inbyggda Genvägar-app.
+          Stämpla utan att öppna appen — via QR-kod, NFC-tagg eller automatiskt när du ansluter till
+          kontorets WiFi. Allt bygger på vanliga länkar, så det fungerar direkt med iPhones inbyggda
+          Genvägar-app.
         </div>
 
         {/* ── QR codes ── */}
@@ -90,7 +86,7 @@ export default function AutomationModal({
             Skriv ut och sätt vid entrén. Skanna med mobilkameran så stämplas du in eller ut.
           </p>
           <div className="flex bg-[#fdf6ee] border border-pc-line rounded-full p-0.5 mb-4">
-            {QR_TABS.map(t => (
+            {QR_TABS.map((t) => (
               <button
                 key={t.action}
                 onClick={() => setQrAction(t.action)}
@@ -117,53 +113,71 @@ export default function AutomationModal({
         {/* ── WiFi automation ── */}
         <Section title="Automatiskt via WiFi" emoji="📶">
           <p className="text-[13px] text-pc-muted mb-3">
-            iPhone kan stämpla in dig automatiskt när du kommer till jobbet, via en
-            personlig automation i appen <b>Genvägar</b>:
+            iPhone kan stämpla in dig automatiskt när du kommer till jobbet, via en personlig
+            automation i appen <b>Genvägar</b>:
           </p>
           <Steps
             steps={[
               "Öppna Genvägar → Automation → +",
-              "Välj utlösare \"WiFi\" och ditt kontorsnätverk",
-              "Välj \"När ansluten\" och stäng av \"Fråga innan körning\"",
-              "Lägg till åtgärden \"Öppna URL\" och klistra in länken nedan",
+              'Välj utlösare "WiFi" och ditt kontorsnätverk',
+              'Välj "När ansluten" och stäng av "Fråga innan körning"',
+              'Lägg till åtgärden "Öppna URL" och klistra in länken nedan',
             ]}
           />
-          <CopyRow label="Checka in (vid anslutning)" value={actionUrl("in", "wifi")} copied={copied} onCopy={copy} k="wifi-in" />
-          <CopyRow label="Checka ut (vid frånkoppling)" value={actionUrl("out", "wifi")} copied={copied} onCopy={copy} k="wifi-out" />
+          <CopyRow
+            label="Checka in (vid anslutning)"
+            value={actionUrl("in", "wifi")}
+            copied={copied}
+            onCopy={copy}
+            k="wifi-in"
+          />
+          <CopyRow
+            label="Checka ut (vid frånkoppling)"
+            value={actionUrl("out", "wifi")}
+            copied={copied}
+            onCopy={copy}
+            k="wifi-out"
+          />
           <p className="text-[11px] text-pc-muted mt-2">
-            Appen ignorerar dubbletter inom 2 minuter och frågar först om schemat säger
-            att du är ledig — korta WiFi-tapp stämplar dig alltså inte ut av misstag.
+            Appen ignorerar dubbletter inom 2 minuter och frågar först om schemat säger att du är
+            ledig — korta WiFi-tapp stämplar dig alltså inte ut av misstag.
           </p>
         </Section>
 
         {/* ── NFC ── */}
         <Section title="NFC-tagg" emoji="🏷️">
           <p className="text-[13px] text-pc-muted mb-3">
-            Klistra en billig NFC-tagg på skrivbordet och tryck mobilen mot den för att
-            stämpla. Skapas också i <b>Genvägar</b>:
+            Klistra en billig NFC-tagg på skrivbordet och tryck mobilen mot den för att stämpla.
+            Skapas också i <b>Genvägar</b>:
           </p>
           <Steps
             steps={[
-              "Genvägar → Automation → + → \"NFC\"",
+              'Genvägar → Automation → + → "NFC"',
               "Skanna taggen och ge den ett namn",
-              "Stäng av \"Fråga innan körning\"",
-              "Lägg till \"Öppna URL\" med länken nedan",
+              'Stäng av "Fråga innan körning"',
+              'Lägg till "Öppna URL" med länken nedan',
             ]}
           />
-          <CopyRow label="Växla in/ut (en tagg räcker)" value={actionUrl("toggle", "nfc")} copied={copied} onCopy={copy} k="nfc" />
+          <CopyRow
+            label="Växla in/ut (en tagg räcker)"
+            value={actionUrl("toggle", "nfc")}
+            copied={copied}
+            onCopy={copy}
+            k="nfc"
+          />
         </Section>
 
         {/* ── Install as app ── */}
         <Section title="Installera som app" emoji="📱">
           <p className="text-[13px] text-pc-muted mb-1">
-            Lägg appen på hemskärmen så öppnas den i helskärm som en riktig app, med
-            egna snabbåtgärder för in-/utcheckning:
+            Lägg appen på hemskärmen så öppnas den i helskärm som en riktig app, med egna
+            snabbåtgärder för in-/utcheckning:
           </p>
           <Steps
             steps={[
               "Öppna appen i Safari",
               "Tryck på dela-knappen (fyrkanten med pil)",
-              "Välj \"Lägg till på hemskärmen\"",
+              'Välj "Lägg till på hemskärmen"',
             ]}
           />
         </Section>
@@ -171,7 +185,15 @@ export default function AutomationModal({
         <button
           onClick={onClose}
           className="w-full mt-2"
-          style={{ padding: "15px", borderRadius: "16px", background: "#fdf6ee", border: "1.5px solid #ece6df", fontWeight: 700, fontSize: "15px", color: "#2d1717" }}
+          style={{
+            padding: "15px",
+            borderRadius: "16px",
+            background: "#fdf6ee",
+            border: "1.5px solid #ece6df",
+            fontWeight: 700,
+            fontSize: "15px",
+            color: "#2d1717",
+          }}
         >
           Stäng
         </button>
@@ -180,11 +202,20 @@ export default function AutomationModal({
   );
 }
 
-function Section({ title, emoji, children }: { title: string; emoji: string; children: React.ReactNode }) {
+function Section({
+  title,
+  emoji,
+  children,
+}: {
+  title: string;
+  emoji: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="bg-[#fdf6ee] border border-[#ece6df] rounded-[20px] p-4 mb-3">
       <div className="text-[13px] font-extrabold text-pc-ink mb-2">
-        <span className="mr-1.5">{emoji}</span>{title}
+        <span className="mr-1.5">{emoji}</span>
+        {title}
       </div>
       {children}
     </div>
@@ -196,7 +227,9 @@ function Steps({ steps }: { steps: string[] }) {
     <ol className="mb-3 space-y-1.5">
       {steps.map((s, i) => (
         <li key={i} className="flex gap-2 text-[13px] font-medium text-pc-ink">
-          <span className="shrink-0 w-5 h-5 rounded-full bg-pc-orange/15 text-pc-orange-deep text-[11px] font-extrabold flex items-center justify-center">{i + 1}</span>
+          <span className="shrink-0 w-5 h-5 rounded-full bg-pc-orange/15 text-pc-orange-deep text-[11px] font-extrabold flex items-center justify-center">
+            {i + 1}
+          </span>
           <span>{s}</span>
         </li>
       ))}
@@ -204,9 +237,18 @@ function Steps({ steps }: { steps: string[] }) {
   );
 }
 
-function CopyRow({ label, value, copied, onCopy, k }: {
-  label: string; value: string; copied: string | null;
-  onCopy: (key: string, text: string) => void; k: string;
+function CopyRow({
+  label,
+  value,
+  copied,
+  onCopy,
+  k,
+}: {
+  label: string;
+  value: string;
+  copied: string | null;
+  onCopy: (key: string, text: string) => void;
+  k: string;
 }) {
   return (
     <button
@@ -217,7 +259,9 @@ function CopyRow({ label, value, copied, onCopy, k }: {
         <div className="text-[12px] font-bold text-pc-ink">{label}</div>
         <div className="text-[11px] text-pc-muted truncate">{value}</div>
       </div>
-      <span className={`shrink-0 text-[11px] font-extrabold ${copied === k ? "text-green-600" : "text-pc-orange"}`}>
+      <span
+        className={`shrink-0 text-[11px] font-extrabold ${copied === k ? "text-green-600" : "text-pc-orange"}`}
+      >
         {copied === k ? "✓ Kopierad" : "Kopiera"}
       </span>
     </button>

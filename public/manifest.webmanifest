@@ -13,7 +13,15 @@
     { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" }
   ],
   "shortcuts": [
-    { "name": "Checka in", "url": "/?action=in&source=shortcut", "icons": [{ "src": "/apple-touch-icon.png", "sizes": "180x180" }] },
-    { "name": "Checka ut", "url": "/?action=out&source=shortcut", "icons": [{ "src": "/apple-touch-icon.png", "sizes": "180x180" }] }
+    {
+      "name": "Checka in",
+      "url": "/?action=in&source=shortcut",
+      "icons": [{ "src": "/apple-touch-icon.png", "sizes": "180x180" }]
+    },
+    {
+      "name": "Checka ut",
+      "url": "/?action=out&source=shortcut",
+      "icons": [{ "src": "/apple-touch-icon.png", "sizes": "180x180" }]
+    }
   ]
 }

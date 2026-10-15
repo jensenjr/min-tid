@@ -1,11 +1,26 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
-  type DayKey, type DayConfig, type WeekSchedule,
-  DAY_KEYS, DAY_LABEL_SHORT,
+  type DayKey,
+  type DayConfig,
+  type WeekSchedule,
+  DAY_KEYS,
+  DAY_LABEL_SHORT,
   DEFAULT_SCHEDULE,
-  shiftMinutes, netDayMin, weeklyNetMin, fmtMin,
+  shiftMinutes,
+  netDayMin,
+  weeklyNetMin,
+  fmtMin,
 } from "../lib/schedule";
-import { syncRegister, syncLogin, syncSendPhoneCode, syncVerifyPhone, type SyncState, SYNC_PHONE_KEY } from "../lib/sync";
+import {
+  syncRegister,
+  syncLogin,
+  syncSendPhoneCode,
+  syncVerifyPhone,
+  type SyncState,
+  SYNC_PHONE_KEY,
+} from "../lib/sync";
+import RecoveryKeySheet from "./RecoveryKeySheet";
+import TimeField from "./TimeField";
 
 export type OnboardingResult = {
   name: string;
@@ -19,7 +34,7 @@ export type OnboardingResult = {
 
 type Step = "welcome" | "login" | "info" | "choice" | "schedule" | "sync";
 
-// ─── TimePicker — hour or minute select snapping to 5-min ─────
+// ─── TimePicker — compact TimeField (type a time, or tap the clock) ─────
 function TimePicker({
   value,
   onChange,
@@ -29,49 +44,26 @@ function TimePicker({
   onChange: (v: string) => void;
   disabled?: boolean;
 }) {
-  const [hStr, mStr] = value.split(":");
-  const h = parseInt(hStr) || 0;
-  const m = Math.round((parseInt(mStr) || 0) / 5) * 5 % 60;
-
-  const sel: React.CSSProperties = {
-    padding: "5px 0",
-    borderRadius: "10px",
-    border: "1.5px solid #ece6df",
-    fontSize: "15px",
-    fontWeight: 700,
-    color: disabled ? "#c4b0a0" : "#2d1717",
-    background: disabled ? "#f5f0ea" : "#fdf6ee",
-    outline: "none",
-    appearance: "none",
-    textAlign: "center",
-    width: "42px",
-    cursor: disabled ? "default" : "pointer",
-  };
-
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "1px" }}>
-      <select
-        value={h}
-        onChange={e => onChange(`${String(+e.target.value).padStart(2,"0")}:${String(m).padStart(2,"0")}`)}
-        disabled={disabled}
-        style={sel}
-      >
-        {Array.from({ length: 24 }, (_, i) => (
-          <option key={i} value={i}>{String(i).padStart(2, "0")}</option>
-        ))}
-      </select>
-      <span style={{ fontWeight: 800, fontSize: "16px", color: disabled ? "#c4b0a0" : "#2d1717", userSelect: "none", padding: "0 1px" }}>:</span>
-      <select
-        value={m}
-        onChange={e => onChange(`${String(h).padStart(2,"0")}:${String(+e.target.value).padStart(2,"0")}`)}
-        disabled={disabled}
-        style={sel}
-      >
-        {Array.from({ length: 12 }, (_, i) => i * 5).map(min => (
-          <option key={min} value={min}>{String(min).padStart(2, "0")}</option>
-        ))}
-      </select>
-    </div>
+    <TimeField
+      value={value}
+      onChange={onChange}
+      disabled={disabled}
+      compact
+      className=""
+      style={{
+        flex: "0 0 58px",
+        padding: "5px 0",
+        borderRadius: "10px",
+        border: "1.5px solid #ece6df",
+        fontSize: "15px",
+        fontWeight: 700,
+        color: disabled ? "#c4b0a0" : "#2d1717",
+        background: disabled ? "#f5f0ea" : "#fdf6ee",
+        textAlign: "center",
+        outline: "none",
+      }}
+    />
   );
 }
 
@@ -85,32 +77,50 @@ function LunchInput({
   onChange: (v: number) => void;
   disabled?: boolean;
 }) {
+  // Text state so the field can be emptied while typing — a number-bound input snapped an
+  // emptied field straight back to "0" and you typed after it ("045").
+  const [text, setText] = useState(String(value));
+  const [focused, setFocused] = useState(false);
+  useEffect(() => {
+    if (!focused) setText(String(value));
+  }, [value, focused]);
+
   return (
     <input
-      type="number"
-      min={0}
-      max={90}
-      step={5}
-      value={value}
+      type="text"
+      inputMode="numeric"
+      maxLength={2}
+      aria-label="Lunch i minuter"
+      value={text}
       disabled={disabled}
-      onChange={e => {
-        const v = Math.min(90, Math.max(0, parseInt(e.target.value) || 0));
-        onChange(v);
+      onFocus={() => setFocused(true)}
+      onChange={(e) => {
+        const digits = e.target.value.replace(/D/g, "");
+        setText(digits);
+        if (digits !== "") onChange(Math.min(90, parseInt(digits, 10)));
       }}
-      style={{
-        width: "44px",
-        padding: "5px 4px",
-        borderRadius: "10px",
-        border: "1.5px solid #ece6df",
-        fontSize: "15px",
-        fontWeight: 700,
-        color: disabled ? "#c4b0a0" : "#9a6a3a",
-        background: disabled ? "#f5f0ea" : "#fff3ec",
-        outline: "none",
-        textAlign: "center",
-        boxSizing: "border-box",
-        MozAppearance: "textfield",
-      } as React.CSSProperties}
+      onBlur={() => {
+        setFocused(false);
+        const v = text === "" ? 0 : Math.min(90, parseInt(text, 10));
+        setText(String(v));
+        if (v !== value) onChange(v);
+      }}
+      style={
+        {
+          width: "44px",
+          padding: "5px 4px",
+          borderRadius: "10px",
+          border: "1.5px solid #ece6df",
+          fontSize: "15px",
+          fontWeight: 700,
+          color: disabled ? "#c4b0a0" : "#9a6a3a",
+          background: disabled ? "#f5f0ea" : "#fff3ec",
+          outline: "none",
+          textAlign: "center",
+          boxSizing: "border-box",
+          MozAppearance: "textfield",
+        } as React.CSSProperties
+      }
     />
   );
 }
@@ -146,7 +156,10 @@ export function WeekScheduleEditor({
       {/* Lunch convention hint */}
       <div className="bg-pc-peach/60 border border-pc-line rounded-[14px] px-3 py-2 text-[12px] text-pc-ink leading-snug mb-1">
         <span className="font-bold">🍽️ Lunch räknas av automatiskt</span>
-        <span className="text-pc-muted"> — stämpla inte ut för lunch, minuterna nedan dras från din punchade tid.</span>
+        <span className="text-pc-muted">
+          {" "}
+          — stämpla inte ut för lunch, minuterna nedan dras från din punchade tid.
+        </span>
       </div>
 
       {/* Quick-fill */}
@@ -170,7 +183,7 @@ export function WeekScheduleEditor({
       </div>
 
       {/* Day cards — two-row layout to avoid cramping on mobile */}
-      {DAY_KEYS.map(key => {
+      {DAY_KEYS.map((key) => {
         const cfg = schedule[key];
         const isWeekend = key === "sat" || key === "sun";
         const net = netDayMin(cfg);
@@ -202,10 +215,32 @@ export function WeekScheduleEditor({
                   style={{ background: cfg.active ? "#ff5f00" : "#f0e8df" }}
                   aria-label={cfg.active ? "Inaktivera" : "Aktivera"}
                 >
-                  {cfg.active
-                    ? <svg viewBox="0 0 24 24" className="w-4 h-4 text-white" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-                    : <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="#c4b0a0" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                  }
+                  {cfg.active ? (
+                    <svg
+                      viewBox="0 0 24 24"
+                      className="w-4 h-4 text-white"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  ) : (
+                    <svg
+                      viewBox="0 0 24 24"
+                      className="w-4 h-4"
+                      fill="none"
+                      stroke="#c4b0a0"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  )}
                 </button>
               </div>
             </div>
@@ -214,19 +249,19 @@ export function WeekScheduleEditor({
             <div className="flex items-center gap-2">
               <TimePicker
                 value={cfg.startTime}
-                onChange={v => setDay(key, { startTime: v })}
+                onChange={(v) => setDay(key, { startTime: v })}
                 disabled={!cfg.active}
               />
               <span className="text-[12px] text-pc-muted font-bold shrink-0">→</span>
               <TimePicker
                 value={cfg.endTime}
-                onChange={v => setDay(key, { endTime: v })}
+                onChange={(v) => setDay(key, { endTime: v })}
                 disabled={!cfg.active}
               />
               <span className="text-[13px] shrink-0 ml-auto">🍽️</span>
               <LunchInput
                 value={cfg.lunchMinutes}
-                onChange={v => setDay(key, { lunchMinutes: v })}
+                onChange={(v) => setDay(key, { lunchMinutes: v })}
                 disabled={!cfg.active}
               />
               <span className="text-[11px] text-pc-muted font-semibold shrink-0">min</span>
@@ -237,7 +272,9 @@ export function WeekScheduleEditor({
 
       {/* Weekly total */}
       <div className="mt-1 bg-pc-peach rounded-2xl px-4 py-3 flex items-center justify-between">
-        <span className="text-[12px] font-bold text-pc-orange-deep uppercase tracking-wide">Netto / vecka</span>
+        <span className="text-[12px] font-bold text-pc-orange-deep uppercase tracking-wide">
+          Netto / vecka
+        </span>
         <span className="text-[20px] font-extrabold tabular-nums text-pc-orange-deep">
           {fmtMin(weeklyNetMin(schedule))}
         </span>
@@ -254,7 +291,13 @@ export default function Onboarding({ onComplete }: { onComplete: (r: OnboardingR
   const [department, setDepartment] = useState("");
   const [schedule, setSchedule] = useState<WeekSchedule>(DEFAULT_SCHEDULE);
 
-  function finish(sched: WeekSchedule, syncToken?: string, syncUsername?: string, restoredState?: SyncState, syncRev?: number) {
+  function finish(
+    sched: WeekSchedule,
+    syncToken?: string,
+    syncUsername?: string,
+    restoredState?: SyncState,
+    syncRev?: number,
+  ) {
     onComplete({
       name: name.trim(),
       department: department.trim() || undefined,
@@ -266,7 +309,12 @@ export default function Onboarding({ onComplete }: { onComplete: (r: OnboardingR
     });
   }
 
-  function finishFromLogin(token: string, state: SyncState | null, username: string, syncRev: number) {
+  function finishFromLogin(
+    token: string,
+    state: SyncState | null,
+    username: string,
+    syncRev: number,
+  ) {
     // Returning user: use the synced name/department/schedule.
     onComplete({
       name: (state?.name ?? username).trim(),
@@ -280,173 +328,269 @@ export default function Onboarding({ onComplete }: { onComplete: (r: OnboardingR
   }
 
   // ── Step: Welcome — new vs returning ─────────────────────────
-  if (step === "welcome") return (
-    <Screen>
-      <Logo />
-      <h1 className="text-[28px] font-extrabold tracking-tight text-pc-ink mb-2">Välkommen!</h1>
-      <p className="text-[14px] text-pc-muted mb-7 leading-relaxed text-center max-w-[300px]">
-        Är det här första gången du använder appen, eller har du redan ett synk-konto?
-      </p>
+  if (step === "welcome")
+    return (
+      <Screen>
+        <Logo />
+        <h1 className="text-[28px] font-extrabold tracking-tight text-pc-ink mb-2">Välkommen!</h1>
+        <p className="text-[14px] text-pc-muted mb-7 leading-relaxed text-center max-w-[300px]">
+          Är det här första gången du använder appen, eller har du redan ett synk-konto?
+        </p>
 
-      <div className="w-full space-y-3">
-        <button
-          onClick={() => setStep("info")}
-          className="pc-press w-full text-left bg-white border border-pc-line rounded-[20px] px-5 py-4 flex items-start gap-4 shadow-[0_2px_12px_rgba(81,43,43,0.04)]"
-        >
-          <span className="text-[26px] leading-none mt-0.5 shrink-0">✨</span>
-          <div className="flex-1">
-            <div className="font-extrabold text-[15px] text-pc-ink leading-tight mb-0.5">Ny användare</div>
-            <div className="text-[12px] text-pc-muted leading-snug">Sätt upp appen från början.</div>
-          </div>
-          <svg viewBox="0 0 24 24" className="w-5 h-5 text-pc-muted shrink-0 mt-1" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
-        </button>
+        <div className="w-full space-y-3">
+          <button
+            onClick={() => setStep("info")}
+            className="pc-press w-full text-left bg-white border border-pc-line rounded-[20px] px-5 py-4 flex items-start gap-4 shadow-[0_2px_12px_rgba(81,43,43,0.04)]"
+          >
+            <span className="text-[26px] leading-none mt-0.5 shrink-0">✨</span>
+            <div className="flex-1">
+              <div className="font-extrabold text-[15px] text-pc-ink leading-tight mb-0.5">
+                Ny användare
+              </div>
+              <div className="text-[12px] text-pc-muted leading-snug">
+                Sätt upp appen från början.
+              </div>
+            </div>
+            <svg
+              viewBox="0 0 24 24"
+              className="w-5 h-5 text-pc-muted shrink-0 mt-1"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M9 18l6-6-6-6" />
+            </svg>
+          </button>
 
-        <button
-          onClick={() => setStep("login")}
-          className="pc-press w-full text-left bg-white border border-pc-line rounded-[20px] px-5 py-4 flex items-start gap-4 shadow-[0_2px_12px_rgba(81,43,43,0.04)]"
-        >
-          <span className="text-[26px] leading-none mt-0.5 shrink-0">☁️</span>
-          <div className="flex-1">
-            <div className="font-extrabold text-[15px] text-pc-ink leading-tight mb-0.5">Återkommande användare</div>
-            <div className="text-[12px] text-pc-muted leading-snug">Logga in med ditt användarnamn och din synk-kod.</div>
-          </div>
-          <svg viewBox="0 0 24 24" className="w-5 h-5 text-pc-muted shrink-0 mt-1" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
-        </button>
-      </div>
-    </Screen>
-  );
+          <button
+            onClick={() => setStep("login")}
+            className="pc-press w-full text-left bg-white border border-pc-line rounded-[20px] px-5 py-4 flex items-start gap-4 shadow-[0_2px_12px_rgba(81,43,43,0.04)]"
+          >
+            <span className="text-[26px] leading-none mt-0.5 shrink-0">☁️</span>
+            <div className="flex-1">
+              <div className="font-extrabold text-[15px] text-pc-ink leading-tight mb-0.5">
+                Återkommande användare
+              </div>
+              <div className="text-[12px] text-pc-muted leading-snug">
+                Logga in med ditt användarnamn och din synk-kod.
+              </div>
+            </div>
+            <svg
+              viewBox="0 0 24 24"
+              className="w-5 h-5 text-pc-muted shrink-0 mt-1"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M9 18l6-6-6-6" />
+            </svg>
+          </button>
+
+          <a
+            href="?demo=1"
+            className="block text-center text-[13px] font-bold text-pc-muted underline pt-2"
+          >
+            Titta runt i en demo först
+          </a>
+        </div>
+      </Screen>
+    );
 
   // ── Step: Login (returning user) ─────────────────────────────
-  if (step === "login") return (
-    <LoginStep
-      onBack={() => setStep("welcome")}
-      onLogin={(token, state, username, rev) => finishFromLogin(token, state, username, rev)}
-    />
-  );
+  if (step === "login")
+    return (
+      <LoginStep
+        onBack={() => setStep("welcome")}
+        onLogin={(token, state, username, rev) => finishFromLogin(token, state, username, rev)}
+      />
+    );
 
   // ── Step: Name + role ────────────────────────────────────────
-  if (step === "info") return (
-    <Screen>
-      <Logo />
-      <h1 className="text-[28px] font-extrabold tracking-tight text-pc-ink mb-2">Välkommen!</h1>
-      <p className="text-[14px] text-pc-muted mb-7 leading-relaxed text-center max-w-[300px]">
-        Fyll i ditt namn för att komma igång. Roll är valfritt.
-      </p>
+  if (step === "info")
+    return (
+      <Screen>
+        <Logo />
+        <h1 className="text-[28px] font-extrabold tracking-tight text-pc-ink mb-2">Välkommen!</h1>
+        <p className="text-[14px] text-pc-muted mb-7 leading-relaxed text-center max-w-[300px]">
+          Fyll i ditt namn för att komma igång. Roll är valfritt.
+        </p>
 
-      <div className="w-full space-y-3">
-        <div>
-          <Label>Namn <span className="text-pc-orange">*</span></Label>
-          <input
-            autoFocus
-            type="text"
-            placeholder="t.ex. Anna Karlsson"
-            value={name}
-            onChange={e => { setName(e.target.value); setNameErr(""); }}
-            onKeyDown={e => { if (e.key === "Enter" && name.trim()) setStep("choice"); }}
-            className="ob-input"
-          />
-          {nameErr && <p className="text-red-500 text-[13px] mt-1 font-semibold">{nameErr}</p>}
+        <div className="w-full space-y-3">
+          <div>
+            <Label>
+              Namn <span className="text-pc-orange">*</span>
+            </Label>
+            <input
+              autoFocus
+              type="text"
+              placeholder="t.ex. Anna Karlsson"
+              value={name}
+              onChange={(e) => {
+                setName(e.target.value);
+                setNameErr("");
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && name.trim()) setStep("choice");
+              }}
+              className="ob-input"
+            />
+            {nameErr && <p className="text-red-500 text-[13px] mt-1 font-semibold">{nameErr}</p>}
+          </div>
+
+          <div>
+            <Label>
+              Roll / avdelning{" "}
+              <span className="text-pc-muted font-medium normal-case tracking-normal">
+                (valfri)
+              </span>
+            </Label>
+            <input
+              type="text"
+              placeholder="t.ex. Lager, Kontor, Teknik…"
+              value={department}
+              onChange={(e) => setDepartment(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && name.trim()) setStep("choice");
+              }}
+              className="ob-input"
+            />
+          </div>
+
+          <button
+            onClick={() => {
+              if (!name.trim()) {
+                setNameErr("Ange ditt namn för att fortsätta.");
+                return;
+              }
+              setStep("choice");
+            }}
+            className="ob-btn-primary w-full"
+          >
+            Fortsätt →
+          </button>
+          <button onClick={() => setStep("welcome")} className="ob-btn-ghost w-full">
+            ← Tillbaka
+          </button>
         </div>
-
-        <div>
-          <Label>Roll / avdelning <span className="text-pc-muted font-medium normal-case tracking-normal">(valfri)</span></Label>
-          <input
-            type="text"
-            placeholder="t.ex. Lager, Kontor, Teknik…"
-            value={department}
-            onChange={e => setDepartment(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter" && name.trim()) setStep("choice"); }}
-            className="ob-input"
-          />
-        </div>
-
-        <button
-          onClick={() => {
-            if (!name.trim()) { setNameErr("Ange ditt namn för att fortsätta."); return; }
-            setStep("choice");
-          }}
-          className="ob-btn-primary w-full"
-        >
-          Fortsätt →
-        </button>
-        <button onClick={() => setStep("welcome")} className="ob-btn-ghost w-full">← Tillbaka</button>
-      </div>
-    </Screen>
-  );
+      </Screen>
+    );
 
   // ── Step: Set schedule or skip ───────────────────────────────
-  if (step === "choice") return (
-    <Screen>
-      <StepDots current={1} total={3} />
-      <h2 className="text-[24px] font-extrabold tracking-tight text-pc-ink mb-1 text-center">
-        Vill du sätta ditt schema?
-      </h2>
-      <p className="text-[13px] text-pc-muted mb-7 text-center leading-relaxed">
-        Du kan alltid ändra det senare via inställningarna.
-      </p>
+  if (step === "choice")
+    return (
+      <Screen>
+        <StepDots current={1} total={3} />
+        <h2 className="text-[24px] font-extrabold tracking-tight text-pc-ink mb-1 text-center">
+          Vill du sätta ditt schema?
+        </h2>
+        <p className="text-[13px] text-pc-muted mb-7 text-center leading-relaxed">
+          Du kan alltid ändra det senare under Mer → Schema & rapportläge.
+        </p>
 
-      <div className="w-full space-y-3">
-        <button
-          onClick={() => setStep("schedule")}
-          className="pc-press w-full text-left bg-white border border-pc-line rounded-[20px] px-5 py-4 flex items-start gap-4 shadow-[0_2px_12px_rgba(81,43,43,0.04)]"
-        >
-          <span className="text-[26px] leading-none mt-0.5 shrink-0">🗓️</span>
-          <div className="flex-1">
-            <div className="font-extrabold text-[15px] text-pc-ink leading-tight mb-0.5">Anpassa schema</div>
-            <div className="text-[12px] text-pc-muted leading-snug">Sätt arbetstider och lunch per dag.</div>
-          </div>
-          <svg viewBox="0 0 24 24" className="w-5 h-5 text-pc-muted shrink-0 mt-1" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
-        </button>
+        <div className="w-full space-y-3">
+          <button
+            onClick={() => setStep("schedule")}
+            className="pc-press w-full text-left bg-white border border-pc-line rounded-[20px] px-5 py-4 flex items-start gap-4 shadow-[0_2px_12px_rgba(81,43,43,0.04)]"
+          >
+            <span className="text-[26px] leading-none mt-0.5 shrink-0">🗓️</span>
+            <div className="flex-1">
+              <div className="font-extrabold text-[15px] text-pc-ink leading-tight mb-0.5">
+                Anpassa schema
+              </div>
+              <div className="text-[12px] text-pc-muted leading-snug">
+                Sätt arbetstider och lunch per dag.
+              </div>
+            </div>
+            <svg
+              viewBox="0 0 24 24"
+              className="w-5 h-5 text-pc-muted shrink-0 mt-1"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M9 18l6-6-6-6" />
+            </svg>
+          </button>
 
-        <button
-          onClick={() => { setSchedule(DEFAULT_SCHEDULE); setStep("sync"); }}
-          className="pc-press w-full text-left bg-white border border-pc-line rounded-[20px] px-5 py-4 flex items-start gap-4 shadow-[0_2px_12px_rgba(81,43,43,0.04)]"
-        >
-          <span className="text-[26px] leading-none mt-0.5 shrink-0">⚡</span>
-          <div className="flex-1">
-            <div className="font-extrabold text-[15px] text-pc-ink leading-tight mb-0.5">Hoppa över</div>
-            <div className="text-[12px] text-pc-muted leading-snug">Mån–Fre 08:00–17:00 med 1h lunch (8h/dag, 40h/vecka).</div>
-          </div>
-          <svg viewBox="0 0 24 24" className="w-5 h-5 text-pc-muted shrink-0 mt-1" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
-        </button>
+          <button
+            onClick={() => {
+              setSchedule(DEFAULT_SCHEDULE);
+              setStep("sync");
+            }}
+            className="pc-press w-full text-left bg-white border border-pc-line rounded-[20px] px-5 py-4 flex items-start gap-4 shadow-[0_2px_12px_rgba(81,43,43,0.04)]"
+          >
+            <span className="text-[26px] leading-none mt-0.5 shrink-0">⚡</span>
+            <div className="flex-1">
+              <div className="font-extrabold text-[15px] text-pc-ink leading-tight mb-0.5">
+                Hoppa över
+              </div>
+              <div className="text-[12px] text-pc-muted leading-snug">
+                Mån–Fre 08:00–17:00 med 1h lunch (8h/dag, 40h/vecka).
+              </div>
+            </div>
+            <svg
+              viewBox="0 0 24 24"
+              className="w-5 h-5 text-pc-muted shrink-0 mt-1"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M9 18l6-6-6-6" />
+            </svg>
+          </button>
 
-        <button onClick={() => setStep("info")} className="ob-btn-ghost w-full">← Tillbaka</button>
-      </div>
-    </Screen>
-  );
+          <button onClick={() => setStep("info")} className="ob-btn-ghost w-full">
+            ← Tillbaka
+          </button>
+        </div>
+      </Screen>
+    );
 
   // ── Step: Schedule editor ────────────────────────────────────
-  if (step === "schedule") return (
-    <Screen scroll>
-      <StepDots current={2} total={3} />
-      <h2 className="text-[22px] font-extrabold tracking-tight text-pc-ink mb-1 text-center">
-        Din arbetsvecka
-      </h2>
-      <p className="text-[12px] text-pc-muted mb-5 text-center">
-        Starttid, sluttid och lunchrast per dag.
-      </p>
+  if (step === "schedule")
+    return (
+      <Screen scroll>
+        <StepDots current={2} total={3} />
+        <h2 className="text-[22px] font-extrabold tracking-tight text-pc-ink mb-1 text-center">
+          Din arbetsvecka
+        </h2>
+        <p className="text-[12px] text-pc-muted mb-5 text-center">
+          Starttid, sluttid och lunchrast per dag.
+        </p>
 
-      <WeekScheduleEditor schedule={schedule} onChange={setSchedule} />
+        <WeekScheduleEditor schedule={schedule} onChange={setSchedule} />
 
-      <div className="grid grid-cols-2 gap-3 pt-4 w-full">
-        <button onClick={() => setStep("choice")} className="ob-btn-ghost">← Tillbaka</button>
-        <button onClick={() => setStep("sync")} className="ob-btn-primary">Nästa →</button>
-      </div>
-    </Screen>
-  );
+        <div className="grid grid-cols-2 gap-3 pt-4 w-full">
+          <button onClick={() => setStep("choice")} className="ob-btn-ghost">
+            ← Tillbaka
+          </button>
+          <button onClick={() => setStep("sync")} className="ob-btn-primary">
+            Nästa →
+          </button>
+        </div>
+      </Screen>
+    );
 
   // ── Step: Sync setup ─────────────────────────────────────────
-  if (step === "sync") return (
-    <SyncStep
-      schedule={schedule}
-      onBack={() => setStep("choice")}
-      onFinish={finish}
-      name={name.trim()}
-    />
-  );
+  if (step === "sync")
+    return (
+      <SyncStep
+        schedule={schedule}
+        onBack={() => setStep("choice")}
+        onFinish={finish}
+        name={name.trim()}
+      />
+    );
 
   return null;
-
 }
 
 // ─── Sub-components ───────────────────────────────────────────
@@ -486,9 +630,7 @@ function Screen({ children, scroll = false }: { children: React.ReactNode; scrol
         style={{ overflowY: scroll ? "auto" : "hidden", overflowX: "hidden" }}
       >
         <div className="h-[env(safe-area-inset-top,0px)]" />
-        <div className="flex flex-col items-center w-full mt-8 flex-1">
-          {children}
-        </div>
+        <div className="flex flex-col items-center w-full mt-8 flex-1">{children}</div>
         <div className="h-[env(safe-area-inset-bottom,0px)]" />
       </div>
     </div>
@@ -499,11 +641,22 @@ function Logo() {
   return (
     <div className="flex flex-col items-center mb-5">
       <div className="w-16 h-16 rounded-3xl bg-pc-orange flex items-center justify-center shadow-[0_8px_28px_rgba(255,95,0,0.38)] mb-4">
-        <svg viewBox="0 0 24 24" className="w-8 h-8 text-white" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
+        <svg
+          viewBox="0 0 24 24"
+          className="w-8 h-8 text-white"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 7v5l3 2" />
         </svg>
       </div>
-      <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-pc-muted">Tidrapport</div>
+      <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-pc-muted">
+        Tidrapport
+      </div>
     </div>
   );
 }
@@ -512,17 +665,25 @@ function StepDots({ current, total }: { current: number; total: number }) {
   return (
     <div className="flex gap-1.5 mb-5">
       {Array.from({ length: total }, (_, i) => (
-        <span key={i} className="h-1.5 rounded-full transition-all" style={{
-          width: i + 1 === current ? 20 : 6,
-          background: i + 1 <= current ? "#ff5f00" : "#ece6df",
-        }} />
+        <span
+          key={i}
+          className="h-1.5 rounded-full transition-all"
+          style={{
+            width: i + 1 === current ? 20 : 6,
+            background: i + 1 <= current ? "#ff5f00" : "#ece6df",
+          }}
+        />
       ))}
     </div>
   );
 }
 
 function Label({ children }: { children: React.ReactNode }) {
-  return <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-pc-muted mb-2">{children}</div>;
+  return (
+    <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-pc-muted mb-2">
+      {children}
+    </div>
+  );
 }
 
 function LoginStep({
@@ -533,21 +694,35 @@ function LoginStep({
   onLogin: (token: string, state: SyncState | null, username: string, rev: number) => void;
 }) {
   const [username, setUsername] = useState("");
-  const [secret, setSecret]     = useState("");
-  const [loading, setLoading]   = useState(false);
-  const [err, setErr]           = useState("");
+  const [secret, setSecret] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
 
   const inputStyle: React.CSSProperties = {
-    width: "100%", boxSizing: "border-box", padding: "14px 16px", borderRadius: "16px",
-    border: "1.5px solid #ece6df", fontSize: "16px", outline: "none",
-    background: "#fdf6ee", fontWeight: 600, color: "#2d1717",
+    width: "100%",
+    boxSizing: "border-box",
+    padding: "14px 16px",
+    borderRadius: "16px",
+    border: "1.5px solid #ece6df",
+    fontSize: "16px",
+    outline: "none",
+    background: "#fdf6ee",
+    fontWeight: 600,
+    color: "#2d1717",
     marginBottom: "14px",
   };
 
   async function handleLogin() {
-    if (!username) { setErr("Ange ditt användarnamn."); return; }
-    if (!secret) { setErr("Ange din synk-kod."); return; }
-    setLoading(true); setErr("");
+    if (!username) {
+      setErr("Ange ditt användarnamn.");
+      return;
+    }
+    if (!secret) {
+      setErr("Ange din synk-kod.");
+      return;
+    }
+    setLoading(true);
+    setErr("");
     try {
       const { token, state, updatedAt } = await syncLogin(username, secret);
       if (!state) {
@@ -573,25 +748,37 @@ function LoginStep({
       </p>
 
       <div className="w-full">
-        <Label>Användarnamn <span className="text-pc-orange">*</span></Label>
+        <Label>
+          Användarnamn <span className="text-pc-orange">*</span>
+        </Label>
         <input
           autoFocus
           type="text"
           placeholder="t.ex. carl eller carl2"
           value={username}
-          onChange={e => { setUsername(e.target.value); setErr(""); }}
+          onChange={(e) => {
+            setUsername(e.target.value);
+            setErr("");
+          }}
           className="ob-input"
           style={inputStyle}
           autoCapitalize="none"
           autoCorrect="off"
         />
-        <Label>Synk-kod <span className="text-pc-orange">*</span></Label>
+        <Label>
+          Synk-kod <span className="text-pc-orange">*</span>
+        </Label>
         <input
           type="password"
           placeholder="Din synk-kod"
           value={secret}
-          onChange={e => { setSecret(e.target.value); setErr(""); }}
-          onKeyDown={e => { if (e.key === "Enter" && username && secret) handleLogin(); }}
+          onChange={(e) => {
+            setSecret(e.target.value);
+            setErr("");
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && username && secret) handleLogin();
+          }}
           className="ob-input"
           style={inputStyle}
         />
@@ -601,11 +788,15 @@ function LoginStep({
           onClick={handleLogin}
           disabled={loading}
           className="ob-btn-primary w-full"
-          style={loading ? { background: "#f0e8df", color: "#c4a882", boxShadow: "none" } : undefined}
+          style={
+            loading ? { background: "#f0e8df", color: "#c4a882", boxShadow: "none" } : undefined
+          }
         >
           {loading ? "Loggar in…" : "Logga in →"}
         </button>
-        <button onClick={onBack} className="ob-btn-ghost w-full mt-1">← Tillbaka</button>
+        <button onClick={onBack} className="ob-btn-ghost w-full mt-1">
+          ← Tillbaka
+        </button>
       </div>
     </Screen>
   );
@@ -621,80 +812,133 @@ function SyncStep({
 }: {
   schedule: WeekSchedule;
   onBack: () => void;
-  onFinish: (sched: WeekSchedule, token?: string, username?: string, state?: SyncState, rev?: number) => void;
+  onFinish: (
+    sched: WeekSchedule,
+    token?: string,
+    username?: string,
+    state?: SyncState,
+    rev?: number,
+  ) => void;
   name: string;
 }) {
   void name;
-  const [sub, setSub]             = useState<SyncSubStep>("choose");
-  const [username, setUsername]   = useState("");
-  const [secret, setSecret]       = useState("");
-  const [confirm, setConfirm]     = useState("");
-  const [loading, setLoading]     = useState(false);
-  const [err, setErr]             = useState("");
+  const [sub, setSub] = useState<SyncSubStep>("choose");
+  const [username, setUsername] = useState("");
+  const [secret, setSecret] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
   // Held after successful create, before phone step resolves
   const [createdToken, setCreatedToken] = useState("");
   // Phone sub-step state
   const [phoneInput, setPhoneInput] = useState("");
-  const [phoneCode, setPhoneCode]   = useState("");
+  const [phoneCode, setPhoneCode] = useState("");
 
   const inputStyle: React.CSSProperties = {
-    width: "100%", boxSizing: "border-box", padding: "14px 16px", borderRadius: "16px",
-    border: "1.5px solid #ece6df", fontSize: "16px", outline: "none",
-    background: "#fdf6ee", fontWeight: 600, color: "#2d1717",
+    width: "100%",
+    boxSizing: "border-box",
+    padding: "14px 16px",
+    borderRadius: "16px",
+    border: "1.5px solid #ece6df",
+    fontSize: "16px",
+    outline: "none",
+    background: "#fdf6ee",
+    fontWeight: 600,
+    color: "#2d1717",
     marginBottom: "14px",
   };
 
-  if (sub === "choose") return (
-    <Screen>
-      <StepDots current={3} total={3} />
-      <h2 className="text-[24px] font-extrabold tracking-tight text-pc-ink mb-1 text-center">
-        Synkronisera enheter
-      </h2>
-      <p className="text-[13px] text-pc-muted mb-7 text-center leading-relaxed">
-        Synka data mellan dina enheter med en hemlig kod.
-        Ingen e-post eller konto krävs.
-      </p>
+  if (sub === "choose")
+    return (
+      <Screen>
+        <StepDots current={3} total={3} />
+        <h2 className="text-[24px] font-extrabold tracking-tight text-pc-ink mb-1 text-center">
+          Synkronisera enheter
+        </h2>
+        <p className="text-[13px] text-pc-muted mb-7 text-center leading-relaxed">
+          Synka data mellan dina enheter med en hemlig kod. Ingen e-post eller konto krävs.
+        </p>
 
-      <div className="w-full space-y-3">
-        <button
-          onClick={() => setSub("create")}
-          className="pc-press w-full text-left bg-white border border-pc-line rounded-[20px] px-5 py-4 flex items-start gap-4 shadow-[0_2px_12px_rgba(81,43,43,0.04)]"
-        >
-          <span className="text-[26px] leading-none mt-0.5 shrink-0">🔑</span>
-          <div className="flex-1">
-            <div className="font-extrabold text-[15px] text-pc-ink leading-tight mb-0.5">Skapa ny synk-kod</div>
-            <div className="text-[12px] text-pc-muted leading-snug">Välj en hemlig kod för att synka till fler enheter.</div>
-          </div>
-          <svg viewBox="0 0 24 24" className="w-5 h-5 text-pc-muted shrink-0 mt-1" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
-        </button>
+        <div className="w-full space-y-3">
+          <button
+            onClick={() => setSub("create")}
+            className="pc-press w-full text-left bg-white border border-pc-line rounded-[20px] px-5 py-4 flex items-start gap-4 shadow-[0_2px_12px_rgba(81,43,43,0.04)]"
+          >
+            <span className="text-[26px] leading-none mt-0.5 shrink-0">🔑</span>
+            <div className="flex-1">
+              <div className="font-extrabold text-[15px] text-pc-ink leading-tight mb-0.5">
+                Skapa ny synk-kod
+              </div>
+              <div className="text-[12px] text-pc-muted leading-snug">
+                Välj en hemlig kod för att synka till fler enheter.
+              </div>
+            </div>
+            <svg
+              viewBox="0 0 24 24"
+              className="w-5 h-5 text-pc-muted shrink-0 mt-1"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M9 18l6-6-6-6" />
+            </svg>
+          </button>
 
-        <button
-          onClick={() => setSub("restore")}
-          className="pc-press w-full text-left bg-white border border-pc-line rounded-[20px] px-5 py-4 flex items-start gap-4 shadow-[0_2px_12px_rgba(81,43,43,0.04)]"
-        >
-          <span className="text-[26px] leading-none mt-0.5 shrink-0">☁️</span>
-          <div className="flex-1">
-            <div className="font-extrabold text-[15px] text-pc-ink leading-tight mb-0.5">Återställ från annan enhet</div>
-            <div className="text-[12px] text-pc-muted leading-snug">Jag har redan en synk-kod och vill hämta min data.</div>
-          </div>
-          <svg viewBox="0 0 24 24" className="w-5 h-5 text-pc-muted shrink-0 mt-1" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
-        </button>
+          <button
+            onClick={() => setSub("restore")}
+            className="pc-press w-full text-left bg-white border border-pc-line rounded-[20px] px-5 py-4 flex items-start gap-4 shadow-[0_2px_12px_rgba(81,43,43,0.04)]"
+          >
+            <span className="text-[26px] leading-none mt-0.5 shrink-0">☁️</span>
+            <div className="flex-1">
+              <div className="font-extrabold text-[15px] text-pc-ink leading-tight mb-0.5">
+                Återställ från annan enhet
+              </div>
+              <div className="text-[12px] text-pc-muted leading-snug">
+                Jag har redan en synk-kod och vill hämta min data.
+              </div>
+            </div>
+            <svg
+              viewBox="0 0 24 24"
+              className="w-5 h-5 text-pc-muted shrink-0 mt-1"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M9 18l6-6-6-6" />
+            </svg>
+          </button>
 
-        <button onClick={() => onFinish(schedule)} className="ob-btn-ghost w-full">
-          Hoppa över
-        </button>
+          <button onClick={() => onFinish(schedule)} className="ob-btn-ghost w-full">
+            Hoppa över
+          </button>
 
-        <button onClick={onBack} className="ob-btn-ghost w-full">← Tillbaka</button>
-      </div>
-    </Screen>
-  );
+          <button onClick={onBack} className="ob-btn-ghost w-full">
+            ← Tillbaka
+          </button>
+        </div>
+      </Screen>
+    );
 
   if (sub === "create") {
     async function handleCreate() {
-      if (!/^[a-zA-Z0-9_-]{3,20}$/.test(username)) { setErr("Användarnamnet måste vara 3–20 tecken (a–z, 0–9, _ eller -)."); return; }
-      if (secret.length < 6) { setErr("Minst 6 tecken i synk-koden."); return; }
-      if (secret !== confirm) { setErr("Koderna matchar inte."); return; }
-      setLoading(true); setErr("");
+      if (!/^[a-zA-Z0-9_-]{3,20}$/.test(username)) {
+        setErr("Användarnamnet måste vara 3–20 tecken (a–z, 0–9, _ eller -).");
+        return;
+      }
+      if (secret.length < 6) {
+        setErr("Minst 6 tecken i synk-koden.");
+        return;
+      }
+      if (secret !== confirm) {
+        setErr("Koderna matchar inte.");
+        return;
+      }
+      setLoading(true);
+      setErr("");
       try {
         const { token } = await syncRegister(username, secret);
         setCreatedToken(token);
@@ -717,32 +961,47 @@ function SyncStep({
         </p>
 
         <div className="w-full">
-          <Label>Användarnamn <span className="text-pc-orange">*</span></Label>
+          <Label>
+            Användarnamn <span className="text-pc-orange">*</span>
+          </Label>
           <input
             type="text"
             placeholder="t.ex. carl eller carl2"
             value={username}
-            onChange={e => { setUsername(e.target.value); setErr(""); }}
+            onChange={(e) => {
+              setUsername(e.target.value);
+              setErr("");
+            }}
             className="ob-input"
             style={inputStyle}
             autoCapitalize="none"
             autoCorrect="off"
           />
-          <Label>Synk-kod <span className="text-pc-orange">*</span></Label>
+          <Label>
+            Synk-kod <span className="text-pc-orange">*</span>
+          </Label>
           <input
             type="password"
             placeholder="Minst 6 tecken"
             value={secret}
-            onChange={e => { setSecret(e.target.value); setErr(""); }}
+            onChange={(e) => {
+              setSecret(e.target.value);
+              setErr("");
+            }}
             className="ob-input"
             style={inputStyle}
           />
-          <Label>Bekräfta synk-koden <span className="text-pc-orange">*</span></Label>
+          <Label>
+            Bekräfta synk-koden <span className="text-pc-orange">*</span>
+          </Label>
           <input
             type="password"
             placeholder="Upprepa koden"
             value={confirm}
-            onChange={e => { setConfirm(e.target.value); setErr(""); }}
+            onChange={(e) => {
+              setConfirm(e.target.value);
+              setErr("");
+            }}
             className="ob-input"
             style={inputStyle}
           />
@@ -752,11 +1011,22 @@ function SyncStep({
             onClick={handleCreate}
             disabled={loading}
             className="ob-btn-primary w-full"
-            style={loading ? { background: "#f0e8df", color: "#c4a882", boxShadow: "none" } : undefined}
+            style={
+              loading ? { background: "#f0e8df", color: "#c4a882", boxShadow: "none" } : undefined
+            }
           >
             {loading ? "Skapar…" : "Skapa konto →"}
           </button>
-          <button onClick={() => { setSub("choose"); setErr(""); setUsername(""); setSecret(""); setConfirm(""); }} className="ob-btn-ghost w-full mt-1">
+          <button
+            onClick={() => {
+              setSub("choose");
+              setErr("");
+              setUsername("");
+              setSecret("");
+              setConfirm("");
+            }}
+            className="ob-btn-ghost w-full mt-1"
+          >
             ← Tillbaka
           </button>
         </div>
@@ -766,16 +1036,25 @@ function SyncStep({
 
   if (sub === "restore") {
     async function handleRestore() {
-      if (!username) { setErr("Ange ditt användarnamn."); return; }
-      if (!secret) { setErr("Ange din synk-kod."); return; }
-      setLoading(true); setErr("");
+      if (!username) {
+        setErr("Ange ditt användarnamn.");
+        return;
+      }
+      if (!secret) {
+        setErr("Ange din synk-kod.");
+        return;
+      }
+      setLoading(true);
+      setErr("");
       try {
         const { token, state, updatedAt } = await syncLogin(username, secret);
         if (!state) {
-          setErr("Inloggningen fungerade, men det finns inga data i molnet ännu. Öppna appen på din andra enhet och försök igen.");
+          setErr(
+            "Inloggningen fungerade, men det finns inga data i molnet ännu. Öppna appen på din andra enhet och försök igen.",
+          );
           return;
         }
-        onFinish(state.schedule as WeekSchedule ?? schedule, token, username, state, updatedAt);
+        onFinish((state.schedule as WeekSchedule) ?? schedule, token, username, state, updatedAt);
       } catch (e) {
         setErr((e as Error).message);
       } finally {
@@ -799,7 +1078,10 @@ function SyncStep({
             type="text"
             placeholder="t.ex. carl eller carl2"
             value={username}
-            onChange={e => { setUsername(e.target.value); setErr(""); }}
+            onChange={(e) => {
+              setUsername(e.target.value);
+              setErr("");
+            }}
             className="ob-input"
             style={inputStyle}
             autoCapitalize="none"
@@ -810,7 +1092,10 @@ function SyncStep({
             type="password"
             placeholder="Din synk-kod"
             value={secret}
-            onChange={e => { setSecret(e.target.value); setErr(""); }}
+            onChange={(e) => {
+              setSecret(e.target.value);
+              setErr("");
+            }}
             className="ob-input"
             style={inputStyle}
           />
@@ -820,11 +1105,21 @@ function SyncStep({
             onClick={handleRestore}
             disabled={loading}
             className="ob-btn-primary w-full"
-            style={loading ? { background: "#f0e8df", color: "#c4a882", boxShadow: "none" } : undefined}
+            style={
+              loading ? { background: "#f0e8df", color: "#c4a882", boxShadow: "none" } : undefined
+            }
           >
             {loading ? "Hämtar data…" : "Återställ →"}
           </button>
-          <button onClick={() => { setSub("choose"); setErr(""); setUsername(""); setSecret(""); }} className="ob-btn-ghost w-full mt-1">
+          <button
+            onClick={() => {
+              setSub("choose");
+              setErr("");
+              setUsername("");
+              setSecret("");
+            }}
+            className="ob-btn-ghost w-full mt-1"
+          >
             ← Tillbaka
           </button>
         </div>
@@ -835,8 +1130,12 @@ function SyncStep({
   if (sub === "phone") {
     async function handlePhoneSend() {
       const phone = phoneInput.trim();
-      if (!phone) { setErr("Ange ditt mobilnummer."); return; }
-      setLoading(true); setErr("");
+      if (!phone) {
+        setErr("Ange ditt mobilnummer.");
+        return;
+      }
+      setLoading(true);
+      setErr("");
       try {
         await syncSendPhoneCode(createdToken, phone);
         setSub("phone_code");
@@ -850,22 +1149,44 @@ function SyncStep({
     return (
       <Screen>
         <StepDots current={3} total={3} />
+        <RecoveryKeySheet />
         <h2 className="text-[22px] font-extrabold tracking-tight text-pc-ink mb-1 text-center">
           Återhämtningsnummer
         </h2>
         <p className="text-[13px] text-pc-muted mb-6 text-center leading-relaxed">
-          Valfritt men rekommenderat: lägg till ditt mobilnummer för att kunna återhämta ditt konto via SMS om du glömmer din synk-kod.
+          Valfritt men rekommenderat: lägg till ditt mobilnummer för att kunna återhämta ditt konto
+          via SMS om du glömmer din synk-kod.
         </p>
 
         <div className="w-full">
-          <Label>Mobilnummer <span className="text-pc-muted font-medium normal-case tracking-normal">(valfritt)</span></Label>
+          <Label>
+            Mobilnummer{" "}
+            <span className="text-pc-muted font-medium normal-case tracking-normal">
+              (valfritt)
+            </span>
+          </Label>
           <input
             type="tel"
             placeholder="t.ex. 0701234567"
             value={phoneInput}
-            onChange={e => { setPhoneInput(e.target.value); setErr(""); }}
+            onChange={(e) => {
+              setPhoneInput(e.target.value);
+              setErr("");
+            }}
             className="ob-input"
-            style={{ width: "100%", boxSizing: "border-box", padding: "14px 16px", borderRadius: "16px", border: "1.5px solid #ece6df", fontSize: "16px", outline: "none", background: "#fdf6ee", fontWeight: 600, color: "#2d1717", marginBottom: "14px" }}
+            style={{
+              width: "100%",
+              boxSizing: "border-box",
+              padding: "14px 16px",
+              borderRadius: "16px",
+              border: "1.5px solid #ece6df",
+              fontSize: "16px",
+              outline: "none",
+              background: "#fdf6ee",
+              fontWeight: 600,
+              color: "#2d1717",
+              marginBottom: "14px",
+            }}
           />
           {err && <p className="text-red-500 text-[13px] mb-3 font-semibold">{err}</p>}
 
@@ -873,7 +1194,9 @@ function SyncStep({
             onClick={handlePhoneSend}
             disabled={loading}
             className="ob-btn-primary w-full"
-            style={loading ? { background: "#f0e8df", color: "#c4a882", boxShadow: "none" } : undefined}
+            style={
+              loading ? { background: "#f0e8df", color: "#c4a882", boxShadow: "none" } : undefined
+            }
           >
             {loading ? "Skickar…" : "Skicka verifieringskod →"}
           </button>
@@ -891,13 +1214,21 @@ function SyncStep({
   if (sub === "phone_code") {
     async function handlePhoneVerify() {
       const code = phoneCode.trim();
-      if (code.length !== 6) { setErr("Koden är 6 siffror."); return; }
-      setLoading(true); setErr("");
+      if (code.length !== 6) {
+        setErr("Koden är 6 siffror.");
+        return;
+      }
+      setLoading(true);
+      setErr("");
       try {
         await syncVerifyPhone(createdToken, phoneInput.trim(), code);
         // Save phone locally
         const digits = phoneInput.trim().replace(/\D/g, "");
-        const e164 = digits.startsWith("46") ? "+" + digits : digits.startsWith("0") ? "+46" + digits.slice(1) : "+" + digits;
+        const e164 = digits.startsWith("46")
+          ? "+" + digits
+          : digits.startsWith("0")
+            ? "+46" + digits.slice(1)
+            : "+" + digits;
         localStorage.setItem(SYNC_PHONE_KEY, e164);
         onFinish(schedule, createdToken, username);
       } catch (e) {
@@ -926,9 +1257,25 @@ function SyncStep({
             maxLength={6}
             placeholder="123456"
             value={phoneCode}
-            onChange={e => { setPhoneCode(e.target.value.replace(/\D/g, "")); setErr(""); }}
+            onChange={(e) => {
+              setPhoneCode(e.target.value.replace(/\D/g, ""));
+              setErr("");
+            }}
             className="ob-input"
-            style={{ width: "100%", boxSizing: "border-box", padding: "14px 16px", borderRadius: "16px", border: "1.5px solid #ece6df", fontSize: "16px", outline: "none", background: "#fdf6ee", fontWeight: 600, color: "#2d1717", marginBottom: "14px", letterSpacing: "0.25em" }}
+            style={{
+              width: "100%",
+              boxSizing: "border-box",
+              padding: "14px 16px",
+              borderRadius: "16px",
+              border: "1.5px solid #ece6df",
+              fontSize: "16px",
+              outline: "none",
+              background: "#fdf6ee",
+              fontWeight: 600,
+              color: "#2d1717",
+              marginBottom: "14px",
+              letterSpacing: "0.25em",
+            }}
           />
           {err && <p className="text-red-500 text-[13px] mb-3 font-semibold">{err}</p>}
 
@@ -936,14 +1283,26 @@ function SyncStep({
             onClick={handlePhoneVerify}
             disabled={loading}
             className="ob-btn-primary w-full"
-            style={loading ? { background: "#f0e8df", color: "#c4a882", boxShadow: "none" } : undefined}
+            style={
+              loading ? { background: "#f0e8df", color: "#c4a882", boxShadow: "none" } : undefined
+            }
           >
             {loading ? "Verifierar…" : "Bekräfta →"}
           </button>
-          <button onClick={() => { setSub("phone"); setPhoneCode(""); setErr(""); }} className="ob-btn-ghost w-full mt-1">
+          <button
+            onClick={() => {
+              setSub("phone");
+              setPhoneCode("");
+              setErr("");
+            }}
+            className="ob-btn-ghost w-full mt-1"
+          >
             ← Tillbaka
           </button>
-          <button onClick={() => onFinish(schedule, createdToken, username)} className="ob-btn-ghost w-full">
+          <button
+            onClick={() => onFinish(schedule, createdToken, username)}
+            className="ob-btn-ghost w-full"
+          >
             Hoppa över
           </button>
         </div>
