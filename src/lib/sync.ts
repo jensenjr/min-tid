@@ -225,16 +225,66 @@ const saltFor = (username: string) =>
 
 const fetchServerState = (token: string) => call<ServerState>("GET", "/api/sync", { token });
 
-/** userId claim of our JWT (no verification — only used to match the stored key). */
-function tokenUserId(token: string): string | null {
+/** Claims of our JWT (no verification — only for matching the stored key and debug info). */
+function tokenClaims(token: string): { userId?: unknown; exp?: unknown } | null {
   try {
     const part = token.split(".")[1];
     const b64 = part.replace(/-/g, "+").replace(/_/g, "/");
-    const id = JSON.parse(atob(b64.padEnd(Math.ceil(b64.length / 4) * 4, "="))).userId;
-    return typeof id === "string" ? id : null;
+    return JSON.parse(atob(b64.padEnd(Math.ceil(b64.length / 4) * 4, "=")));
   } catch {
     return null;
   }
+}
+
+function tokenUserId(token: string): string | null {
+  const id = tokenClaims(token)?.userId;
+  return typeof id === "string" ? id : null;
+}
+
+export type SyncDeviceInfo = {
+  /** Where the API calls go. */
+  server: string;
+  tokenPresent: boolean;
+  /** ms, from the JWT's exp claim. */
+  tokenExpiresAt: number | null;
+  keyPresent: boolean;
+  /** False when the stored key belongs to another account than the token. */
+  keyMatchesToken: boolean;
+  /** First characters of the key's salt — enough to tell keys apart, nothing secret. */
+  keyId: string | null;
+};
+
+export type ServerHealth = {
+  ok: boolean;
+  version?: string;
+  /** Whether the server's data file survives a redeploy. */
+  storage?: "persistent" | "ephemeral" | "unknown";
+};
+
+/** GET /api/health (no auth). Null when the server can't be reached. */
+export async function syncServerHealth(): Promise<ServerHealth | null> {
+  try {
+    const res = await fetch(`${BASE}/api/health`, { cache: "no-store" });
+    if (!res.ok) return null;
+    return (await res.json()) as ServerHealth;
+  } catch {
+    return null;
+  }
+}
+
+/** For the debug panel. Never exposes the token or key material. */
+export async function syncDeviceInfo(token: string | null): Promise<SyncDeviceInfo> {
+  const key = await keyStore.getKey().catch(() => null);
+  const exp = token ? tokenClaims(token)?.exp : undefined;
+  const uid = token ? tokenUserId(token) : null;
+  return {
+    server: `${BASE || (typeof location !== "undefined" ? location.origin : "")}/api`,
+    tokenPresent: !!token,
+    tokenExpiresAt: typeof exp === "number" ? exp * 1000 : null,
+    keyPresent: !!key,
+    keyMatchesToken: !key || uid === null || uid === key.userId,
+    keyId: key ? key.salt.slice(0, 8) : null,
+  };
 }
 
 /** The key this device holds for the token's account, or a NO_KEY error. */

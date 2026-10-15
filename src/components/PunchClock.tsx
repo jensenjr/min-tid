@@ -106,6 +106,7 @@ import type {
   AppState as StorageShape,
 } from "../lib/types";
 import type { ImportPatch } from "../lib/excel/plan";
+import { useDebugMode } from "../lib/debugMode";
 import {
   DEMO_STORAGE_KEY,
   buildDemoState,
@@ -265,6 +266,7 @@ export default function PunchClock() {
   // effect instead used to let the save-effect fire with empty defaults first.
   // Demo mode (?demo=1) is decided once per page load; leaving it is a full navigation.
   const [demo] = useState(() => isDemoSearch(window.location.search));
+  const [debugMode] = useDebugMode();
   const bootRef = useRef<StorageShape | null>(null);
   if (bootRef.current === null) bootRef.current = load(demo);
   const boot = bootRef.current;
@@ -1139,7 +1141,7 @@ export default function PunchClock() {
   }
 
   /** Stop syncing on this device. The account and its data stay on the server. */
-  function handleDisconnectSync() {
+  function handleDisconnectSync(opts: { quiet?: boolean } = {}) {
     if (syncTimer.current) clearTimeout(syncTimer.current);
     localStorage.removeItem(SYNC_TOKEN_KEY);
     localStorage.removeItem(SYNC_USERNAME_KEY);
@@ -1155,7 +1157,7 @@ export default function PunchClock() {
     setSyncStatus("idle");
     clearSyncFailure();
     setSyncedAt(null);
-    showToast("Synk avstängd här. Kontot finns kvar — logga in igen när du vill.");
+    if (!opts.quiet) showToast("Synk avstängd här. Kontot finns kvar — logga in igen när du vill.");
   }
 
   /** Destructive: removes the account and every synced copy from the server. */
@@ -1475,9 +1477,14 @@ export default function PunchClock() {
             <SyncErrorBanner
               headline={syncErrorInfo.headline}
               detail={
-                syncErrorInfo.networkBlocked
+                (syncErrorInfo.networkBlocked
                   ? "Din tid sparas på enheten, men den når inte molnet."
-                  : "Din tid sparas på enheten, men synken till molnet misslyckas."
+                  : syncErrorInfo.recreate
+                    ? "Din tid finns kvar på enheten. Aktivera synk igen för att ladda upp den."
+                    : "Din tid sparas på enheten, men synken till molnet misslyckas.") +
+                (debugMode && syncFailure
+                  ? ` [${syncFailure.status === 0 ? "ingen kontakt" : "HTTP " + syncFailure.status} ${syncFailure.method} ${syncFailure.path}]`
+                  : "")
               }
               onReadMore={() => {
                 setSyncHelpOpen(true);
@@ -1720,7 +1727,17 @@ export default function PunchClock() {
         onPullNow={() => {
           void pullNow({ manual: true });
         }}
-        onDisconnectSync={handleDisconnectSync}
+        onDisconnectSync={() => handleDisconnectSync()}
+        onRecreateSync={() => {
+          // The account is gone from the server (404). Drop the dead session — local data
+          // stays in punchclock_v2 — and set sync up again; the new account is seeded from
+          // this device.
+          handleDisconnectSync({ quiet: true });
+          setSettingsModal(false);
+          setSyncHelpOpen(false);
+          if (!demo) setSyncModal(true);
+        }}
+        syncRev={syncRevRef.current || null}
         onDeleteSyncAccount={handleDeleteSyncAccount}
         onOpenAutomation={() => {
           setSettingsModal(false);

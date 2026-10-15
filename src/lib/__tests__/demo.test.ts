@@ -251,5 +251,5 @@ describe("buildDemoState", () => {
       expect(b.used).toBeLessThanOrEqual(5);
       expect(ymdLocal(new Date(`${today}T12:00:00`))).toBe(today);
     }
-  });
+  }, 30_000); // ~730 full demo builds: slow when the whole suite runs in parallel
 });

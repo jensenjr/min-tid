@@ -7,3 +7,5 @@ dist
 eslint.config.js
 server/node_modules
 server/data.json
+.env
+.env.*

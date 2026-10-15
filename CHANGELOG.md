@@ -138,6 +138,9 @@ _Nothing yet._
 - **Dina egna data rörs aldrig i demon.** Demon läser och skriver inte dina vanliga data, pratar aldrig med servern och synken är avstängd ("Synk och säkerhet" förklarar det). Importen är avstängd. "Avsluta demo" tar dig tillbaka till din egen app precis som du lämnade den.
 - **Välkomstskärmen** har en länk "Titta runt i en demo först".
 - **Tydligare första start.** Schemavalet i introduktionen pekar på rätt plats (Mer → Schema & rapportläge). Kalendern visar inte längre dagar före din första registrering som "Ledig · 8 h".
+- **Begripliga synkfel.** Finns ditt synk-konto inte längre på servern säger appen det rakt ut och erbjuder "Aktivera synk igen", som laddar upp tiderna från enheten till ett nytt konto. HTTP-koder och teknik visas inte längre för alla.
+- **Felsökningsläge** under profilen (gäller bara enheten): visar server, serverns lagring, inloggning, krypteringsnyckel, senaste synk och felloggen med serverns svar. Felrapporten skickas i två steg – "Kopiera" och "Öppna e-post" – så den går att skicka även där e-postlänken inte öppnar något.
+- **Servern skyddar sig själv.** I produktion startar den inte utan en riktig `JWT_SECRET`, och den sparar på Railways volym automatiskt. Saknas volym varnar den i loggen och i felsökningsläget: utan volym försvinner alla konton vid varje deploy.
 - **Snabbare tidfält.** Skriv tiden direkt i fältet – "1645", "16:45", "16.45" eller "945" fungerar och mobilen visar sifferknappar. När du trycker i fältet töms det så du kan skriva direkt; lämnar du det utan att skriva står den gamla tiden kvar. Klockknappen bredvid öppnar telefonens eller datorns egen klocka, med tiden i 5-minuterssteg.
 - **Lunchfältet i schemat** går att tömma och skriva om – tidigare fastnade en nolla när man suddade.
 - **Rapporten räknar inte dagar före flexstart.** Börjar du mitt i en månad visar Rapport bara dagarna från din första registrering, inte hela månaden som arbetad enligt schema.

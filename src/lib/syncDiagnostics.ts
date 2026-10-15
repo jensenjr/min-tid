@@ -35,6 +35,11 @@ export type SyncErrorExplanation = {
    * The settings sheet then offers "Logga in igen", which keeps and merges local data.
    */
   relogin: boolean;
+  /**
+   * True when the account no longer exists on the server (404): the fix is to set sync up
+   * again from this device ("Aktivera synk igen"), which uploads the local data.
+   */
+  recreate?: boolean;
 };
 
 export function explainSyncError(f: SyncFailure | null): SyncErrorExplanation {
@@ -119,6 +124,25 @@ export function explainSyncError(f: SyncFailure | null): SyncErrorExplanation {
     };
   }
 
+  // 404 on an authenticated call: the session is valid but the account is gone — the
+  // server's data file was reset (e.g. redeployed without a persistent volume) or the
+  // account was removed after 60 days without activity.
+  if (status === 404) {
+    return {
+      headline: "Ditt synk-konto finns inte på servern",
+      cause:
+        "Servern känner inte igen kontot längre. Det händer om servern har nollställts eller om kontot tagits bort efter lång tids inaktivitet. Dina tider på den här enheten finns kvar.",
+      fixes: [
+        "Tryck ”Aktivera synk igen” och skapa kontot på nytt – gärna med samma användarnamn.",
+        "Allt som finns på den här enheten laddas upp till det nya kontot.",
+        "Har du fler enheter: logga in på dem med det nya kontot efteråt.",
+      ],
+      networkBlocked: false,
+      relogin: false,
+      recreate: true,
+    };
+  }
+
   if (status === 405) {
     return {
       headline: "Servern svarar fel",
@@ -198,22 +222,50 @@ const hhmm = (ms: number) =>
 const stamp = (ms: number) =>
   new Date(ms).toLocaleString("sv-SE", { dateStyle: "short", timeStyle: "short" });
 
-/**
- * Build the mailto: for a felanmälan. Includes what we know about the failure and
- * nothing else — never the sync token or the secret.
- */
-export function buildSyncReportMailto(opts: {
+/** What the debug panel knows about this device's sync session (no token, no key bytes). */
+export type SyncDebugContext = {
+  server?: string;
+  serverVersion?: string | null;
+  /** From GET /api/health; null = no answer. */
+  serverStorage?: "persistent" | "ephemeral" | "unknown" | null;
+  syncStatus?: string;
+  syncRev?: number | null;
+  tokenPresent?: boolean;
+  tokenExpiresAt?: number | null;
+  keyPresent?: boolean;
+  keyMatchesToken?: boolean;
+  keyId?: string | null;
+};
+
+export type SyncReportInput = {
   failure: SyncFailure | null;
   log: SyncFailure[];
   username?: string | null;
   version: string;
   lastSyncedAt?: number | null;
   pendingChanges: boolean;
-}): string {
-  const { failure, log, username, version, lastSyncedAt, pendingChanges } = opts;
+  debug?: SyncDebugContext;
+};
+
+export function storageText(s: SyncDebugContext["serverStorage"]): string {
+  if (s === "persistent") return "beständig";
+  if (s === "ephemeral") return "TILLFÄLLIG – alla konton försvinner vid nästa deploy";
+  if (s === "unknown") return "okänd (ingen Railway-volym att kontrollera)";
+  return "inget svar från /api/health";
+}
+
+const yesNo = (v: boolean | undefined) => (v === undefined ? "-" : v ? "ja" : "nej");
+const statusText = (s: number) => (s === 0 ? "ingen kontakt med servern" : "HTTP " + s);
+
+/**
+ * The felanmälan / felsökningsinfo as plain text — what "Kopiera" puts on the clipboard
+ * and what the mail body carries. Never includes the sync token or the secret.
+ */
+export function buildSyncReportText(opts: SyncReportInput): string {
+  const { failure, log, username, version, lastSyncedAt, pendingChanges, debug } = opts;
   const at = failure?.at ?? Date.now();
 
-  const lines = [
+  const lines: (string | null)[] = [
     "felanmälan app. får ingen sync.",
     "",
     "--- fellogg ---",
@@ -221,24 +273,40 @@ export function buildSyncReportMailto(opts: {
     `Tid:            ${stamp(at)}`,
     `Användare:      ${username ? "@" + username : "(ej inloggad på synk)"}`,
     failure
-      ? `Fel:            ${failure.status === 0 ? "ingen kontakt med servern" : "HTTP " + failure.status} (${failure.method} ${failure.path})`
+      ? `Fel:            ${statusText(failure.status)} (${failure.method} ${failure.path})`
       : "Fel:            (inget registrerat)",
     failure ? `Meddelande:     ${failure.message}` : null,
+    failure ? `Förklaring:     ${explainSyncError(failure).headline}` : null,
     `Nätverk:        ${failure ? (failure.online ? "online" : "offline") : "-"}`,
     `Senast synkat:  ${lastSyncedAt ? stamp(lastSyncedAt) : "aldrig"}`,
     `Osparade ändr.: ${pendingChanges ? "ja" : "nej"}`,
-    `Enhet:          ${typeof navigator !== "undefined" ? navigator.userAgent : "-"}`,
-  ].filter(Boolean) as string[];
+  ];
+  if (debug) {
+    lines.push(
+      `Server:         ${debug.server ?? "-"}${debug.serverVersion ? " (v" + debug.serverVersion + ")" : ""}`,
+      `Serverlagring:  ${storageText(debug.serverStorage)}`,
+      `Synkstatus:     ${debug.syncStatus ?? "-"}`,
+      `Server-rev:     ${debug.syncRev ? stamp(debug.syncRev) + " (" + debug.syncRev + ")" : "ingen"}`,
+      `Inloggning:     ${debug.tokenPresent ? "finns" + (debug.tokenExpiresAt ? ", giltig till " + stamp(debug.tokenExpiresAt) : "") : "saknas"}`,
+      `Nyckel på enh.: ${yesNo(debug.keyPresent)}${debug.keyPresent ? " (id " + (debug.keyId ?? "?") + (debug.keyMatchesToken === false ? ", TILLHÖR ANNAT KONTO" : "") + ")" : ""}`,
+    );
+  }
+  lines.push(`Enhet:          ${typeof navigator !== "undefined" ? navigator.userAgent : "-"}`);
 
   if (log.length > 1) {
     lines.push("", "Tidigare fel:");
     for (const e of log.slice(1)) {
       lines.push(
-        `  ${hhmm(e.at)}  ${e.status === 0 ? "ingen kontakt" : "HTTP " + e.status}  ${e.method} ${e.path}`,
+        `  ${hhmm(e.at)}  ${e.status === 0 ? "ingen kontakt" : "HTTP " + e.status}  ${e.method} ${e.path}  ${e.message}`,
       );
     }
   }
+  return (lines.filter((l) => l !== null) as string[]).join("\n");
+}
 
+/** mailto: for the felanmälan. Same text as buildSyncReportText. */
+export function buildSyncReportMailto(opts: SyncReportInput): string {
+  const at = opts.failure?.at ?? Date.now();
   const subject = `mintid sync error kl ${hhmm(at)}`;
-  return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(lines.join("\n"))}`;
+  return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(buildSyncReportText(opts))}`;
 }

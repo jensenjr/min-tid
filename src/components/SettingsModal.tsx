@@ -1,11 +1,8 @@
 import { useState, useEffect } from "react";
 import { syncChangeSecret, syncSendPhoneCode, syncVerifyPhone, SYNC_PHONE_KEY } from "../lib/sync";
-import {
-  explainSyncError,
-  buildSyncReportMailto,
-  SUPPORT_EMAIL,
-  type SyncFailure,
-} from "../lib/syncDiagnostics";
+import { explainSyncError, type SyncFailure } from "../lib/syncDiagnostics";
+import { useDebugMode } from "../lib/debugMode";
+import SyncDebugPanel from "./SyncDebugPanel";
 
 export type SettingsResult = {
   name: string;
@@ -30,6 +27,8 @@ export default function SettingsModal({
   onDisconnectSync,
   onDeleteSyncAccount,
   onOpenAutomation,
+  onRecreateSync,
+  syncRev = null,
   demo = false,
 }: {
   open: boolean;
@@ -51,6 +50,10 @@ export default function SettingsModal({
   onDisconnectSync: () => void;
   onDeleteSyncAccount: () => void;
   onOpenAutomation: () => void;
+  /** The account is gone from the server (404): drop the dead session and set sync up again. */
+  onRecreateSync?: () => void;
+  /** Last server revision this device has seen (debug panel). */
+  syncRev?: number | null;
   /** Demo mode: never touch the sync keys in localStorage. */
   demo?: boolean;
 }) {
@@ -82,6 +85,8 @@ export default function SettingsModal({
 
   // Sync troubleshooting panel (the "Läs mer" target from the red banner).
   const [showSyncHelp, setShowSyncHelp] = useState(false);
+  // "Felsökningsläge": device-local, reveals HTTP codes, session/key state and the report.
+  const [debugMode, setDebugMode] = useDebugMode();
 
   useEffect(() => {
     if (open) {
@@ -117,14 +122,6 @@ export default function SettingsModal({
 
   const explain = explainSyncError(syncFailure);
   const hasFailure = !!syncFailure;
-  const reportHref = buildSyncReportMailto({
-    failure: syncFailure,
-    log: syncErrorLog,
-    username: syncUsername,
-    version: __APP_VERSION__,
-    lastSyncedAt: syncedAt,
-    pendingChanges: !!dirty,
-  });
 
   function handleSave() {
     if (!name.trim()) {
@@ -253,6 +250,23 @@ export default function SettingsModal({
           placeholder="t.ex. Lager, Kontor…"
         />
 
+        <label className="flex items-center gap-3 rounded-[14px] border border-[#ece6df] bg-[#fdf6ee] px-4 py-3 mb-4 cursor-pointer">
+          <div className="flex-1 min-w-0">
+            <div className="text-[13px] font-bold text-[#2d1717]">Felsökningsläge</div>
+            <div className="text-[11px] text-[#9c7c5c] font-medium">
+              Visar teknisk info om synken och felrapport. Gäller bara den här enheten.
+            </div>
+          </div>
+          <input
+            type="checkbox"
+            role="switch"
+            aria-label="Felsökningsläge"
+            checked={debugMode}
+            onChange={(e) => setDebugMode(e.target.checked)}
+            className="w-5 h-5 accent-[#ff5f00] shrink-0"
+          />
+        </label>
+
         {/* Automation */}
         <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-2 mt-2">
           Automatisering
@@ -361,9 +375,10 @@ export default function SettingsModal({
                         hour: "2-digit",
                         minute: "2-digit",
                       })}
-                      {syncFailure!.status > 0
-                        ? ` · HTTP ${syncFailure!.status}`
-                        : " · ingen kontakt"}
+                      {debugMode &&
+                        (syncFailure!.status > 0
+                          ? ` · HTTP ${syncFailure!.status}`
+                          : " · ingen kontakt")}
                     </div>
                   </div>
                   <span className="text-[11px] font-bold" style={{ color: "#b91c1c" }}>
@@ -423,37 +438,56 @@ export default function SettingsModal({
                       >
                         Försök igen
                       </button>
-                      <a
-                        href={reportHref}
-                        style={{
-                          padding: "11px",
-                          borderRadius: "12px",
-                          background: "#dc2626",
-                          color: "white",
-                          fontWeight: 700,
-                          fontSize: "13px",
-                          textAlign: "center",
-                          textDecoration: "none",
-                        }}
-                      >
-                        Skicka fellogg
-                      </a>
-                    </div>
-                    {explain.relogin && (
-                      <button
-                        onClick={onSetupSync}
-                        className="w-full mt-2 py-[11px] rounded-[12px] bg-[#b91c1c] text-white text-[13px] font-bold"
-                      >
-                        Logga in igen
-                      </button>
-                    )}
-                    <div className="text-[10px] mt-2 text-center" style={{ color: "#9f1239" }}>
-                      Felloggen mejlas till {SUPPORT_EMAIL} — den innehåller tidpunkt, felkod och
-                      enhet, aldrig din synk-kod.
+                      {explain.recreate ? (
+                        <button
+                          onClick={onRecreateSync ?? onSetupSync}
+                          className="py-[11px] rounded-[12px] bg-[#dc2626] text-white text-[13px] font-bold"
+                        >
+                          Aktivera synk igen
+                        </button>
+                      ) : explain.relogin ? (
+                        <button
+                          onClick={onSetupSync}
+                          className="py-[11px] rounded-[12px] bg-[#dc2626] text-white text-[13px] font-bold"
+                        >
+                          Logga in igen
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setDebugMode(true);
+                            setTimeout(
+                              () =>
+                                document
+                                  .getElementById("sync-debug")
+                                  ?.scrollIntoView({ block: "center" }),
+                              60,
+                            );
+                          }}
+                          className="py-[11px] rounded-[12px] bg-white text-[13px] font-bold"
+                          style={{ border: "1.5px solid #fca5a5", color: "#b91c1c" }}
+                        >
+                          Visa detaljer
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}
               </div>
+            )}
+
+            {debugMode && !demo && (
+              <SyncDebugPanel
+                token={syncToken}
+                username={syncUsername}
+                syncStatus={syncStatus}
+                syncedAt={syncedAt}
+                syncRev={syncRev}
+                dirty={!!dirty}
+                failure={syncFailure}
+                log={syncErrorLog}
+                onPullNow={onPullNow}
+              />
             )}
 
             {/* PIN done banner */}
