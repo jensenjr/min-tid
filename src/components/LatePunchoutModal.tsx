@@ -190,7 +190,7 @@ export default function LatePunchoutModal({
             <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-2">
               Sluttid
             </div>
-            <div className="grid grid-cols-[1.4fr_1fr] gap-2" style={{ marginBottom: "10px" }}>
+            <div className="grid grid-cols-2 gap-2" style={{ marginBottom: "10px" }}>
               <input
                 type="date"
                 aria-label="Datum för sluttid"
@@ -207,7 +207,7 @@ export default function LatePunchoutModal({
                   if (v) setCustomEnd(`${customEnd.split("T")[0]}T${v}`);
                 }}
                 className=""
-                style={END_FIELD}
+                style={{ ...END_FIELD, marginBottom: 0 }}
               />
             </div>
 

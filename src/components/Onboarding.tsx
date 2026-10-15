@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   type DayKey,
   type DayConfig,
@@ -34,7 +34,7 @@ export type OnboardingResult = {
 
 type Step = "welcome" | "login" | "info" | "choice" | "schedule" | "sync";
 
-// ─── TimePicker — compact TimeField (own 5-min picker, no OS wheels) ─────
+// ─── TimePicker — compact TimeField (type a time, or tap the clock) ─────
 function TimePicker({
   value,
   onChange,
@@ -49,8 +49,10 @@ function TimePicker({
       value={value}
       onChange={onChange}
       disabled={disabled}
+      compact
       className=""
       style={{
+        flex: "0 0 58px",
         padding: "5px 0",
         borderRadius: "10px",
         border: "1.5px solid #ece6df",
@@ -59,7 +61,7 @@ function TimePicker({
         color: disabled ? "#c4b0a0" : "#2d1717",
         background: disabled ? "#f5f0ea" : "#fdf6ee",
         textAlign: "center",
-        width: "68px",
+        outline: "none",
       }}
     />
   );
@@ -75,17 +77,33 @@ function LunchInput({
   onChange: (v: number) => void;
   disabled?: boolean;
 }) {
+  // Text state so the field can be emptied while typing — a number-bound input snapped an
+  // emptied field straight back to "0" and you typed after it ("045").
+  const [text, setText] = useState(String(value));
+  const [focused, setFocused] = useState(false);
+  useEffect(() => {
+    if (!focused) setText(String(value));
+  }, [value, focused]);
+
   return (
     <input
-      type="number"
-      min={0}
-      max={90}
-      step={5}
-      value={value}
+      type="text"
+      inputMode="numeric"
+      maxLength={2}
+      aria-label="Lunch i minuter"
+      value={text}
       disabled={disabled}
+      onFocus={() => setFocused(true)}
       onChange={(e) => {
-        const v = Math.min(90, Math.max(0, parseInt(e.target.value) || 0));
-        onChange(v);
+        const digits = e.target.value.replace(/D/g, "");
+        setText(digits);
+        if (digits !== "") onChange(Math.min(90, parseInt(digits, 10)));
+      }}
+      onBlur={() => {
+        setFocused(false);
+        const v = text === "" ? 0 : Math.min(90, parseInt(text, 10));
+        setText(String(v));
+        if (v !== value) onChange(v);
       }}
       style={
         {
