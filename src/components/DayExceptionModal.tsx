@@ -89,7 +89,6 @@ export default function DayExceptionModal({
         <TimeField
           label="Ny sluttid"
           value={endTime}
-          defaultHour={15}
           onChange={(v) => {
             setEndTime(v);
             setErr("");

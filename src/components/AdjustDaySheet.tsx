@@ -130,7 +130,6 @@ export default function AdjustDaySheet({
           <TimeField
             label="Slut"
             value={end}
-            defaultHour={17}
             onChange={(v) => {
               setEnd(v);
               setErr("");

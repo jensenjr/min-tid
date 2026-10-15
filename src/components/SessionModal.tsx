@@ -225,7 +225,7 @@ export default function SessionModal({
               value={endTime}
               onChange={setEndTime}
               placeholder="Pågående"
-              defaultHour={17}
+              clearable
               style={{ marginBottom: endTime ? "8px" : "16px" }}
             />
             {endTime && (

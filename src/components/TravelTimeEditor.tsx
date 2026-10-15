@@ -226,7 +226,6 @@ export default function TravelTimeEditor({
                 <TimeField
                   label="Restid från"
                   value={draft.from}
-                  defaultHour={7}
                   onChange={(v) => setDraft({ ...draft, from: v })}
                 />
               </div>
@@ -235,7 +234,6 @@ export default function TravelTimeEditor({
                 <TimeField
                   label="Restid till"
                   value={draft.to}
-                  defaultHour={17}
                   onChange={(v) => setDraft({ ...draft, to: v })}
                 />
               </div>
