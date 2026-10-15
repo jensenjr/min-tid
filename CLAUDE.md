@@ -420,12 +420,25 @@ Phone endpoints (`/api/auth/phone`, `/phone/verify`, `/recover/request`) are unc
 
 ### Environment variables
 
-| Variable     | Default                           | Description                                                    |
-| ------------ | --------------------------------- | -------------------------------------------------------------- |
-| `PORT`       | `3001` (dev) / `3000` (prod)      | Port the server listens on                                     |
-| `JWT_SECRET` | `dev-secret-change-in-production` | **Must be overridden in production**                           |
-| `DATA_PATH`  | `server/data.json`                | Path to the JSON data file                                     |
-| `NODE_ENV`   | —                                 | Set to `production` to enable static file serving from `dist/` |
+All of them are documented in `.env.example`. Resolution lives in `server/config.js`
+(pure, tested in `server/__tests__/config.test.js`).
+
+| Variable                                        | Default                                                                   | Description                                                                                                |
+| ----------------------------------------------- | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `JWT_SECRET`                                    | dev default (development only)                                            | **Required in production**, ≥ 32 chars. The server exits on start if it is missing or a known placeholder. |
+| `NODE_ENV`                                      | —                                                                         | `production` serves `dist/` and enforces `JWT_SECRET`                                                      |
+| `PORT`                                          | `3001` (dev) / `3000` (prod)                                              | Port the server listens on                                                                                 |
+| `DATA_PATH`                                     | `$RAILWAY_VOLUME_MOUNT_PATH/data.json`, else `/app/data/data.json` (prod) | The JSON store. **There is no database** — this file must be on a persistent disk.                         |
+| `DATA_PERSISTENT`                               | —                                                                         | `1` = the data disk survives restarts outside Railway (docker-compose bind mount)                          |
+| `RAILWAY_VOLUME_MOUNT_PATH`                     | set by Railway                                                            | Present only when a volume is attached; the server stores `data.json` there                                |
+| `ELKS_API_USERNAME` / `_PASSWORD` / `ELKS_FROM` | —                                                                         | SMS recovery via 46elks; without them the code is logged (dev only)                                        |
+
+**Storage check.** `GET /api/health` (no auth) → `{ ok, version, storage }` where `storage` is
+`persistent` / `ephemeral` / `unknown`. On Railway without a volume the server logs
+`[config] VARNING: … ALLA KONTON FÖRSVINNER VID NÄSTA DEPLOY` and reports `ephemeral`; the app's
+debug panel (Felsökningsläge) shows it. That exact situation — every redeploy wiping data.json
+while phones kept valid tokens — is what produced `404 Användare inte hittad` on the first
+Railway test.
 
 ### How sync works in `PunchClock.tsx`
 
@@ -513,6 +526,18 @@ A 405 from `Allow: GET, HEAD` always means a static file server (Caddy or nginx)
 ---
 
 ## Deployment
+
+### Railway
+
+1. New service from the GitHub repo (branch `omtag/v1` for testing). The `Dockerfile` is used.
+2. **Volume**: add a Volume to the service with mount path `/app/data`. Without it every deploy
+   starts with no accounts.
+3. **Variables**: `JWT_SECRET` = a long random string (`openssl rand -base64 48`). Optional: the
+   46elks SMS variables.
+4. Deploy, then check the deploy log for `lagring persistent` (or open `/api/health`).
+
+Config-as-code (`railway.json`) is deprecated by Railway and cannot create or require volumes,
+so this repo has none — the server's startup check is the guard instead.
 
 ### Production (Coolify / Docker)
 

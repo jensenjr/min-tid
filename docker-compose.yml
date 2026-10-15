@@ -6,8 +6,10 @@ services:
     volumes:
       - ./data:/app/data
     environment:
-      JWT_SECRET: "change-this-to-a-long-random-string-in-production"
+      # Required: export JWT_SECRET (at least 32 random characters) before "docker compose up".
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET to a long random string}
       DATA_PATH: /app/data/data.json
+      DATA_PERSISTENT: "1" # ./data is a bind mount, so data.json survives restarts
       NODE_ENV: production
       PORT: 3000
     restart: unless-stopped

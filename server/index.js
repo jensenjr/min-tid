@@ -6,13 +6,22 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import fs from "node:fs";
 import { createCore, PROTOCOL_HEADER, PROTOCOL_VERSION } from "./core.js";
+import { resolveServerConfig } from "./config.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const PORT = parseInt(process.env.PORT ?? "3001", 10);
-const JWT_SECRET = process.env.JWT_SECRET ?? "dev-secret-change-in-production";
-const DATA_PATH = process.env.DATA_PATH ?? path.join(__dirname, "data.json");
-const PROD = process.env.NODE_ENV === "production";
+const CONFIG = resolveServerConfig(process.env, __dirname);
+for (const msg of CONFIG.fatal) console.error(`[config] FEL: ${msg}`);
+if (CONFIG.fatal.length) process.exit(1);
+for (const msg of CONFIG.warnings) console.warn(`[config] VARNING: ${msg}`);
+
+const PORT = CONFIG.port;
+const JWT_SECRET = CONFIG.jwtSecret;
+const DATA_PATH = CONFIG.dataPath;
+const PROD = CONFIG.prod;
+const SERVER_VERSION = JSON.parse(
+  fs.readFileSync(path.join(__dirname, "package.json"), "utf8"),
+).version;
 const BCRYPT_ROUNDS = 12;
 const INACTIVE_MS = 60 * 24 * 60 * 60 * 1000; // 60 days
 
@@ -223,6 +232,12 @@ const send = (res, r) => res.status(r.status).json(r.body);
 const isE2E = (req) => req.get(PROTOCOL_HEADER) === PROTOCOL_VERSION;
 
 // ─── GET /api/auth/salt?username=  →  { salt, encrypted }
+// Unauthenticated status for the app's debug panel and for uptime checks. Says whether
+// data.json survives a redeploy — never anything about accounts.
+app.get("/api/health", (_req, res) => {
+  res.json({ ok: true, version: SERVER_VERSION, storage: CONFIG.storage });
+});
+
 app.get("/api/auth/salt", (req, res) => {
   send(res, core.salt({ username: req.query.username }));
 });
@@ -395,5 +410,7 @@ app.use((err, req, res, _next) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`min-tid server :${PORT} (${PROD ? "production" : "development"})`);
+  console.log(
+    `min-tid server v${SERVER_VERSION} :${PORT} (${PROD ? "production" : "development"}) · data ${DATA_PATH} · lagring ${CONFIG.storage}`,
+  );
 });
