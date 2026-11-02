@@ -80,16 +80,26 @@ export default function AttendCard({
             </div>
             <div className="text-[12px] text-pc-muted font-medium mt-0.5 leading-snug">
               {monthPrompt.ready
-                ? `Månaden bekräftas och låses${monthPrompt.unconfirmedCount > 0 ? `. ${monthPrompt.unconfirmedCount} ej bekräftade dagar räknas enligt schema.` : "."}`
-                : `${monthPrompt.missingDays.length} ${monthPrompt.missingDays.length === 1 ? "dag saknas" : "dagar saknas"} — fyll i ${monthPrompt.missingDays.length === 1 ? "den" : "dem"} först.`}
+                ? "Alla dagar är genomgångna. Månaden bekräftas och låses."
+                : monthPrompt.missingDays.length > 0
+                  ? `${monthPrompt.missingDays.length} ${monthPrompt.missingDays.length === 1 ? "dag saknas" : "dagar saknas"} — fyll i ${monthPrompt.missingDays.length === 1 ? "den" : "dem"} först.`
+                  : `${monthPrompt.unconfirmedCount} ${monthPrompt.unconfirmedCount === 1 ? "dag är inte genomgången. Markera den" : "dagar är inte genomgångna. Markera dem"} (OK, sjuk, VAB …) innan du låser månaden.`}
             </div>
-            <button
-              onClick={() => actions.confirmMonth(monthPrompt.month)}
-              disabled={!monthPrompt.ready}
-              className="pc-press w-full mt-3 py-3 rounded-[14px] bg-pc-orange text-white font-bold text-[14px] disabled:opacity-40"
-            >
-              Bekräfta {monthName(monthPrompt.month)}
-            </button>
+            {monthPrompt.ready ? (
+              <button
+                onClick={() => actions.confirmMonth(monthPrompt.month)}
+                className="pc-press w-full mt-3 py-3 rounded-[14px] bg-pc-orange text-white font-bold text-[14px]"
+              >
+                Bekräfta {monthName(monthPrompt.month)}
+              </button>
+            ) : (
+              <button
+                onClick={() => actions.reviewMonth(monthPrompt.month)}
+                className="pc-press w-full mt-3 py-3 rounded-[14px] bg-pc-orange text-white font-bold text-[14px]"
+              >
+                Gå igenom {monthName(monthPrompt.month)}
+              </button>
+            )}
           </div>
         )}
 

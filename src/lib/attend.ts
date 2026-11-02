@@ -23,7 +23,7 @@ export function lateThresholdMs(cfg: DayConfig): number {
 
 export type MonthPrompt = {
   month: string; // YYYY-MM
-  ready: boolean; // confirmMonth would accept it (no missing days)
+  ready: boolean; // confirmMonth would accept it (no missing or unconfirmed days)
   missingDays: string[];
   unconfirmedCount: number;
 };
@@ -85,7 +85,7 @@ export function buildMonthPrompt(ctx: DayContext, today: string): MonthPrompt | 
   const r = computeFlex({ ...ctx, today }, { from: first, to: last });
   return {
     month,
-    ready: r.missingDays.length === 0,
+    ready: r.missingDays.length === 0 && r.unconfirmedDays.length === 0,
     missingDays: r.missingDays,
     unconfirmedCount: r.unconfirmedDays.length,
   };

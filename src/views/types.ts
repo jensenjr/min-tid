@@ -1,5 +1,6 @@
 // Contracts between the shell (PunchClock.tsx) and the four views.
 import type { ReactNode } from "react";
+import type { BulkStatus } from "../lib/bulk";
 import type { Report, ReportPeriod } from "../lib/report";
 import type { AbsenceEntry, ExpenseEntry, Session } from "../lib/types";
 
@@ -30,6 +31,10 @@ export type DayActions = {
   unlockMonth: (month: string) => void;
   /** Remove the "Justera dag" adjustment of a day. */
   removeAdjustment: (date: string) => void;
+  /** "Välj dagar": set one status on many days (lib/bulk.ts); locked days are skipped. */
+  bulkStatus: (days: string[], status: BulkStatus) => void;
+  /** Open the calendar on a month in "Välj dagar" mode, to go through its days. */
+  reviewMonth: (month: string) => void;
 };
 
 /**

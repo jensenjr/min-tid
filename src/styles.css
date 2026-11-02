@@ -373,6 +373,20 @@
     animation: pcDialog 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
   }
 }
+/* Kalender day cells. A phone keeps 44px rows. From md up a row grows with the
+ * window HEIGHT (what is left after the header, month bar, weekdays and legend,
+ * shared by up to six weeks), so the month fills the screen downwards instead of
+ * only stretching sideways. Capped so a tall 1440p window does not blow it up;
+ * at a high browser zoom the viewport is short and the rows fall back to 44px. */
+.pc-cal-cell {
+  min-height: 44px;
+}
+@media (min-width: 768px) {
+  .pc-cal-cell {
+    height: clamp(44px, calc((100dvh - 360px) / 6), 96px);
+  }
+}
+
 @keyframes pcDialog {
   from {
     opacity: 0;

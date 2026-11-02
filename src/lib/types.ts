@@ -52,6 +52,15 @@ export type DayAdjustment = {
 // unregistered day in a locked month reads as reported per schedule.
 export type LockedMonth = { at: number; by: string };
 
+/** A manual ± change of the flex balance (lib/flexAdjust.ts). */
+export type FlexAdjustment = {
+  id: string;
+  date: string; // YYYY-MM-DD — the day it counts from
+  minutes: number; // signed, never 0
+  note?: string;
+  at: number; // when it was entered (ms)
+};
+
 export type AuditAction = "confirm" | "unlock";
 export type AuditEntry = { at: number; action: AuditAction; month: string }; // month: YYYY-MM
 
@@ -103,4 +112,5 @@ export type AppState = {
   travelRules?: TravelRules;
   vacation?: VacationSettings;
   flexBaseDate?: string;
+  flexAdjustments?: FlexAdjustment[]; // manual ± changes of the balance, oldest first
 };

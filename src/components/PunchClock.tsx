@@ -1,7 +1,7 @@
 import { lazy, Suspense, useState, useEffect, useRef, type ReactNode } from "react";
 import Onboarding, { type OnboardingResult } from "./Onboarding";
 import ScheduleEditorModal from "./schedule/ScheduleEditorModal";
-import AbsenceModal, { type AbsenceEntry } from "./AbsenceModal";
+import AbsenceModal, { ABSENCE_META, type AbsenceEntry } from "./AbsenceModal";
 import ExpenseModal, { type ExpenseEntry } from "./ExpenseModal";
 import SettingsModal from "./SettingsModal";
 import SyncModal from "./SyncModal";
@@ -10,6 +10,7 @@ import LatePunchoutModal from "./LatePunchoutModal";
 import AutomationModal from "./AutomationModal";
 import SessionModal, { type DayBlock } from "./SessionModal";
 import DayExceptionModal from "./DayExceptionModal";
+import ThemeToggle from "./ThemeToggle";
 import AdjustDaySheet from "./AdjustDaySheet";
 import ConfirmSheet from "./ConfirmSheet";
 import { ScheduleBanner } from "./dayUi";
@@ -66,6 +67,7 @@ import {
 import { ymdLocal, todayLocal as todayStr, getWeekMonday, isYmd } from "../lib/dates";
 import {
   evaluateDay,
+  fmtSignedDuration,
   liveDayDelta,
   resolveReportingMode,
   sessionsOn,
@@ -85,6 +87,8 @@ import {
   unlockMonth,
 } from "../lib/confirm";
 import { buildAttend, lateThresholdMs } from "../lib/attend";
+import { applyBulkStatus } from "../lib/bulk";
+import { mergeFlexAdjustments, parseFlexAdjustments } from "../lib/flexAdjust";
 import {
   DEFAULT_TRAVEL_RULES,
   makeTravelFor,
@@ -99,6 +103,7 @@ import type {
   ReportingMode,
   AuditEntry,
   DayAdjustment,
+  FlexAdjustment,
   LockedMonth,
   VacationSettings,
   TravelEntry,
@@ -161,6 +166,7 @@ function load(demo: boolean): StorageShape {
       travelRules: travelState.travelRules,
       flexBaseMinutes: typeof p.flexBaseMinutes === "number" ? p.flexBaseMinutes : 0,
       flexBaseDate: isYmd(p.flexBaseDate) ? p.flexBaseDate : undefined,
+      flexAdjustments: parseFlexAdjustments(p.flexAdjustments),
       vacation: parseVacation(p.vacation),
       trackingStartDate,
       scheduleExceptions:
@@ -229,6 +235,7 @@ function mergeSyncState(server: SyncState, local: SyncState): SyncState {
     reportingMode: local.reportingMode ?? server.reportingMode,
     flexBaseMinutes: local.flexBaseMinutes,
     flexBaseDate: local.flexBaseDate,
+    flexAdjustments: mergeFlexAdjustments(server.flexAdjustments, local.flexAdjustments),
     vacation: parseVacation(local.vacation) ?? parseVacation(server.vacation),
     trackingStartDate,
     sessions: mergeById(
@@ -312,6 +319,9 @@ export default function PunchClock() {
   const [flexBaseMinutes, setFlexBaseMinutes] = useState(boot.flexBaseMinutes ?? 0);
   // The balance above is at the END of this day (Excel import "Saldon"); flex accrues after it.
   const [flexBaseDate, setFlexBaseDate] = useState<string | undefined>(boot.flexBaseDate);
+  const [flexAdjustments, setFlexAdjustments] = useState<FlexAdjustment[]>(
+    boot.flexAdjustments ?? [],
+  );
   const [importModal, setImportModal] = useState(false);
   const [trackingStartDate, setTrackingStartDate] = useState<string | undefined>(
     boot.trackingStartDate,
@@ -327,6 +337,12 @@ export default function PunchClock() {
     month: string;
   } | null>(null);
   const [focusExpenses, setFocusExpenses] = useState(false);
+  // "Gå igenom månaden": opens Kalender on a month in "Välj dagar" mode; `n` remounts it.
+  const [calendarOpen, setCalendarOpen] = useState<{ month: string; n: number } | null>(null);
+  // Leaving the tab forgets it, so the nav opens the calendar as usual next time.
+  useEffect(() => {
+    if (view !== "calendar") setCalendarOpen(null);
+  }, [view]);
   // Demo never reads the sync keys: no token, no revision, no error log.
   const [syncToken, setSyncToken] = useState<string | null>(() =>
     demo ? null : localStorage.getItem(SYNC_TOKEN_KEY),
@@ -494,6 +510,7 @@ export default function PunchClock() {
     setTravelRules(ts.travelRules);
     setFlexBaseMinutes(typeof s.flexBaseMinutes === "number" ? s.flexBaseMinutes : 0);
     setFlexBaseDate(isYmd(s.flexBaseDate) ? s.flexBaseDate : undefined);
+    setFlexAdjustments(parseFlexAdjustments(s.flexAdjustments));
     setVacation(parseVacation(s.vacation));
     setTrackingStartDate(s.trackingStartDate);
     setScheduleExceptions(
@@ -612,6 +629,7 @@ export default function PunchClock() {
         travelRules,
         flexBaseMinutes,
         flexBaseDate,
+        flexAdjustments,
         vacation,
         trackingStartDate,
         scheduleExceptions,
@@ -636,6 +654,7 @@ export default function PunchClock() {
       travelRules,
       flexBaseMinutes,
       flexBaseDate,
+      flexAdjustments,
       vacation,
       trackingStartDate,
       scheduleExceptions,
@@ -665,6 +684,7 @@ export default function PunchClock() {
     travelRules,
     flexBaseMinutes,
     flexBaseDate,
+    flexAdjustments,
     vacation,
     trackingStartDate,
     scheduleExceptions,
@@ -903,6 +923,18 @@ export default function PunchClock() {
     showToast("Dagen är justerad.");
   }
 
+  // Manual flex adjustments ("Justera saldo" in the flex sheet). Blocked in a locked month
+  // like every other edit of a day.
+  function addFlexAdjustment(adj: FlexAdjustment) {
+    if (blockIfLocked(adj.date)) return;
+    setFlexAdjustments((prev) => parseFlexAdjustments([...prev, adj]));
+    showToast(`Flexsaldot är justerat ${fmtSignedDuration(adj.minutes)}.`);
+  }
+  function deleteFlexAdjustment(adj: FlexAdjustment) {
+    if (blockIfLocked(adj.date)) return;
+    setFlexAdjustments((prev) => prev.filter((a) => a.id !== adj.id));
+  }
+
   function handleSaveExpense(entry: ExpenseEntry) {
     setExpenses((prev) => [...prev, entry]);
     setExpenseModal(false);
@@ -915,7 +947,6 @@ export default function PunchClock() {
     const res = confirmMonth(month, flexCtx, { at: Date.now(), by: name, auditLog });
     if (res.ok) {
       anchorTracking(todayStr());
-      setConfirmedDays(res.confirmedDays);
       setLockedMonths(res.lockedMonths);
       setAuditLog(res.auditLog);
       showToast(`${monthTitle(month)} är bekräftad och låst.`);
@@ -923,6 +954,11 @@ export default function PunchClock() {
       const n = res.missingDays.length;
       showToast(
         `${n} ${n === 1 ? "dag saknas" : "dagar saknas"} — fyll i ${n === 1 ? "den" : "dem"} först.`,
+      );
+    } else if (res.reason === "unreviewed-days") {
+      const n = res.unreviewedDays.length;
+      showToast(
+        `${n} ${n === 1 ? "dag är inte genomgången" : "dagar är inte genomgångna"} — markera ${n === 1 ? "den" : "dem"} först.`,
       );
     } else if (res.reason === "locked") {
       showToast("Månaden är redan låst.");
@@ -998,6 +1034,45 @@ export default function PunchClock() {
         return next;
       });
       setAdjustDate(null);
+    },
+    bulkStatus(days, status) {
+      const r = applyBulkStatus(days, status, {
+        absences,
+        confirmedDays,
+        lockedMonths,
+        schedule: schedules,
+        exceptions: scheduleExceptions,
+        today: todayStr(),
+      });
+      const n = r.changed.length;
+      if (n > 0) {
+        if (status.kind !== "clear") anchorTracking(r.changed[0]);
+        setAbsences(r.absences);
+        setConfirmedDays(r.confirmedDays);
+      }
+      const dagar = (k: number) => `${k} ${k === 1 ? "dag" : "dagar"}`;
+      const what =
+        status.kind === "ok"
+          ? "✓ OK"
+          : status.kind === "absence"
+            ? `${ABSENCE_META[status.category].emoji} ${ABSENCE_META[status.category].label}`
+            : "Status borttagen";
+      const notes: string[] = [];
+      // Days off inside an absence period are part of it, so only "OK" reports them.
+      if (status.kind === "ok" && r.skipped.off.length) {
+        notes.push(`${dagar(r.skipped.off.length)} utan schema`);
+      }
+      if (r.skipped.future.length) notes.push(`${dagar(r.skipped.future.length)} framåt i tiden`);
+      if (r.skipped.locked.length) notes.push(`${dagar(r.skipped.locked.length)} i låst månad`);
+      showToast(
+        n > 0
+          ? `${what} på ${dagar(n)}${notes.length ? ` · hoppade över ${notes.join(", ")}` : ""}`
+          : `Inget ändrades${notes.length ? ` · ${notes.join(", ")}` : ""}`,
+      );
+    },
+    reviewMonth(month) {
+      setCalendarOpen((prev) => ({ month, n: (prev?.n ?? 0) + 1 }));
+      setView("calendar");
     },
   };
 
@@ -1191,6 +1266,7 @@ export default function PunchClock() {
     lockedMonths,
     dayAdjustments,
     flexBaseDate,
+    flexAdjustments,
     // Restid: fills evaluateDay's `travel` field. Does not touch flexDelta (see travel.ts).
     travelFor: makeTravelFor(travel, travelRules),
   };
@@ -1487,12 +1563,15 @@ export default function PunchClock() {
                 </div>
               </div>
             </div>
-            {isIn && (
-              <div className="shrink-0 flex items-center gap-1.5 bg-pc-orange/10 text-pc-orange-deep px-3 py-1.5 rounded-full">
-                <span className="w-2 h-2 rounded-full bg-pc-orange animate-pulse" />
-                <span className="text-[12px] font-bold">LIVE</span>
-              </div>
-            )}
+            <div className="shrink-0 flex items-center gap-2">
+              {isIn && (
+                <div className="shrink-0 flex items-center gap-1.5 bg-pc-orange/10 text-pc-orange-deep px-3 py-1.5 rounded-full">
+                  <span className="w-2 h-2 rounded-full bg-pc-orange animate-pulse" />
+                  <span className="text-[12px] font-bold">LIVE</span>
+                </div>
+              )}
+              <ThemeToggle />
+            </div>
           </header>
 
           {showSyncErrorBanner && (
@@ -1557,7 +1636,15 @@ export default function PunchClock() {
                 />
               )}
 
-              {view === "calendar" && <Calendar ctx={flexCtx} actions={actions} />}
+              {view === "calendar" && (
+                <Calendar
+                  key={calendarOpen?.n ?? 0}
+                  ctx={flexCtx}
+                  actions={actions}
+                  initialMonth={calendarOpen?.month}
+                  initialSelect={!!calendarOpen}
+                />
+              )}
 
               {view === "report" && (
                 <Report
@@ -1810,6 +1897,11 @@ export default function PunchClock() {
         trackingStartDate={trackingStartDate}
         weeks={computeWeeklyFlex(flexCtx, 12)}
         total={flexTotal}
+        today={todayDate}
+        adjustments={flexAdjustments}
+        isLocked={isLocked}
+        onAddAdjustment={addFlexAdjustment}
+        onDeleteAdjustment={deleteFlexAdjustment}
       />
 
       {latePunchoutOpen && activeSession && (
@@ -1844,7 +1936,7 @@ export default function PunchClock() {
         text={
           confirmSheet?.kind === "unlock"
             ? "Du kan ändra dagarna i månaden igen. Dagar du bekräftat förblir bekräftade, och upplåsningen sparas i loggen."
-            : "Dagar som inte är bekräftade räknas enligt schema och månaden låses. Du kan inte ändra dagarna förrän du låser upp den igen."
+            : "Alla dagar hittills är genomgångna. Månaden låses och du kan inte ändra dagarna förrän du låser upp den igen. Dagar som återstår i månaden räknas enligt schema."
         }
         confirmLabel={confirmSheet?.kind === "unlock" ? "Lås upp" : "Bekräfta och lås"}
         danger={confirmSheet?.kind === "unlock"}

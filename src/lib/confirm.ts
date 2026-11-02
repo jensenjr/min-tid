@@ -6,10 +6,13 @@
 //   user edit sessions, absences, adjustments or confirmations on a locked day.
 // - evaluateDay reads an unregistered scheduled day in a locked month as "reported" per
 //   schedule (never missing/unconfirmed). Registered days keep their real values.
+// - Every past day must be gone through before the month can be locked: confirmMonth
+//   refuses while a day is missing (punch) or unconfirmed (schedule) and lists them. The
+//   user marks them (Enligt schema, an absence, an adjustment, "Välj dagar" in the
+//   calendar); locking never confirms days on its own, so it cannot be a blind click.
 // - A month can be confirmed before it ends (the "Bekräfta oktober" prompt from the
-//   25th): the past unconfirmed days are marked confirmed; the remaining days of the
-//   month then read as per schedule once they have passed, unless something is
-//   registered on them.
+//   25th): the remaining days of the month then read as per schedule once they have
+//   passed, unless something is registered on them.
 // - unlockMonth removes the lock and logs it. Confirmed days stay confirmed; days that
 //   were only covered by the lock become missing/unconfirmed again.
 import { addDaysStr } from "./schedule";
@@ -65,20 +68,44 @@ export function unconfirmDay(
 
 // ─── Months ───────────────────────────────────────────────────
 export type ConfirmMonthResult =
-  | {
-      ok: true;
-      confirmed: string[]; // days newly marked confirmed
-      confirmedDays: Record<string, true>;
-      lockedMonths: Record<string, LockedMonth>;
-      auditLog: AuditEntry[];
-    }
+  | { ok: true; lockedMonths: Record<string, LockedMonth>; auditLog: AuditEntry[] }
   | { ok: false; reason: "missing-days"; missingDays: string[] }
+  | { ok: false; reason: "unreviewed-days"; unreviewedDays: string[] }
   | { ok: false; reason: "locked" | "future" | "invalid-month" };
 
+export type MonthReview = {
+  /** Past scheduled days (up to today) that need a status. */
+  total: number;
+  /** Of those, the ones that have one (reported, absent, partial). */
+  reviewed: number;
+  /** Missing (punch) or unconfirmed (schedule) days, sorted. */
+  open: string[];
+};
+
 /**
- * Confirm and lock a month ("YYYY-MM"). Every unconfirmed day up to today is marked
- * confirmed. Refuses while the month has missing days (punch mode), when it is already
- * locked, or when it has not started yet.
+ * How far the user has gone through a month: every scheduled day from the flex start up
+ * to today that is settled vs. still missing/unconfirmed. Today counts once it is settled.
+ */
+export function monthReview(month: string, ctx: DayContext): MonthReview {
+  const today = ctx.today ?? todayLocal();
+  const { first, last } = monthRange(month);
+  const c: DayContext = { ...ctx, today, now: ctx.now ?? Date.now() };
+  const end = last < today ? last : today;
+  const open: string[] = [];
+  let total = 0;
+  for (let d = first; d <= end; d = addDaysStr(d, 1)) {
+    const { status } = evaluateDay(d, c, { explain: false });
+    if (status === "off" || status === "ongoing") continue;
+    total++;
+    if (status === "missing" || status === "unconfirmed") open.push(d);
+  }
+  return { total, reviewed: total - open.length, open };
+}
+
+/**
+ * Confirm and lock a month ("YYYY-MM"). Refuses while the month has missing days (punch
+ * mode) or unconfirmed days (schedule mode) — the user goes through every day first —
+ * when it is already locked, or when it has not started yet.
  */
 export function confirmMonth(
   month: string,
@@ -93,21 +120,18 @@ export function confirmMonth(
 
   const c: DayContext = { ...ctx, today, now: ctx.now ?? Date.now() };
   const end = last < today ? last : today;
-  const confirmed: string[] = [];
+  const unreviewedDays: string[] = [];
   const missingDays: string[] = [];
   for (let d = first; d <= end; d = addDaysStr(d, 1)) {
     const { status } = evaluateDay(d, c, { explain: false });
-    if (status === "unconfirmed") confirmed.push(d);
+    if (status === "unconfirmed") unreviewedDays.push(d);
     else if (status === "missing") missingDays.push(d);
   }
   if (missingDays.length > 0) return { ok: false, reason: "missing-days", missingDays };
+  if (unreviewedDays.length > 0) return { ok: false, reason: "unreviewed-days", unreviewedDays };
 
-  const confirmedDays = { ...(ctx.confirmedDays ?? {}) };
-  for (const d of confirmed) confirmedDays[d] = true;
   return {
     ok: true,
-    confirmed,
-    confirmedDays,
     lockedMonths: { ...(ctx.lockedMonths ?? {}), [month]: { at: opts.at, by: opts.by } },
     auditLog: sortAudit([...(opts.auditLog ?? []), { at: opts.at, action: "confirm", month }]),
   };
