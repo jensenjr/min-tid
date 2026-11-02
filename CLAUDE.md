@@ -60,10 +60,12 @@ localStorage["sync_dirty"]    = "1"       // local edits the server hasn't ackno
 localStorage["sync_error_log"] = [...]    // last 10 sync failures (device-local, never synced)
 localStorage["punchclock_import_undo"] = {...}  // one pre-import snapshot (device-local, never synced)
 localStorage["punchclock_banner_dismissed"]     // per-day schedule-banner dismissals (device-local)
+localStorage["min-tid-theme"]  = "light"|"dark"  // absent = follow the device (device-local, see "Theme")
+localStorage["min-tid-accent"] = "hav"|…         // Färgtema; absent = orange (device-local)
 IndexedDB "min-tid-sync" / "keys"               // the sync encryption key (src/lib/keyStore.ts)
 ```
 
-Everything except the sync, undo and banner keys and IndexedDB is synced (as `SyncState`, encrypted). `onboardingDone` is never synced.
+Everything except the sync, undo, banner and theme keys and IndexedDB is synced (as `SyncState`, encrypted). `onboardingDone` is never synced.
 
 `trackingStartDate` (YYYY-MM-DD, optional) anchors flex accrual. It is set by the first registration (first punch-in, or "Enligt schema", an adjustment, a confirmation, added time or an absence; see "Flex anchor" below); for migrating users it's backfilled in `load()` from the earliest session date so historic flex stays sensible. It round-trips through sync (`SyncState.trackingStartDate`).
 
@@ -81,6 +83,15 @@ The bottom nav is **not** `fixed bottom-0` — that breaks on mobile Safari when
 - `<main>`: `flex-1 min-h-0 overflow-y-auto`
 
 This keeps the nav anchored to the visible viewport bottom while only the main area scrolls. Don't reintroduce `min-h-screen` + `fixed bottom-0`.
+
+### Desktop layout (md and up)
+
+Taken from Bytefest-app's DESIGN.md ("phone AND desktop, equally"). Below `md` (768 px) the app is the 480 px column above. From `md`:
+
+- The bottom nav is `md:hidden`; a left sidebar (`<aside>`, `SideNavItem`) holds the logo and Idag / Kalender / Rapport / Mer.
+- Header, sync banner and `<main>`'s content share one centred column: `md:max-w-3xl lg:max-w-5xl` (main keeps full width so its scrollbar sits at the window edge).
+- Views use the width: Today is two columns at `lg` (the day left, flex + "Att åtgärda" right); Mer puts its groups in two columns.
+- Every bottom sheet becomes a centred dialog (`md:items-center`, `md:max-w-[560px]`, `md:rounded-[28px]`, the drag handle `md:hidden`); `.pc-sheet` gets a fade-in instead of the slide-up (styles.css). New sheets: use `Sheet` from `ui.tsx`, or copy those classes.
 
 ### Navigation & views (PR 5)
 
@@ -313,7 +324,15 @@ useEffect(() => {
 
 ### Styling
 
-Tailwind CSS v4 with custom `pc-*` design tokens defined in `src/styles.css`. Key tokens: `pc-orange` (#ff5f00 — primary), `pc-ink` (#2d1717 — body text), `pc-bg` (#faf6f1 — background). All components use inline styles for dynamic values and Tailwind classes for layout/spacing.
+Tailwind CSS v4 with custom `pc-*` design tokens defined in `src/styles.css`. Key tokens: `pc-orange` (accent, #ff5f00 by default), `pc-ink` (body text), `pc-bg` (page), `pc-surface` (cards, sheets), `pc-apricot` (inputs, subtle fills), `pc-line`, `pc-muted`, `pc-taupe`, `pc-solid` (dark chip behind white text). All components use inline styles for dynamic values and Tailwind classes for layout/spacing.
+
+**Never write a raw colour in a component.** Use the tokens: `bg-pc-surface` (not `bg-white`), `text-pc-ink`, or `var(--pc-…)` in inline styles; the accent glow is `rgb(var(--pc-orange-rgb) / 0.4)`. Status colours (`--pc-danger*`, `--pc-ok*`) exist as tokens, and Tailwind's `red/amber/green/blue/gray/emerald` palette classes are re-mapped under `.dark` in styles.css, so `bg-amber-50 text-amber-800` works in both themes. `text-white` stays white (it sits on the accent). Exceptions: the print windows (RecoveryKeySheet, AutomationModal QR signs) and the brown "incheckad" clock gradient keep fixed colours.
+
+### Theme (`src/lib/theme.ts`, ported from Bytefest-app)
+
+- **Light/dark:** `.dark` on `<html>`. Choice in Mer → Utseende: "Följ enheten" (default, follows `prefers-color-scheme` live), "Ljust", "Mörkt". `index.html` runs `THEME_BOOT_SCRIPT` inline before first paint (no flash); `theme.test.ts` keeps the copy equal — after changing the script, paste the new output into index.html. `startThemeSync()` in `main.tsx` follows the device and other tabs. `color-scheme` is set per theme so native time pickers and scrollbars match.
+- **Färgtema:** `data-accent` on `<html>` = `hav` / `skog` / `ljung` / `hallon` (absent = orange). Each accent overrides the accent family (`--pc-orange`, `-rgb`, `-deep`, `-end`, `tangerine`, `peach`, `orange-tint/-line/-ink`) for light and for `.dark` in styles.css; the warm neutrals stay. Adding one: a row in `ACCENTS` plus both CSS blocks (the test checks).
+- Both are device-local display preferences: never synced, and also used in demo mode (they are not data).
 
 ---
 

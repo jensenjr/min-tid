@@ -55,11 +55,11 @@ function TimePicker({
         flex: "0 0 58px",
         padding: "5px 0",
         borderRadius: "10px",
-        border: "1.5px solid #ece6df",
+        border: "1.5px solid var(--pc-line)",
         fontSize: "15px",
         fontWeight: 700,
-        color: disabled ? "#c4b0a0" : "#2d1717",
-        background: disabled ? "#f5f0ea" : "#fdf6ee",
+        color: disabled ? "var(--pc-line-strong)" : "var(--pc-ink)",
+        background: disabled ? "var(--pc-apricot)" : "var(--pc-apricot)",
         textAlign: "center",
         outline: "none",
       }}
@@ -110,11 +110,11 @@ function LunchInput({
           width: "44px",
           padding: "5px 4px",
           borderRadius: "10px",
-          border: "1.5px solid #ece6df",
+          border: "1.5px solid var(--pc-line)",
           fontSize: "15px",
           fontWeight: 700,
-          color: disabled ? "#c4b0a0" : "#9a6a3a",
-          background: disabled ? "#f5f0ea" : "#fff3ec",
+          color: disabled ? "var(--pc-line-strong)" : "var(--pc-taupe)",
+          background: disabled ? "var(--pc-apricot)" : "var(--pc-orange-tint)",
           outline: "none",
           textAlign: "center",
           boxSizing: "border-box",
@@ -175,7 +175,7 @@ export function WeekScheduleEditor({
           <LunchInput value={bulkLunch} onChange={setBulkLunch} />
           <button
             onClick={applyBulk}
-            className="ml-auto shrink-0 px-3 py-1.5 rounded-[10px] border border-pc-orange text-pc-orange font-bold text-[12px] bg-white active:scale-[0.97] transition-transform"
+            className="ml-auto shrink-0 px-3 py-1.5 rounded-[10px] border border-pc-orange text-pc-orange font-bold text-[12px] bg-pc-surface active:scale-[0.97] transition-transform"
           >
             Tillämpa
           </button>
@@ -191,28 +191,28 @@ export function WeekScheduleEditor({
         return (
           <div
             key={key}
-            className="bg-white rounded-[16px] px-3 py-2.5 border border-pc-line transition-opacity"
+            className="bg-pc-surface rounded-[16px] px-3 py-2.5 border border-pc-line transition-opacity"
             style={{ opacity: cfg.active ? 1 : 0.45 }}
           >
             {/* Row 1: day label · net duration · toggle */}
             <div className="flex items-center justify-between mb-2">
               <span
                 className="text-[14px] font-extrabold"
-                style={{ color: isWeekend ? "#c4a882" : "#2d1717" }}
+                style={{ color: isWeekend ? "var(--pc-sand)" : "var(--pc-ink)" }}
               >
                 {DAY_LABEL_SHORT[key]}
               </span>
               <div className="flex items-center gap-2">
                 <span
                   className="text-[12px] font-bold tabular-nums"
-                  style={{ color: cfg.active ? "#9a6a3a" : "#c4b0a0" }}
+                  style={{ color: cfg.active ? "var(--pc-taupe)" : "var(--pc-line-strong)" }}
                 >
                   {cfg.active ? fmtMin(net) : "—"}
                 </span>
                 <button
                   onClick={() => setDay(key, { active: !cfg.active })}
                   className="shrink-0 w-8 h-8 rounded-xl flex items-center justify-center transition-colors"
-                  style={{ background: cfg.active ? "#ff5f00" : "#f0e8df" }}
+                  style={{ background: cfg.active ? "var(--pc-orange)" : "var(--pc-line-2)" }}
                   aria-label={cfg.active ? "Inaktivera" : "Aktivera"}
                 >
                   {cfg.active ? (
@@ -232,7 +232,7 @@ export function WeekScheduleEditor({
                       viewBox="0 0 24 24"
                       className="w-4 h-4"
                       fill="none"
-                      stroke="#c4b0a0"
+                      stroke="var(--pc-line-strong)"
                       strokeWidth="2.5"
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -340,7 +340,7 @@ export default function Onboarding({ onComplete }: { onComplete: (r: OnboardingR
         <div className="w-full space-y-3">
           <button
             onClick={() => setStep("info")}
-            className="pc-press w-full text-left bg-white border border-pc-line rounded-[20px] px-5 py-4 flex items-start gap-4 shadow-[0_2px_12px_rgba(81,43,43,0.04)]"
+            className="pc-press w-full text-left bg-pc-surface border border-pc-line rounded-[20px] px-5 py-4 flex items-start gap-4 shadow-[0_2px_12px_rgba(81,43,43,0.04)]"
           >
             <span className="text-[26px] leading-none mt-0.5 shrink-0">✨</span>
             <div className="flex-1">
@@ -366,7 +366,7 @@ export default function Onboarding({ onComplete }: { onComplete: (r: OnboardingR
 
           <button
             onClick={() => setStep("login")}
-            className="pc-press w-full text-left bg-white border border-pc-line rounded-[20px] px-5 py-4 flex items-start gap-4 shadow-[0_2px_12px_rgba(81,43,43,0.04)]"
+            className="pc-press w-full text-left bg-pc-surface border border-pc-line rounded-[20px] px-5 py-4 flex items-start gap-4 shadow-[0_2px_12px_rgba(81,43,43,0.04)]"
           >
             <span className="text-[26px] leading-none mt-0.5 shrink-0">☁️</span>
             <div className="flex-1">
@@ -494,7 +494,7 @@ export default function Onboarding({ onComplete }: { onComplete: (r: OnboardingR
         <div className="w-full space-y-3">
           <button
             onClick={() => setStep("schedule")}
-            className="pc-press w-full text-left bg-white border border-pc-line rounded-[20px] px-5 py-4 flex items-start gap-4 shadow-[0_2px_12px_rgba(81,43,43,0.04)]"
+            className="pc-press w-full text-left bg-pc-surface border border-pc-line rounded-[20px] px-5 py-4 flex items-start gap-4 shadow-[0_2px_12px_rgba(81,43,43,0.04)]"
           >
             <span className="text-[26px] leading-none mt-0.5 shrink-0">🗓️</span>
             <div className="flex-1">
@@ -523,7 +523,7 @@ export default function Onboarding({ onComplete }: { onComplete: (r: OnboardingR
               setSchedule(DEFAULT_SCHEDULE);
               setStep("sync");
             }}
-            className="pc-press w-full text-left bg-white border border-pc-line rounded-[20px] px-5 py-4 flex items-start gap-4 shadow-[0_2px_12px_rgba(81,43,43,0.04)]"
+            className="pc-press w-full text-left bg-pc-surface border border-pc-line rounded-[20px] px-5 py-4 flex items-start gap-4 shadow-[0_2px_12px_rgba(81,43,43,0.04)]"
           >
             <span className="text-[26px] leading-none mt-0.5 shrink-0">⚡</span>
             <div className="flex-1">
@@ -605,22 +605,22 @@ function Screen({ children, scroll = false }: { children: React.ReactNode; scrol
         .pc-press { transition: transform 0.15s; }
         .ob-input {
           width:100%; padding:14px 16px; border-radius:16px;
-          border:1.5px solid #ece6df; font-size:16px; outline:none;
-          background:#fdf6ee; font-weight:600; color:#2d1717;
+          border:1.5px solid var(--pc-line); font-size:16px; outline:none;
+          background:var(--pc-apricot); font-weight:600; color:var(--pc-ink);
           box-sizing:border-box;
         }
-        .ob-input:focus { border-color:#ff5f00; background:#fff; }
+        .ob-input:focus { border-color:var(--pc-orange); background:var(--pc-surface); }
         .ob-btn-primary {
-          padding:15px 24px; border-radius:18px; background:#ff5f00;
+          padding:15px 24px; border-radius:18px; background:var(--pc-orange);
           color:white; font-weight:800; font-size:16px;
-          box-shadow:0 8px 24px -8px rgba(255,95,0,0.55);
+          box-shadow:0 8px 24px -8px rgb(var(--pc-orange-rgb) / 0.55);
           transition:transform 0.15s;
         }
         .ob-btn-primary:active { transform:scale(0.97); }
-        .ob-btn-primary:disabled { background:#f0e8df; color:#c4a882; box-shadow:none; }
+        .ob-btn-primary:disabled { background:var(--pc-line-2); color:var(--pc-sand); box-shadow:none; }
         .ob-btn-ghost {
           padding:12px 24px; border-radius:16px; background:transparent;
-          color:#9a8a82; font-weight:600; font-size:14px;
+          color:var(--pc-muted); font-weight:600; font-size:14px;
           transition:transform 0.15s;
         }
         .ob-btn-ghost:active { transform:scale(0.97); }
@@ -640,7 +640,7 @@ function Screen({ children, scroll = false }: { children: React.ReactNode; scrol
 function Logo() {
   return (
     <div className="flex flex-col items-center mb-5">
-      <div className="w-16 h-16 rounded-3xl bg-pc-orange flex items-center justify-center shadow-[0_8px_28px_rgba(255,95,0,0.38)] mb-4">
+      <div className="w-16 h-16 rounded-3xl bg-pc-orange flex items-center justify-center shadow-[0_8px_28px_rgb(var(--pc-orange-rgb)/0.38)] mb-4">
         <svg
           viewBox="0 0 24 24"
           className="w-8 h-8 text-white"
@@ -670,7 +670,7 @@ function StepDots({ current, total }: { current: number; total: number }) {
           className="h-1.5 rounded-full transition-all"
           style={{
             width: i + 1 === current ? 20 : 6,
-            background: i + 1 <= current ? "#ff5f00" : "#ece6df",
+            background: i + 1 <= current ? "var(--pc-orange)" : "var(--pc-line)",
           }}
         />
       ))}
@@ -703,12 +703,12 @@ function LoginStep({
     boxSizing: "border-box",
     padding: "14px 16px",
     borderRadius: "16px",
-    border: "1.5px solid #ece6df",
+    border: "1.5px solid var(--pc-line)",
     fontSize: "16px",
     outline: "none",
-    background: "#fdf6ee",
+    background: "var(--pc-apricot)",
     fontWeight: 600,
-    color: "#2d1717",
+    color: "var(--pc-ink)",
     marginBottom: "14px",
   };
 
@@ -789,7 +789,9 @@ function LoginStep({
           disabled={loading}
           className="ob-btn-primary w-full"
           style={
-            loading ? { background: "#f0e8df", color: "#c4a882", boxShadow: "none" } : undefined
+            loading
+              ? { background: "var(--pc-line-2)", color: "var(--pc-sand)", boxShadow: "none" }
+              : undefined
           }
         >
           {loading ? "Loggar in…" : "Logga in →"}
@@ -839,12 +841,12 @@ function SyncStep({
     boxSizing: "border-box",
     padding: "14px 16px",
     borderRadius: "16px",
-    border: "1.5px solid #ece6df",
+    border: "1.5px solid var(--pc-line)",
     fontSize: "16px",
     outline: "none",
-    background: "#fdf6ee",
+    background: "var(--pc-apricot)",
     fontWeight: 600,
-    color: "#2d1717",
+    color: "var(--pc-ink)",
     marginBottom: "14px",
   };
 
@@ -862,7 +864,7 @@ function SyncStep({
         <div className="w-full space-y-3">
           <button
             onClick={() => setSub("create")}
-            className="pc-press w-full text-left bg-white border border-pc-line rounded-[20px] px-5 py-4 flex items-start gap-4 shadow-[0_2px_12px_rgba(81,43,43,0.04)]"
+            className="pc-press w-full text-left bg-pc-surface border border-pc-line rounded-[20px] px-5 py-4 flex items-start gap-4 shadow-[0_2px_12px_rgba(81,43,43,0.04)]"
           >
             <span className="text-[26px] leading-none mt-0.5 shrink-0">🔑</span>
             <div className="flex-1">
@@ -888,7 +890,7 @@ function SyncStep({
 
           <button
             onClick={() => setSub("restore")}
-            className="pc-press w-full text-left bg-white border border-pc-line rounded-[20px] px-5 py-4 flex items-start gap-4 shadow-[0_2px_12px_rgba(81,43,43,0.04)]"
+            className="pc-press w-full text-left bg-pc-surface border border-pc-line rounded-[20px] px-5 py-4 flex items-start gap-4 shadow-[0_2px_12px_rgba(81,43,43,0.04)]"
           >
             <span className="text-[26px] leading-none mt-0.5 shrink-0">☁️</span>
             <div className="flex-1">
@@ -1012,7 +1014,9 @@ function SyncStep({
             disabled={loading}
             className="ob-btn-primary w-full"
             style={
-              loading ? { background: "#f0e8df", color: "#c4a882", boxShadow: "none" } : undefined
+              loading
+                ? { background: "var(--pc-line-2)", color: "var(--pc-sand)", boxShadow: "none" }
+                : undefined
             }
           >
             {loading ? "Skapar…" : "Skapa konto →"}
@@ -1106,7 +1110,9 @@ function SyncStep({
             disabled={loading}
             className="ob-btn-primary w-full"
             style={
-              loading ? { background: "#f0e8df", color: "#c4a882", boxShadow: "none" } : undefined
+              loading
+                ? { background: "var(--pc-line-2)", color: "var(--pc-sand)", boxShadow: "none" }
+                : undefined
             }
           >
             {loading ? "Hämtar data…" : "Återställ →"}
@@ -1179,12 +1185,12 @@ function SyncStep({
               boxSizing: "border-box",
               padding: "14px 16px",
               borderRadius: "16px",
-              border: "1.5px solid #ece6df",
+              border: "1.5px solid var(--pc-line)",
               fontSize: "16px",
               outline: "none",
-              background: "#fdf6ee",
+              background: "var(--pc-apricot)",
               fontWeight: 600,
-              color: "#2d1717",
+              color: "var(--pc-ink)",
               marginBottom: "14px",
             }}
           />
@@ -1195,7 +1201,9 @@ function SyncStep({
             disabled={loading}
             className="ob-btn-primary w-full"
             style={
-              loading ? { background: "#f0e8df", color: "#c4a882", boxShadow: "none" } : undefined
+              loading
+                ? { background: "var(--pc-line-2)", color: "var(--pc-sand)", boxShadow: "none" }
+                : undefined
             }
           >
             {loading ? "Skickar…" : "Skicka verifieringskod →"}
@@ -1267,12 +1275,12 @@ function SyncStep({
               boxSizing: "border-box",
               padding: "14px 16px",
               borderRadius: "16px",
-              border: "1.5px solid #ece6df",
+              border: "1.5px solid var(--pc-line)",
               fontSize: "16px",
               outline: "none",
-              background: "#fdf6ee",
+              background: "var(--pc-apricot)",
               fontWeight: 600,
-              color: "#2d1717",
+              color: "var(--pc-ink)",
               marginBottom: "14px",
               letterSpacing: "0.25em",
             }}
@@ -1284,7 +1292,9 @@ function SyncStep({
             disabled={loading}
             className="ob-btn-primary w-full"
             style={
-              loading ? { background: "#f0e8df", color: "#c4a882", boxShadow: "none" } : undefined
+              loading
+                ? { background: "var(--pc-line-2)", color: "var(--pc-sand)", boxShadow: "none" }
+                : undefined
             }
           >
             {loading ? "Verifierar…" : "Bekräfta →"}

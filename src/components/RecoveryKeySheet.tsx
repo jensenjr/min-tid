@@ -130,40 +130,42 @@ export default function RecoveryKeySheet() {
     flex: 1,
     padding: "12px",
     borderRadius: "14px",
-    background: "#fdf6ee",
-    border: "1.5px solid #ece6df",
+    background: "var(--pc-apricot)",
+    border: "1.5px solid var(--pc-line)",
     fontWeight: 700,
     fontSize: "14px",
-    color: "#2d1717",
+    color: "var(--pc-ink)",
   };
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-end justify-center"
-      style={{ background: "rgba(45,23,23,0.6)", animation: "pcOverlay 0.25s ease" }}
+      className="fixed inset-0 z-[60] flex items-end md:items-center justify-center md:p-6"
+      style={{ background: "var(--pc-overlay)", animation: "pcOverlay 0.25s ease" }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="recovery-key-title"
     >
       <div
-        className="bg-white w-full max-w-[480px] rounded-t-[28px] px-6 pt-6 overflow-y-auto"
+        className="pc-sheet bg-pc-surface w-full max-w-[480px] md:max-w-[560px] rounded-t-[28px] md:rounded-[28px] px-6 pt-6 overflow-y-auto"
         style={{
           paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)",
           animation: "pcSheet 0.32s cubic-bezier(0.32,0.72,0,1)",
           maxHeight: "92dvh",
         }}
       >
-        <div className="w-10 h-1 bg-[#ece6df] rounded-full mx-auto mb-5" />
+        <div className="w-10 h-1 bg-(--pc-line) rounded-full mx-auto md:hidden mb-5" />
         <div id="recovery-key-title" className="font-extrabold text-[22px] tracking-tight mb-1">
           🔐 Spara din återställningsnyckel
         </div>
-        <p className="text-[13px] text-[#9c7c5c] mb-4 leading-relaxed">{REASON[pending.reason]}</p>
+        <p className="text-[13px] text-(--pc-taupe) mb-4 leading-relaxed">
+          {REASON[pending.reason]}
+        </p>
 
         <div
           className="rounded-[16px] px-4 py-4 mb-3 text-center"
-          style={{ background: "#fdf6ee", border: "2px dashed #e6d5c3" }}
+          style={{ background: "var(--pc-apricot)", border: "2px dashed var(--pc-line-strong)" }}
         >
-          <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-2">
+          <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-(--pc-taupe) mb-2">
             Återställningsnyckel för @{pending.username}
           </div>
           <div
@@ -174,7 +176,7 @@ export default function RecoveryKeySheet() {
               fontSize: "20px",
               fontWeight: 800,
               letterSpacing: "0.08em",
-              color: "#2d1717",
+              color: "var(--pc-ink)",
             }}
           >
             {pretty.split("-").map((g, i) => (
@@ -183,7 +185,7 @@ export default function RecoveryKeySheet() {
           </div>
         </div>
 
-        <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-2">
+        <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-(--pc-taupe) mb-2">
           Skriv ut / kopiera
         </div>
         <div className="flex gap-2 mb-4">
@@ -197,7 +199,11 @@ export default function RecoveryKeySheet() {
 
         <div
           className="rounded-[14px] px-4 py-3 mb-4 text-[12px] leading-relaxed"
-          style={{ background: "#fff7ed", border: "1px solid #fed7aa", color: "#7c2d12" }}
+          style={{
+            background: "var(--pc-orange-tint)",
+            border: "1px solid var(--pc-orange-line)",
+            color: "var(--pc-orange-ink)",
+          }}
         >
           <div className="font-bold mb-1">Varför den behövs</div>
           Glömmer du synk-koden kan du få tillbaka <b>kontot</b> via SMS — men dina <b>data</b> kan
@@ -212,9 +218,9 @@ export default function RecoveryKeySheet() {
             checked={saved}
             onChange={(e) => setSaved(e.target.checked)}
             className="mt-0.5 w-5 h-5 shrink-0"
-            style={{ accentColor: "#ff5f00" }}
+            style={{ accentColor: "var(--pc-orange)" }}
           />
-          <span className="text-[13px] font-semibold text-[#2d1717] leading-snug">
+          <span className="text-[13px] font-semibold text-(--pc-ink) leading-snug">
             Jag har sparat återställningsnyckeln på ett säkert ställe.
           </span>
         </label>
@@ -226,11 +232,11 @@ export default function RecoveryKeySheet() {
             width: "100%",
             padding: "14px",
             borderRadius: "14px",
-            background: saved ? "#ff5f00" : "#f0e8df",
-            color: saved ? "white" : "#c4a882",
+            background: saved ? "var(--pc-orange)" : "var(--pc-line-2)",
+            color: saved ? "white" : "var(--pc-sand)",
             fontWeight: 700,
             fontSize: "15px",
-            boxShadow: saved ? "0 8px 20px -8px rgba(255,95,0,0.6)" : "none",
+            boxShadow: saved ? "0 8px 20px -8px rgb(var(--pc-orange-rgb) / 0.6)" : "none",
           }}
         >
           Klar

@@ -154,7 +154,7 @@ export function Label({ children }: { children: ReactNode }) {
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
     <section
-      className={`bg-white rounded-[24px] p-5 mb-3 shadow-[0_2px_12px_rgba(81,43,43,0.04)] border border-pc-line ${className}`}
+      className={`bg-pc-surface rounded-[24px] p-5 mb-3 shadow-[0_2px_12px_rgba(81,43,43,0.04)] border border-pc-line ${className}`}
     >
       {children}
     </section>
@@ -183,19 +183,19 @@ export function Sheet({
   if (!open) return null;
   return (
     <div
-      className="fixed inset-0 flex items-end justify-center pc-overlay"
-      style={{ background: "rgba(45,23,23,0.55)", zIndex: z }}
+      className="fixed inset-0 flex items-end md:items-center justify-center md:p-6 pc-overlay"
+      style={{ background: "var(--pc-overlay)", zIndex: z }}
       onClick={onClose}
     >
       <div
-        className="pc-sheet bg-white w-full max-w-[480px] rounded-t-[28px] px-5 pt-6 overflow-y-auto"
+        className="pc-sheet bg-pc-surface w-full max-w-[480px] md:max-w-[560px] rounded-t-[28px] md:rounded-[28px] px-5 pt-6 overflow-y-auto"
         style={{
           paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)",
           maxHeight: "92dvh",
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="w-10 h-1 bg-pc-line rounded-full mx-auto mb-5" />
+        <div className="w-10 h-1 bg-pc-line rounded-full mx-auto md:hidden mb-5" />
         {title && <div className="font-extrabold text-[22px] tracking-tight mb-1">{title}</div>}
         {subtitle && <div className="text-[13px] text-pc-muted mb-5">{subtitle}</div>}
         {children}
@@ -257,7 +257,7 @@ export function PrimaryButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="pc-press w-full py-4 rounded-[18px] bg-pc-orange text-white font-bold text-[15px] shadow-[0_8px_20px_-8px_rgba(255,95,0,0.6)] disabled:opacity-50"
+      className="pc-press w-full py-4 rounded-[18px] bg-pc-orange text-white font-bold text-[15px] shadow-[0_8px_20px_-8px_rgb(var(--pc-orange-rgb)/0.6)] disabled:opacity-50"
     >
       {children}
     </button>
@@ -415,8 +415,8 @@ export function MonthPicker({
   const pill = (active: boolean) =>
     `pc-press px-2 py-2.5 rounded-[14px] text-[13px] font-bold border transition-colors ${
       active
-        ? "bg-pc-orange text-white border-pc-orange shadow-[0_4px_12px_-4px_rgba(255,95,0,0.45)]"
-        : "bg-white border-pc-line text-pc-ink"
+        ? "bg-pc-orange text-white border-pc-orange shadow-[0_4px_12px_-4px_rgb(var(--pc-orange-rgb)/0.45)]"
+        : "bg-pc-surface border-pc-line text-pc-ink"
     }`;
 
   return (

@@ -7,12 +7,12 @@ const END_FIELD: CSSProperties = {
   boxSizing: "border-box",
   padding: "13px 14px",
   borderRadius: "14px",
-  border: "1.5px solid #ece6df",
+  border: "1.5px solid var(--pc-line)",
   fontSize: "16px",
   outline: "none",
-  background: "#fdf6ee",
+  background: "var(--pc-apricot)",
   fontWeight: 600,
-  color: "#2d1717",
+  color: "var(--pc-ink)",
 };
 
 type Session = {
@@ -95,12 +95,12 @@ export default function LatePunchoutModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center"
-      style={{ background: "rgba(45,23,23,0.55)", animation: "pcOverlay 0.25s ease" }}
+      className="fixed inset-0 z-50 flex items-end md:items-center justify-center md:p-6"
+      style={{ background: "var(--pc-overlay)", animation: "pcOverlay 0.25s ease" }}
       onClick={onCancel}
     >
       <div
-        className="bg-white w-full max-w-[480px] rounded-t-[28px] px-6 pt-6"
+        className="pc-sheet bg-pc-surface w-full max-w-[480px] md:max-w-[560px] rounded-t-[28px] md:rounded-[28px] px-6 pt-6"
         style={{
           paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)",
           animation: "pcSheet 0.32s cubic-bezier(0.32,0.72,0,1)",
@@ -108,7 +108,7 @@ export default function LatePunchoutModal({
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="w-10 h-1 bg-pc-line rounded-full mx-auto mb-5" />
+        <div className="w-10 h-1 bg-pc-line rounded-full mx-auto md:hidden mb-5" />
 
         <div className="w-14 h-14 rounded-2xl bg-amber-100 flex items-center justify-center mb-4 mx-auto">
           <svg
@@ -144,7 +144,7 @@ export default function LatePunchoutModal({
                 <button
                   onClick={() => onSave(scheduledEndMs)}
                   className="pc-press w-full mb-3 py-4 rounded-[16px] bg-pc-orange text-white font-bold text-[15px]"
-                  style={{ boxShadow: "0 8px 20px -8px rgba(255,95,0,0.6)" }}
+                  style={{ boxShadow: "0 8px 20px -8px rgb(var(--pc-orange-rgb) / 0.6)" }}
                 >
                   <div>Stämpla ut enligt schema (kl. {fmtTime(scheduledEndMs)})</div>
                   <div className="text-[12px] font-semibold opacity-90 mt-0.5">
@@ -159,7 +159,7 @@ export default function LatePunchoutModal({
                 scheduledEndMs !== undefined &&
                 scheduledEndMs > activeSession.checkIn &&
                 scheduledEndMs <= nowMs
-                  ? "bg-white border border-pc-line text-pc-ink"
+                  ? "bg-pc-surface border border-pc-line text-pc-ink"
                   : "bg-pc-orange text-white"
               }`}
               style={
@@ -167,14 +167,14 @@ export default function LatePunchoutModal({
                 scheduledEndMs > activeSession.checkIn &&
                 scheduledEndMs <= nowMs
                   ? undefined
-                  : { boxShadow: "0 8px 20px -8px rgba(255,95,0,0.6)" }
+                  : { boxShadow: "0 8px 20px -8px rgb(var(--pc-orange-rgb) / 0.6)" }
               }
             >
               Stämpla ut nu (kl. {fmtTime(nowMs)})
             </button>
             <button
               onClick={() => setShowPicker(true)}
-              className="pc-press w-full mb-3 py-4 rounded-[16px] bg-white border border-pc-line font-bold text-[15px] text-pc-ink"
+              className="pc-press w-full mb-3 py-4 rounded-[16px] bg-pc-surface border border-pc-line font-bold text-[15px] text-pc-ink"
             >
               Sätt annan sluttid
             </button>
@@ -245,9 +245,11 @@ export default function LatePunchoutModal({
                 disabled={!customValid}
                 className="pc-press py-4 rounded-[16px] font-bold text-[15px]"
                 style={{
-                  background: customValid ? "#ff5f00" : "#f0e8df",
-                  color: customValid ? "white" : "#c4a882",
-                  boxShadow: customValid ? "0 8px 20px -8px rgba(255,95,0,0.6)" : "none",
+                  background: customValid ? "var(--pc-orange)" : "var(--pc-line-2)",
+                  color: customValid ? "white" : "var(--pc-sand)",
+                  boxShadow: customValid
+                    ? "0 8px 20px -8px rgb(var(--pc-orange-rgb) / 0.6)"
+                    : "none",
                 }}
               >
                 Spara

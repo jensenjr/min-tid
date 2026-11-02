@@ -38,12 +38,12 @@ export default function FlexBreakdownModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center"
-      style={{ background: "rgba(45,23,23,0.55)", animation: "pcOverlay 0.25s ease" }}
+      className="fixed inset-0 z-50 flex items-end md:items-center justify-center md:p-6"
+      style={{ background: "var(--pc-overlay)", animation: "pcOverlay 0.25s ease" }}
       onClick={onClose}
     >
       <div
-        className="bg-white w-full max-w-[480px] rounded-t-[28px] px-5 pt-6 overflow-y-auto"
+        className="pc-sheet bg-pc-surface w-full max-w-[480px] md:max-w-[560px] rounded-t-[28px] md:rounded-[28px] px-5 pt-6 overflow-y-auto"
         style={{
           paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)",
           animation: "pcSheet 0.32s cubic-bezier(0.32,0.72,0,1)",
@@ -51,7 +51,7 @@ export default function FlexBreakdownModal({
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="w-10 h-1 bg-pc-line rounded-full mx-auto mb-5" />
+        <div className="w-10 h-1 bg-pc-line rounded-full mx-auto md:hidden mb-5" />
 
         <div className="font-extrabold text-[22px] tracking-tight mb-1">Flexsaldo</div>
         <div className="text-[13px] text-pc-muted mb-5">
@@ -122,11 +122,11 @@ export default function FlexBreakdownModal({
             width: "100%",
             padding: "15px",
             borderRadius: "16px",
-            background: "#ff5f00",
+            background: "var(--pc-orange)",
             color: "white",
             fontWeight: 700,
             fontSize: "15px",
-            boxShadow: "0 8px 20px -8px rgba(255,95,0,0.6)",
+            boxShadow: "0 8px 20px -8px rgb(var(--pc-orange-rgb) / 0.6)",
             marginTop: "12px",
           }}
         >

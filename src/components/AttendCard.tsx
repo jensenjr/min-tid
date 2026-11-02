@@ -155,7 +155,7 @@ export default function AttendCard({
             </div>
             <button
               onClick={onShowReceipts}
-              className="pc-press w-full mt-3 py-2.5 rounded-[14px] bg-white border border-amber-200 text-amber-800 font-bold text-[13px]"
+              className="pc-press w-full mt-3 py-2.5 rounded-[14px] bg-pc-surface border border-amber-200 text-amber-800 font-bold text-[13px]"
             >
               Visa utlägg
             </button>

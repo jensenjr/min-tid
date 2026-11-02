@@ -30,7 +30,7 @@ export default function ConfirmSheet({
         </button>
         <button
           onClick={onConfirm}
-          className={`pc-press py-4 rounded-[16px] text-white font-bold text-[15px] ${danger ? "bg-red-500" : "bg-pc-orange shadow-[0_8px_20px_-8px_rgba(255,95,0,0.6)]"}`}
+          className={`pc-press py-4 rounded-[16px] text-white font-bold text-[15px] ${danger ? "bg-red-500" : "bg-pc-orange shadow-[0_8px_20px_-8px_rgb(var(--pc-orange-rgb)/0.6)]"}`}
         >
           {confirmLabel}
         </button>

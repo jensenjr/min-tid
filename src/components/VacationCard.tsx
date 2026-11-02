@@ -57,7 +57,7 @@ export default function VacationCard({
       className={
         bare
           ? ""
-          : "bg-white rounded-[24px] p-5 mb-3 shadow-[0_2px_12px_rgba(81,43,43,0.04)] border border-pc-line"
+          : "bg-pc-surface rounded-[24px] p-5 mb-3 shadow-[0_2px_12px_rgba(81,43,43,0.04)] border border-pc-line"
       }
     >
       <div className="flex items-center justify-between gap-3">

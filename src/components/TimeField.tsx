@@ -124,7 +124,7 @@ export default function TimeField({
           marginBottom: 0,
           flex: 1,
           minWidth: 0,
-          ...(invalid ? { borderColor: "#dc2626" } : null),
+          ...(invalid ? { borderColor: "var(--pc-danger)" } : null),
           ...fieldStyle,
         }}
       />

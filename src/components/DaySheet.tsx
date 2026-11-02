@@ -103,7 +103,7 @@ export default function DaySheet({
           </div>
           <button
             onClick={() => actions.unlockMonth(month)}
-            className="pc-press w-full mt-2.5 py-2.5 rounded-[12px] bg-white border border-amber-200 text-amber-800 font-bold text-[13px]"
+            className="pc-press w-full mt-2.5 py-2.5 rounded-[12px] bg-pc-surface border border-amber-200 text-amber-800 font-bold text-[13px]"
           >
             Lås upp månaden
           </button>

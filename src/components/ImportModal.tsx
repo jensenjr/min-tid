@@ -172,12 +172,12 @@ export default function ImportModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center"
-      style={{ background: "rgba(45,23,23,0.55)", animation: "pcOverlay 0.25s ease" }}
+      className="fixed inset-0 z-50 flex items-end md:items-center justify-center md:p-6"
+      style={{ background: "var(--pc-overlay)", animation: "pcOverlay 0.25s ease" }}
       onClick={onClose}
     >
       <div
-        className="bg-white w-full max-w-[480px] rounded-t-[28px] px-5 pt-6 overflow-y-auto"
+        className="pc-sheet bg-pc-surface w-full max-w-[480px] md:max-w-[560px] rounded-t-[28px] md:rounded-[28px] px-5 pt-6 overflow-y-auto"
         style={{
           paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)",
           animation: "pcSheet 0.32s cubic-bezier(0.32,0.72,0,1)",
@@ -185,7 +185,7 @@ export default function ImportModal({
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="w-10 h-1 bg-pc-line rounded-full mx-auto mb-5" />
+        <div className="w-10 h-1 bg-pc-line rounded-full mx-auto md:hidden mb-5" />
 
         <div className="font-extrabold text-[22px] tracking-tight mb-1">Importera från Excel</div>
         <div className="text-[13px] text-pc-muted mb-5">
@@ -207,7 +207,7 @@ export default function ImportModal({
           <div className="space-y-3 mb-2">
             <button
               onClick={downloadTemplate}
-              className="pc-press w-full py-4 rounded-[18px] bg-white border border-pc-line text-pc-ink font-bold text-[15px]"
+              className="pc-press w-full py-4 rounded-[18px] bg-pc-surface border border-pc-line text-pc-ink font-bold text-[15px]"
             >
               1. Ladda ner mallen (.xlsx)
             </button>
@@ -224,7 +224,7 @@ export default function ImportModal({
             <button
               onClick={() => fileRef.current?.click()}
               disabled={step.kind === "parsing"}
-              className="pc-press w-full py-4 rounded-[18px] bg-pc-orange text-white font-bold text-[15px] shadow-[0_8px_20px_-8px_rgba(255,95,0,0.6)] disabled:opacity-60"
+              className="pc-press w-full py-4 rounded-[18px] bg-pc-orange text-white font-bold text-[15px] shadow-[0_8px_20px_-8px_rgb(var(--pc-orange-rgb)/0.6)] disabled:opacity-60"
             >
               {step.kind === "parsing" ? `Läser ${step.fileName}…` : "2. Välj ifylld fil"}
             </button>
@@ -332,14 +332,14 @@ export default function ImportModal({
             <div className="grid grid-cols-2 gap-3 mt-2">
               <button
                 onClick={() => setStep({ kind: "idle" })}
-                className="pc-press py-4 rounded-[18px] bg-white border border-pc-line text-pc-ink font-bold text-[15px]"
+                className="pc-press py-4 rounded-[18px] bg-pc-surface border border-pc-line text-pc-ink font-bold text-[15px]"
               >
                 Välj annan fil
               </button>
               <button
                 onClick={doImport}
                 disabled={!hasImportable || busy}
-                className="pc-press py-4 rounded-[18px] bg-pc-orange text-white font-bold text-[15px] shadow-[0_8px_20px_-8px_rgba(255,95,0,0.6)] disabled:opacity-50"
+                className="pc-press py-4 rounded-[18px] bg-pc-orange text-white font-bold text-[15px] shadow-[0_8px_20px_-8px_rgb(var(--pc-orange-rgb)/0.6)] disabled:opacity-50"
               >
                 Importera
               </button>
@@ -362,7 +362,7 @@ export default function ImportModal({
             {!confirmUndo ? (
               <button
                 onClick={() => setConfirmUndo(true)}
-                className="pc-press w-full py-3 rounded-[16px] bg-white border border-pc-line text-pc-ink font-bold text-[14px]"
+                className="pc-press w-full py-3 rounded-[16px] bg-pc-surface border border-pc-line text-pc-ink font-bold text-[14px]"
               >
                 Ångra senaste import
                 <span className="block text-[11px] font-medium text-pc-muted">
@@ -380,7 +380,7 @@ export default function ImportModal({
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     onClick={() => setConfirmUndo(false)}
-                    className="pc-press py-3 rounded-[14px] bg-white border border-pc-line text-pc-ink font-bold text-[14px]"
+                    className="pc-press py-3 rounded-[14px] bg-pc-surface border border-pc-line text-pc-ink font-bold text-[14px]"
                   >
                     Avbryt
                   </button>
@@ -402,8 +402,8 @@ export default function ImportModal({
             width: "100%",
             padding: "15px",
             borderRadius: "16px",
-            background: step.kind === "done" ? "#ff5f00" : "#f3ece4",
-            color: step.kind === "done" ? "white" : "#2d1717",
+            background: step.kind === "done" ? "var(--pc-orange)" : "var(--pc-apricot)",
+            color: step.kind === "done" ? "white" : "var(--pc-ink)",
             fontWeight: 700,
             fontSize: "15px",
             marginTop: "16px",

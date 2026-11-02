@@ -23,11 +23,11 @@ const stamp = (ms: number) =>
 
 function Row({ k, v, warn }: { k: string; v: string; warn?: boolean }) {
   return (
-    <div className="flex gap-3 py-1 border-t border-[#e9e2da] first:border-t-0">
-      <span className="w-[112px] shrink-0 text-[11px] font-bold text-[#8a7a6e]">{k}</span>
+    <div className="flex gap-3 py-1 border-t border-(--pc-line) first:border-t-0">
+      <span className="w-[112px] shrink-0 text-[11px] font-bold text-(--pc-muted)">{k}</span>
       <span
         className="flex-1 min-w-0 text-[11px] font-semibold break-words"
-        style={{ color: warn ? "#b91c1c" : "#2d1717" }}
+        style={{ color: warn ? "var(--pc-danger)" : "var(--pc-ink)" }}
       >
         {v}
       </span>
@@ -111,16 +111,16 @@ export default function SyncDebugPanel({
     <div
       id="sync-debug"
       className="rounded-[16px] mb-3 px-4 py-3"
-      style={{ background: "#f6f3ef", border: "1.5px dashed #cbbfb3" }}
+      style={{ background: "var(--pc-apricot)", border: "1.5px dashed var(--pc-line-strong)" }}
     >
       <div className="flex items-center justify-between mb-2">
-        <div className="text-[11px] font-extrabold uppercase tracking-[0.1em] text-[#5b4a3f]">
+        <div className="text-[11px] font-extrabold uppercase tracking-[0.1em] text-(--pc-ink-soft)">
           🛠 Felsökning
         </div>
         <button
           type="button"
           onClick={onPullNow}
-          className="text-[11px] font-bold text-[#ff5f00] underline"
+          className="text-[11px] font-bold text-(--pc-orange) underline"
         >
           Testa anslutning nu
         </button>
@@ -181,10 +181,10 @@ export default function SyncDebugPanel({
 
       {visibleLog.length > 0 && (
         <div className="mb-3">
-          <div className="text-[10px] font-extrabold uppercase tracking-[0.1em] text-[#8a7a6e] mb-1">
+          <div className="text-[10px] font-extrabold uppercase tracking-[0.1em] text-(--pc-muted) mb-1">
             Fellogg ({visibleLog.length})
           </div>
-          <div className="rounded-[10px] bg-white border border-[#e9e2da] px-2 py-1.5 font-mono text-[10px] leading-relaxed text-[#2d1717] max-h-[140px] overflow-y-auto">
+          <div className="rounded-[10px] bg-pc-surface border border-(--pc-line) px-2 py-1.5 font-mono text-[10px] leading-relaxed text-(--pc-ink) max-h-[140px] overflow-y-auto">
             {visibleLog.map((e, i) => (
               <div key={i} className="break-words">
                 {new Date(e.at).toLocaleTimeString("sv-SE")}{" "}
@@ -195,25 +195,25 @@ export default function SyncDebugPanel({
         </div>
       )}
 
-      <div className="text-[10px] font-extrabold uppercase tracking-[0.1em] text-[#8a7a6e] mb-1.5">
+      <div className="text-[10px] font-extrabold uppercase tracking-[0.1em] text-(--pc-muted) mb-1.5">
         Skicka felrapport
       </div>
       <div className="grid grid-cols-2 gap-2">
         <button
           type="button"
           onClick={copy}
-          className="pc-press py-2.5 rounded-[12px] bg-white border border-[#cbbfb3] text-[12px] font-bold text-[#2d1717]"
+          className="pc-press py-2.5 rounded-[12px] bg-pc-surface border border-(--pc-line-strong) text-[12px] font-bold text-(--pc-ink)"
         >
           {copied === "ok" ? "✓ Kopierat" : "1. Kopiera"}
         </button>
         <a
           href={buildSyncReportMailto(reportInput)}
-          className="pc-press py-2.5 rounded-[12px] bg-[#2d1717] text-center text-[12px] font-bold text-white no-underline"
+          className="pc-press py-2.5 rounded-[12px] bg-(--pc-solid) text-center text-[12px] font-bold text-white no-underline"
         >
           2. Öppna e-post
         </a>
       </div>
-      <div className="text-[10px] text-[#8a7a6e] mt-1.5 leading-snug">
+      <div className="text-[10px] text-(--pc-muted) mt-1.5 leading-snug">
         Öppnas ingen e-post: klistra in det kopierade i ett mejl till {SUPPORT_EMAIL}. Rapporten
         innehåller aldrig din synk-kod eller inloggning.
       </div>
@@ -223,7 +223,7 @@ export default function SyncDebugPanel({
           value={reportText}
           onFocus={(e) => e.currentTarget.select()}
           autoFocus
-          className="w-full mt-2 h-[160px] rounded-[10px] border border-[#cbbfb3] p-2 font-mono text-[10px]"
+          className="w-full mt-2 h-[160px] rounded-[10px] border border-(--pc-line-strong) p-2 font-mono text-[10px]"
         />
       )}
       {visibleLog.length > 0 && (
@@ -233,7 +233,7 @@ export default function SyncDebugPanel({
             clearSyncErrorLog();
             setCleared(true);
           }}
-          className="mt-2 text-[11px] font-bold text-[#8a7a6e] underline"
+          className="mt-2 text-[11px] font-bold text-(--pc-muted) underline"
         >
           Rensa felloggen
         </button>

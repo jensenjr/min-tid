@@ -59,12 +59,12 @@ export default function DayExceptionModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center"
-      style={{ background: "rgba(45,23,23,0.55)", animation: "pcOverlay 0.25s ease" }}
+      className="fixed inset-0 z-50 flex items-end md:items-center justify-center md:p-6"
+      style={{ background: "var(--pc-overlay)", animation: "pcOverlay 0.25s ease" }}
       onClick={onClose}
     >
       <div
-        className="bg-white w-full max-w-[480px] rounded-t-[28px] px-6 pt-6 overflow-y-auto"
+        className="pc-sheet bg-pc-surface w-full max-w-[480px] md:max-w-[560px] rounded-t-[28px] md:rounded-[28px] px-6 pt-6 overflow-y-auto"
         style={{
           paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)",
           animation: "pcSheet 0.32s cubic-bezier(0.32,0.72,0,1)",
@@ -72,7 +72,7 @@ export default function DayExceptionModal({
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="w-10 h-1 bg-[#ece6df] rounded-full mx-auto mb-5" />
+        <div className="w-10 h-1 bg-(--pc-line) rounded-full mx-auto md:hidden mb-5" />
 
         <div className="font-extrabold text-[22px] tracking-tight mb-1 capitalize">{dateLabel}</div>
         <div className="text-[13px] text-pc-muted mb-1">
@@ -125,24 +125,24 @@ export default function DayExceptionModal({
             width: "100%",
             padding: "12px 14px",
             borderRadius: "14px",
-            border: "1.5px solid #ece6df",
+            border: "1.5px solid var(--pc-line)",
             fontSize: "15px",
             outline: "none",
-            background: "#fdf6ee",
+            background: "var(--pc-apricot)",
             fontWeight: 500,
-            color: "#2d1717",
+            color: "var(--pc-ink)",
             resize: "none",
             marginBottom: "16px",
             fontFamily: "inherit",
             boxSizing: "border-box",
           }}
           onFocus={(e) => {
-            e.currentTarget.style.borderColor = "#ff5f00";
-            e.currentTarget.style.background = "#fff";
+            e.currentTarget.style.borderColor = "var(--pc-orange)";
+            e.currentTarget.style.background = "var(--pc-surface)";
           }}
           onBlur={(e) => {
-            e.currentTarget.style.borderColor = "#ece6df";
-            e.currentTarget.style.background = "#fdf6ee";
+            e.currentTarget.style.borderColor = "var(--pc-line)";
+            e.currentTarget.style.background = "var(--pc-apricot)";
           }}
         />
 
@@ -163,11 +163,11 @@ export default function DayExceptionModal({
             style={{
               padding: "16px",
               borderRadius: "16px",
-              background: "#fdf6ee",
-              border: "1.5px solid #ece6df",
+              background: "var(--pc-apricot)",
+              border: "1.5px solid var(--pc-line)",
               fontWeight: 700,
               fontSize: "15px",
-              color: "#2d1717",
+              color: "var(--pc-ink)",
             }}
           >
             Avbryt
@@ -177,11 +177,11 @@ export default function DayExceptionModal({
             style={{
               padding: "16px",
               borderRadius: "16px",
-              background: "#ff5f00",
+              background: "var(--pc-orange)",
               color: "white",
               fontWeight: 700,
               fontSize: "15px",
-              boxShadow: "0 8px 20px -8px rgba(255,95,0,0.6)",
+              boxShadow: "0 8px 20px -8px rgb(var(--pc-orange-rgb) / 0.6)",
             }}
           >
             Spara

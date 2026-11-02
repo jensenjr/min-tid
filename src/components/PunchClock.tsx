@@ -1325,7 +1325,7 @@ export default function PunchClock() {
       <button
         type="button"
         onClick={() => void downloadReportXlsx(p.start, p.end)}
-        className="pc-press w-full py-4 rounded-[18px] bg-white border border-pc-line text-pc-ink font-bold text-[15px]"
+        className="pc-press w-full py-4 rounded-[18px] bg-pc-surface border border-pc-line text-pc-ink font-bold text-[15px]"
       >
         Exportera Excel
       </button>
@@ -1411,7 +1411,7 @@ export default function PunchClock() {
         @keyframes pcPop { 0% { transform: scale(0.85); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
         .pc-pulse-ring::before {
           content: ''; position: absolute; inset: -8px; border-radius: 50%;
-          border: 2px solid #ff5f00; opacity: 0.6;
+          border: 2px solid var(--pc-orange); opacity: 0.6;
           animation: pcRing 2s ease-out infinite;
         }
         @keyframes pcRing { 0% { transform: scale(0.95); opacity: 0.6; } 100% { transform: scale(1.25); opacity: 0; } }
@@ -1424,161 +1424,33 @@ export default function PunchClock() {
         .pc-input {
           width: 100%; max-width: 100%; box-sizing: border-box;
           padding: 14px 16px; border-radius: 16px;
-          border: 1px solid #ece6df; font-size: 16px; outline: none;
-          margin-bottom: 16px; background: #fdf6ee; font-weight: 600; color: #2d1717;
+          border: 1px solid var(--pc-line); font-size: 16px; outline: none;
+          margin-bottom: 16px; background: var(--pc-apricot); font-weight: 600; color: var(--pc-ink);
           -webkit-appearance: none; appearance: none;
         }
-        .pc-input:focus { border-color: #ff5f00; background: #fff; }
+        .pc-input:focus { border-color: var(--pc-orange); background: var(--pc-surface); }
         .hide-scroll { scrollbar-width: none; }
         .hide-scroll::-webkit-scrollbar { display: none; }
       `}</style>
 
-      <div className="mx-auto max-w-[480px] h-full flex flex-col">
-        <div className="shrink-0 h-[env(safe-area-inset-top,0px)]" />
-
-        {demo && <DemoBanner onExit={exitDemo} />}
-
-        {/* Header */}
-        <header className="shrink-0 px-5 pt-6 pb-4 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 shrink-0 rounded-2xl bg-pc-orange flex items-center justify-center shadow-[0_4px_14px_rgba(255,95,0,0.35)]">
-              <svg
-                viewBox="0 0 24 24"
-                className="w-5 h-5 text-white"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <circle cx="12" cy="12" r="9" />
-                <path d="M12 7v5l3 2" />
-              </svg>
+      {/* Phone: one 480px column with the bottom nav. Desktop (md+): a left
+          sidebar nav and content centred in a wider column (Bytefest layout). */}
+      <div className="h-full flex">
+        <aside className="hidden md:flex shrink-0 w-56 lg:w-64 h-full flex-col border-r border-pc-line bg-pc-surface px-3 pt-6 pb-4">
+          <div className="flex items-center gap-3 px-2 mb-8">
+            <div className="w-10 h-10 shrink-0 rounded-2xl bg-pc-orange flex items-center justify-center shadow-[0_4px_14px_rgb(var(--pc-orange-rgb)/0.35)]">
+              <ClockGlyph />
             </div>
             <div className="min-w-0">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-pc-muted truncate">
-                Tidrapport{department ? ` · ${department}` : ""}
-              </div>
-              <div className="text-[17px] font-bold leading-tight text-pc-ink truncate">
-                {name || "—"}
+              <div className="text-[16px] font-extrabold leading-tight text-pc-ink">min-tid</div>
+              <div className="text-[11px] font-semibold text-pc-muted truncate">
+                Arbetstid och avvikelser
               </div>
             </div>
           </div>
-          {isIn && (
-            <div className="shrink-0 flex items-center gap-1.5 bg-pc-orange/10 text-pc-orange-deep px-3 py-1.5 rounded-full">
-              <span className="w-2 h-2 rounded-full bg-pc-orange animate-pulse" />
-              <span className="text-[12px] font-bold">LIVE</span>
-            </div>
-          )}
-        </header>
-
-        {showSyncErrorBanner && (
-          <div className="shrink-0 px-5 pb-3">
-            <SyncErrorBanner
-              headline={syncErrorInfo.headline}
-              detail={
-                (syncErrorInfo.networkBlocked
-                  ? "Din tid sparas på enheten, men den når inte molnet."
-                  : syncErrorInfo.recreate
-                    ? "Din tid finns kvar på enheten. Aktivera synk igen för att ladda upp den."
-                    : "Din tid sparas på enheten, men synken till molnet misslyckas.") +
-                (debugMode && syncFailure
-                  ? ` [${syncFailure.status === 0 ? "ingen kontakt" : "HTTP " + syncFailure.status} ${syncFailure.method} ${syncFailure.path}]`
-                  : "")
-              }
-              onReadMore={() => {
-                setSyncHelpOpen(true);
-                setSettingsModal(true);
-              }}
-              onDismiss={() => setBannerHiddenFor(syncFailure?.at ?? Date.now())}
-            />
-          </div>
-        )}
-
-        <main ref={mainRef} className="flex-1 min-h-0 overflow-y-auto px-5">
-          {view === "today" && (
-            <Today
-              mode={resolvedMode}
-              today={todayDate}
-              evaluation={todayEval}
-              cfg={todayCfg}
-              sessions={todaySessions}
-              absences={getAbsencesForDate(absences, todayDate)}
-              adjustment={dayAdjustments[todayDate]}
-              confirmed={confirmedDays[todayDate] === true}
-              locked={lockedToday}
-              lockedMonth={lockedToday ? todayDate.slice(0, 7) : undefined}
-              scheduleLeave={scheduledLeaveTime(todayCfg, dayAdjustments[todayDate])}
-              flex={{
-                total: flexTotal,
-                week: flexWeek,
-                month: flexMonth,
-                today: todayDelta,
-                attention: flexAttention,
-              }}
-              attend={attend}
-              actions={actions}
-              banners={banners}
-              activeSession={activeSession}
-              liveMs={liveMs}
-              leave={leave}
-              isLongSession={isLongSession}
-              onPunch={handlePunch}
-              onFixLongSession={() => setLatePunchoutOpen(true)}
-              onOpenFlex={() => setFlexBreakdownOpen(true)}
-              onShowReceipts={() => {
-                setFocusExpenses(true);
-                setView("report");
-              }}
-            />
-          )}
-
-          {view === "calendar" && <Calendar ctx={flexCtx} actions={actions} />}
-
-          {view === "report" && (
-            <Report
-              ctx={flexCtx}
-              expenses={expenses}
-              name={name}
-              slots={reportSlots}
-              focusExpenses={focusExpenses}
-              onAddExpense={() => setExpenseModal(true)}
-              onDeleteExpense={handleDeleteExpense}
-            />
-          )}
-
-          {view === "more" && (
-            <More
-              name={name}
-              department={department}
-              mode={resolvedMode}
-              syncToken={syncToken}
-              syncStatus={syncStatus}
-              syncedAt={syncedAt}
-              syncDirty={dirtyRef.current}
-              slots={moreSlots}
-              onOpenProfile={() => setSettingsModal(true)}
-              onOpenSchedule={() => setScheduleModal(true)}
-              demo={demo}
-              onSetupSync={() => !demo && setSyncModal(true)}
-              onOpenSyncAccount={() => setSettingsModal(true)}
-              onPullNow={() => {
-                void pullNow({ manual: true });
-              }}
-              onOpenAutomation={() => setAutomationModal(true)}
-            />
-          )}
-          <div className="h-4" />
-        </main>
-
-        {/* Bottom nav */}
-        <nav
-          className="shrink-0 w-full bg-white/85 backdrop-blur-xl border-t border-pc-line px-2"
-          style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 6px)" }}
-        >
-          <div className="grid grid-cols-4 gap-1 pt-2">
+          <nav className="flex flex-col gap-1" aria-label="Huvudmeny">
             {NAV.map((n) => (
-              <NavItem
+              <SideNavItem
                 key={n.key}
                 active={view === n.key}
                 onClick={() => {
@@ -1589,8 +1461,162 @@ export default function PunchClock() {
                 icon={n.icon}
               />
             ))}
+          </nav>
+          <div className="mt-auto px-3 text-[11px] font-semibold text-pc-muted">
+            min-tid v{__APP_VERSION__}
           </div>
-        </nav>
+        </aside>
+
+        <div className="mx-auto w-full max-w-[480px] md:max-w-none md:mx-0 flex-1 min-w-0 h-full flex flex-col">
+          <div className="shrink-0 h-[env(safe-area-inset-top,0px)]" />
+
+          {demo && <DemoBanner onExit={exitDemo} />}
+
+          {/* Header */}
+          <header className="shrink-0 px-5 md:px-0 pt-6 pb-4 flex items-center justify-between gap-3 w-full md:w-[calc(100%-4rem)] md:max-w-3xl lg:max-w-5xl md:mx-auto">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="md:hidden w-10 h-10 shrink-0 rounded-2xl bg-pc-orange flex items-center justify-center shadow-[0_4px_14px_rgb(var(--pc-orange-rgb)/0.35)]">
+                <ClockGlyph />
+              </div>
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-pc-muted truncate">
+                  Tidrapport{department ? ` · ${department}` : ""}
+                </div>
+                <div className="text-[17px] font-bold leading-tight text-pc-ink truncate">
+                  {name || "—"}
+                </div>
+              </div>
+            </div>
+            {isIn && (
+              <div className="shrink-0 flex items-center gap-1.5 bg-pc-orange/10 text-pc-orange-deep px-3 py-1.5 rounded-full">
+                <span className="w-2 h-2 rounded-full bg-pc-orange animate-pulse" />
+                <span className="text-[12px] font-bold">LIVE</span>
+              </div>
+            )}
+          </header>
+
+          {showSyncErrorBanner && (
+            <div className="shrink-0 px-5 md:px-0 pb-3 w-full md:w-[calc(100%-4rem)] md:max-w-3xl lg:max-w-5xl md:mx-auto">
+              <SyncErrorBanner
+                headline={syncErrorInfo.headline}
+                detail={
+                  (syncErrorInfo.networkBlocked
+                    ? "Din tid sparas på enheten, men den når inte molnet."
+                    : syncErrorInfo.recreate
+                      ? "Din tid finns kvar på enheten. Aktivera synk igen för att ladda upp den."
+                      : "Din tid sparas på enheten, men synken till molnet misslyckas.") +
+                  (debugMode && syncFailure
+                    ? ` [${syncFailure.status === 0 ? "ingen kontakt" : "HTTP " + syncFailure.status} ${syncFailure.method} ${syncFailure.path}]`
+                    : "")
+                }
+                onReadMore={() => {
+                  setSyncHelpOpen(true);
+                  setSettingsModal(true);
+                }}
+                onDismiss={() => setBannerHiddenFor(syncFailure?.at ?? Date.now())}
+              />
+            </div>
+          )}
+
+          <main ref={mainRef} className="flex-1 min-h-0 overflow-y-auto px-5 md:px-8">
+            <div className="w-full md:max-w-3xl lg:max-w-5xl mx-auto">
+              {view === "today" && (
+                <Today
+                  mode={resolvedMode}
+                  today={todayDate}
+                  evaluation={todayEval}
+                  cfg={todayCfg}
+                  sessions={todaySessions}
+                  absences={getAbsencesForDate(absences, todayDate)}
+                  adjustment={dayAdjustments[todayDate]}
+                  confirmed={confirmedDays[todayDate] === true}
+                  locked={lockedToday}
+                  lockedMonth={lockedToday ? todayDate.slice(0, 7) : undefined}
+                  scheduleLeave={scheduledLeaveTime(todayCfg, dayAdjustments[todayDate])}
+                  flex={{
+                    total: flexTotal,
+                    week: flexWeek,
+                    month: flexMonth,
+                    today: todayDelta,
+                    attention: flexAttention,
+                  }}
+                  attend={attend}
+                  actions={actions}
+                  banners={banners}
+                  activeSession={activeSession}
+                  liveMs={liveMs}
+                  leave={leave}
+                  isLongSession={isLongSession}
+                  onPunch={handlePunch}
+                  onFixLongSession={() => setLatePunchoutOpen(true)}
+                  onOpenFlex={() => setFlexBreakdownOpen(true)}
+                  onShowReceipts={() => {
+                    setFocusExpenses(true);
+                    setView("report");
+                  }}
+                />
+              )}
+
+              {view === "calendar" && <Calendar ctx={flexCtx} actions={actions} />}
+
+              {view === "report" && (
+                <Report
+                  ctx={flexCtx}
+                  expenses={expenses}
+                  name={name}
+                  slots={reportSlots}
+                  focusExpenses={focusExpenses}
+                  onAddExpense={() => setExpenseModal(true)}
+                  onDeleteExpense={handleDeleteExpense}
+                />
+              )}
+
+              {view === "more" && (
+                <More
+                  name={name}
+                  department={department}
+                  mode={resolvedMode}
+                  syncToken={syncToken}
+                  syncStatus={syncStatus}
+                  syncedAt={syncedAt}
+                  syncDirty={dirtyRef.current}
+                  slots={moreSlots}
+                  onOpenProfile={() => setSettingsModal(true)}
+                  onOpenSchedule={() => setScheduleModal(true)}
+                  demo={demo}
+                  onSetupSync={() => !demo && setSyncModal(true)}
+                  onOpenSyncAccount={() => setSettingsModal(true)}
+                  onPullNow={() => {
+                    void pullNow({ manual: true });
+                  }}
+                  onOpenAutomation={() => setAutomationModal(true)}
+                />
+              )}
+              <div className="h-4" />
+            </div>
+          </main>
+
+          {/* Bottom nav (phone only; the sidebar takes over from md) */}
+          <nav
+            className="md:hidden shrink-0 w-full bg-pc-surface/85 backdrop-blur-xl border-t border-pc-line px-2"
+            style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 6px)" }}
+          >
+            <div className="grid grid-cols-4 gap-1 pt-2">
+              {NAV.map((n) => (
+                <NavItem
+                  key={n.key}
+                  active={view === n.key}
+                  onClick={() => {
+                    setFocusExpenses(false);
+                    setView(n.key);
+                  }}
+                  label={n.label}
+                  icon={n.icon}
+                />
+              ))}
+            </div>
+          </nav>
+        </div>
       </div>
 
       {shortWarn && activeSession && (
@@ -1832,10 +1858,10 @@ export default function PunchClock() {
 
       {toast && (
         <div
-          className="fixed left-1/2 -translate-x-1/2 z-[60] pointer-events-none pc-pop max-w-[calc(100vw-32px)]"
+          className="fixed left-1/2 md:left-[calc(50%+7rem)] lg:left-[calc(50%+8rem)] -translate-x-1/2 z-[60] pointer-events-none pc-pop max-w-[calc(100vw-32px)]"
           style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 84px)" }}
         >
-          <div className="bg-pc-ink text-white text-[13px] font-bold px-4 py-3 rounded-2xl shadow-[0_8px_28px_rgba(45,23,23,0.4)] text-center">
+          <div className="bg-pc-solid text-white text-[13px] font-bold px-4 py-3 rounded-2xl shadow-[0_8px_28px_rgba(45,23,23,0.4)] text-center">
             {toast}
           </div>
         </div>
@@ -1848,11 +1874,14 @@ export default function PunchClock() {
 // Always on screen in demo (above the header, outside the scrolling area).
 function DemoBanner({ onExit }: { onExit: () => void }) {
   return (
-    <div role="status" className="shrink-0 flex items-center gap-3 px-5 py-2 bg-pc-ink text-white">
+    <div
+      role="status"
+      className="shrink-0 flex items-center gap-3 px-5 py-2 bg-pc-solid text-white"
+    >
       <span className="flex-1 min-w-0 text-[12px] font-bold truncate">Demoläge – inget sparas</span>
       <button
         onClick={onExit}
-        className="pc-press shrink-0 px-3 py-1 rounded-full bg-white text-pc-ink text-[12px] font-extrabold"
+        className="pc-press shrink-0 px-3 py-1 rounded-full bg-pc-surface text-pc-ink text-[12px] font-extrabold"
       >
         Avsluta demo
       </button>
@@ -1879,24 +1908,30 @@ function SyncErrorBanner({
       role="alert"
       className="rounded-[18px] px-4 py-3 pc-pop"
       style={{
-        background: "#fef2f2",
-        border: "1.5px solid #fca5a5",
+        background: "var(--pc-danger-bg)",
+        border: "1.5px solid var(--pc-danger-line)",
         boxShadow: "0 4px 16px rgba(220,38,38,0.10)",
       }}
     >
       <div className="flex items-start gap-3">
         <span className="text-[18px] leading-none mt-0.5 shrink-0">⚠️</span>
         <div className="flex-1 min-w-0">
-          <div className="text-[13px] font-extrabold leading-tight" style={{ color: "#b91c1c" }}>
+          <div
+            className="text-[13px] font-extrabold leading-tight"
+            style={{ color: "var(--pc-danger)" }}
+          >
             {headline}
           </div>
-          <div className="text-[12px] leading-snug mt-0.5" style={{ color: "#9f1239" }}>
+          <div
+            className="text-[12px] leading-snug mt-0.5"
+            style={{ color: "var(--pc-danger-ink)" }}
+          >
             {detail}
           </div>
           <button
             onClick={onReadMore}
             className="mt-2 text-[12px] font-extrabold underline"
-            style={{ color: "#b91c1c" }}
+            style={{ color: "var(--pc-danger)" }}
           >
             Läs mer och åtgärda →
           </button>
@@ -1904,7 +1939,7 @@ function SyncErrorBanner({
         <button
           onClick={onDismiss}
           className="shrink-0 w-6 h-6 flex items-center justify-center rounded-lg"
-          style={{ color: "#b91c1c" }}
+          style={{ color: "var(--pc-danger)" }}
           aria-label="Dölj"
         >
           <svg
@@ -1936,16 +1971,16 @@ function ShortSessionWarning({
   const secs = Math.floor(elapsed / 1000);
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center pc-overlay"
-      style={{ background: "rgba(45,23,23,0.55)" }}
+      className="fixed inset-0 z-50 flex items-end md:items-center justify-center md:p-6 pc-overlay"
+      style={{ background: "var(--pc-overlay)" }}
       onClick={onCancel}
     >
       <div
-        className="pc-sheet bg-white w-full max-w-[480px] rounded-t-[28px] px-6 pt-6"
+        className="pc-sheet bg-pc-surface w-full max-w-[480px] md:max-w-[560px] rounded-t-[28px] md:rounded-[28px] px-6 pt-6"
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)" }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="w-10 h-1 bg-pc-line rounded-full mx-auto mb-5" />
+        <div className="w-10 h-1 bg-pc-line rounded-full mx-auto md:hidden mb-5" />
         <div className="w-14 h-14 rounded-2xl bg-amber-100 flex items-center justify-center mb-4 mx-auto">
           <svg
             viewBox="0 0 24 24"
@@ -1979,7 +2014,7 @@ function ShortSessionWarning({
           </button>
           <button
             onClick={onStop}
-            className="pc-press py-4 rounded-[16px] bg-pc-orange text-white font-bold text-[15px] shadow-[0_8px_20px_-8px_rgba(255,95,0,0.6)]"
+            className="pc-press py-4 rounded-[16px] bg-pc-orange text-white font-bold text-[15px] shadow-[0_8px_20px_-8px_rgb(var(--pc-orange-rgb)/0.6)]"
           >
             Stoppa klockan
           </button>
@@ -1990,6 +2025,50 @@ function ShortSessionWarning({
 }
 
 // ─── Nav Item ─────────────────────────────────────────────────
+function ClockGlyph() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="w-5 h-5 text-white"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </svg>
+  );
+}
+
+function SideNavItem({
+  active,
+  onClick,
+  label,
+  icon,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  icon: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      aria-current={active ? "page" : undefined}
+      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-[14px] font-bold transition-colors ${
+        active
+          ? "bg-pc-peach text-pc-orange-deep"
+          : "text-pc-muted hover:bg-pc-apricot hover:text-pc-ink"
+      }`}
+    >
+      {icon}
+      <span>{label}</span>
+    </button>
+  );
+}
+
 function NavItem({
   active,
   onClick,

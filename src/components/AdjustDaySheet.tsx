@@ -234,7 +234,7 @@ export default function AdjustDaySheet({
         <button
           type="button"
           onClick={handleSave}
-          className="pc-press py-4 rounded-[16px] bg-pc-orange text-white font-bold text-[15px] shadow-[0_8px_20px_-8px_rgba(255,95,0,0.6)]"
+          className="pc-press py-4 rounded-[16px] bg-pc-orange text-white font-bold text-[15px] shadow-[0_8px_20px_-8px_rgb(var(--pc-orange-rgb)/0.6)]"
         >
           Spara
         </button>

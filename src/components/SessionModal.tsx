@@ -135,19 +135,19 @@ export default function SessionModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center pc-overlay"
-      style={{ background: "rgba(45,23,23,0.55)" }}
+      className="fixed inset-0 z-50 flex items-end md:items-center justify-center md:p-6 pc-overlay"
+      style={{ background: "var(--pc-overlay)" }}
       onClick={onClose}
     >
       <div
-        className="pc-sheet bg-white w-full max-w-[480px] rounded-t-[28px] px-6 pt-6 overflow-y-auto"
+        className="pc-sheet bg-pc-surface w-full max-w-[480px] md:max-w-[560px] rounded-t-[28px] md:rounded-[28px] px-6 pt-6 overflow-y-auto"
         style={{
           paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)",
           maxHeight: "92dvh",
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="w-10 h-1 bg-pc-line rounded-full mx-auto mb-5" />
+        <div className="w-10 h-1 bg-pc-line rounded-full mx-auto md:hidden mb-5" />
         <div className="font-extrabold text-[22px] tracking-tight mb-1">
           {isEdit ? "Redigera pass" : "Lägg till tid"}
         </div>
@@ -170,7 +170,7 @@ export default function SessionModal({
               }}
               className={`flex-1 py-2.5 rounded-[14px] text-[13px] font-bold border transition-colors ${
                 !multiDay
-                  ? "bg-pc-orange text-white border-pc-orange shadow-[0_4px_12px_-4px_rgba(255,95,0,0.45)]"
+                  ? "bg-pc-orange text-white border-pc-orange shadow-[0_4px_12px_-4px_rgb(var(--pc-orange-rgb)/0.45)]"
                   : "bg-pc-bg border-pc-line text-pc-ink"
               }`}
             >
@@ -184,7 +184,7 @@ export default function SessionModal({
               }}
               className={`flex-1 py-2.5 rounded-[14px] text-[13px] font-bold border transition-colors ${
                 multiDay
-                  ? "bg-pc-orange text-white border-pc-orange shadow-[0_4px_12px_-4px_rgba(255,95,0,0.45)]"
+                  ? "bg-pc-orange text-white border-pc-orange shadow-[0_4px_12px_-4px_rgb(var(--pc-orange-rgb)/0.45)]"
                   : "bg-pc-bg border-pc-line text-pc-ink"
               }`}
             >
@@ -274,7 +274,7 @@ export default function SessionModal({
                   onClick={() => setPct(p)}
                   className={`py-2.5 rounded-[12px] text-[13px] font-bold border transition-colors ${
                     pct === p
-                      ? "bg-pc-orange text-white border-pc-orange shadow-[0_4px_12px_-4px_rgba(255,95,0,0.45)]"
+                      ? "bg-pc-orange text-white border-pc-orange shadow-[0_4px_12px_-4px_rgb(var(--pc-orange-rgb)/0.45)]"
                       : "bg-pc-bg border-pc-line text-pc-ink"
                   }`}
                 >
@@ -302,23 +302,23 @@ export default function SessionModal({
             boxSizing: "border-box",
             padding: "12px 14px",
             borderRadius: "14px",
-            border: "1px solid #ece6df",
+            border: "1px solid var(--pc-line)",
             fontSize: "15px",
             outline: "none",
-            background: "#fdf6ee",
+            background: "var(--pc-apricot)",
             fontWeight: 500,
-            color: "#2d1717",
+            color: "var(--pc-ink)",
             resize: "none",
             marginBottom: "16px",
             fontFamily: "inherit",
           }}
           onFocus={(e) => {
-            e.currentTarget.style.borderColor = "#ff5f00";
-            e.currentTarget.style.background = "#fff";
+            e.currentTarget.style.borderColor = "var(--pc-orange)";
+            e.currentTarget.style.background = "var(--pc-surface)";
           }}
           onBlur={(e) => {
-            e.currentTarget.style.borderColor = "#ece6df";
-            e.currentTarget.style.background = "#fdf6ee";
+            e.currentTarget.style.borderColor = "var(--pc-line)";
+            e.currentTarget.style.background = "var(--pc-apricot)";
           }}
         />
 
@@ -374,7 +374,7 @@ export default function SessionModal({
           </button>
           <button
             onClick={multiDay ? handleSaveMulti : handleSave}
-            className="pc-press py-4 rounded-[16px] bg-pc-orange text-white font-bold text-[15px] shadow-[0_8px_20px_-8px_rgba(255,95,0,0.6)]"
+            className="pc-press py-4 rounded-[16px] bg-pc-orange text-white font-bold text-[15px] shadow-[0_8px_20px_-8px_rgb(var(--pc-orange-rgb)/0.6)]"
           >
             {isEdit
               ? "Spara ändringar"

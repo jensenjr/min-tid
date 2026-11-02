@@ -108,7 +108,7 @@ export default function Calendar({ ctx, actions }: { ctx: DayContext; actions: D
     <div className="pc-fade pt-2">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-[28px] font-extrabold tracking-tight">Kalender</h1>
-        <div className="flex bg-white border border-pc-line rounded-full p-0.5">
+        <div className="flex bg-pc-surface border border-pc-line rounded-full p-0.5">
           {(["grid", "list"] as const).map((m) => (
             <button
               key={m}
@@ -195,10 +195,10 @@ export default function Calendar({ ctx, actions }: { ctx: DayContext; actions: D
                       style={{
                         fontWeight: isToday ? 800 : 600,
                         color: isToday
-                          ? "var(--color-pc-orange, #ff5f00)"
+                          ? "var(--color-pc-orange, var(--pc-orange))"
                           : !inMonth
-                            ? "#9c7c5c"
-                            : "#2d1717",
+                            ? "var(--pc-taupe)"
+                            : "var(--pc-ink)",
                       }}
                     >
                       {new Date(dateStr + "T12:00:00").getDate()}
@@ -310,7 +310,7 @@ export default function Calendar({ ctx, actions }: { ctx: DayContext; actions: D
           </div>
           <button
             onClick={() => actions.unlockMonth(monthKey)}
-            className="pc-press w-full mt-3 py-2.5 rounded-[14px] bg-white border border-amber-200 text-amber-800 font-bold text-[13px]"
+            className="pc-press w-full mt-3 py-2.5 rounded-[14px] bg-pc-surface border border-amber-200 text-amber-800 font-bold text-[13px]"
           >
             Lås upp månaden
           </button>
@@ -319,7 +319,7 @@ export default function Calendar({ ctx, actions }: { ctx: DayContext; actions: D
         started && (
           <button
             onClick={() => actions.confirmMonth(monthKey)}
-            className="pc-press w-full mb-4 py-3.5 rounded-[18px] bg-white border border-pc-line font-bold text-[14px] text-pc-ink"
+            className="pc-press w-full mb-4 py-3.5 rounded-[18px] bg-pc-surface border border-pc-line font-bold text-[14px] text-pc-ink"
           >
             Bekräfta {monthTitle(monthKey).split(" ")[0].toLowerCase()}
           </button>

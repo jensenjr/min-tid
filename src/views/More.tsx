@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { ABSENCE_META, type AbsenceCategory } from "../components/AbsenceModal";
+import AppearanceSheet from "../components/AppearanceSheet";
+import { appearanceSummary, useAppearance } from "../lib/useAppearance";
 import SyncSecuritySheet, { type SyncStatus } from "../components/SyncSecuritySheet";
 import { MoreRow, Sheet } from "../components/ui";
 import type { ReportingMode } from "../lib/types";
@@ -96,7 +98,7 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
       <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-pc-muted mb-2 px-1">
         {title}
       </div>
-      <div className="bg-white rounded-[22px] border border-pc-line shadow-[0_2px_12px_rgba(81,43,43,0.04)] overflow-hidden">
+      <div className="bg-pc-surface rounded-[22px] border border-pc-line shadow-[0_2px_12px_rgba(81,43,43,0.04)] overflow-hidden">
         {children}
       </div>
     </div>
@@ -135,6 +137,8 @@ export default function More(p: MoreProps) {
   const [rules, setRules] = useState(false);
   const [about, setAbout] = useState(false);
   const [sync, setSync] = useState(false);
+  const [appearance, setAppearance] = useState(false);
+  const look = useAppearance();
   const initial = (p.name.trim()[0] ?? "?").toUpperCase();
 
   return (
@@ -143,7 +147,7 @@ export default function More(p: MoreProps) {
 
       <button
         onClick={p.onOpenProfile}
-        className="pc-press w-full flex items-center gap-3 bg-white rounded-[22px] border border-pc-line shadow-[0_2px_12px_rgba(81,43,43,0.04)] px-4 py-4 mb-5 text-left"
+        className="pc-press w-full flex items-center gap-3 bg-pc-surface rounded-[22px] border border-pc-line shadow-[0_2px_12px_rgba(81,43,43,0.04)] px-4 py-4 mb-5 text-left"
       >
         <span className="w-11 h-11 rounded-2xl bg-pc-orange text-white flex items-center justify-center font-extrabold text-[18px] shrink-0">
           {initial}
@@ -157,56 +161,75 @@ export default function More(p: MoreProps) {
         <span className="text-pc-muted">›</span>
       </button>
 
-      <Group title="Tid och regler">
-        <MoreRow
-          icon="📅"
-          title="Schema & rapportläge"
-          subtitle={p.mode === "schedule" ? "Rapportläge: Enligt schema" : "Rapportläge: Stämpla"}
-          onClick={p.onOpenSchedule}
-        />
-        <MoreRow
-          icon="📋"
-          title="Frånvaroregler"
-          subtitle="Så räknas frånvaro, flex och lunch"
-          onClick={() => setRules(true)}
-        />
-        {p.slots?.travelRules}
-        {p.slots?.vacation}
-      </Group>
+      {/* Two columns of groups on desktop. */}
+      <div className="md:grid md:grid-cols-2 md:gap-x-6 md:items-start">
+        <div>
+          <Group title="Tid och regler">
+            <MoreRow
+              icon="📅"
+              title="Schema & rapportläge"
+              subtitle={
+                p.mode === "schedule" ? "Rapportläge: Enligt schema" : "Rapportläge: Stämpla"
+              }
+              onClick={p.onOpenSchedule}
+            />
+            <MoreRow
+              icon="📋"
+              title="Frånvaroregler"
+              subtitle="Så räknas frånvaro, flex och lunch"
+              onClick={() => setRules(true)}
+            />
+            {p.slots?.travelRules}
+            {p.slots?.vacation}
+          </Group>
 
-      <Group title="Data">
-        <MoreRow
-          icon="🔒"
-          title="Synk och säkerhet"
-          subtitle={
-            p.demo
-              ? "Av i demoläget"
-              : p.syncToken
-                ? "Krypterad synk är på · AES-256"
-                : "Krypterad på enheten · AES-256"
-          }
-          onClick={() => setSync(true)}
-        />
-        {p.slots?.excelImport}
-      </Group>
+          <Group title="Data">
+            <MoreRow
+              icon="🔒"
+              title="Synk och säkerhet"
+              subtitle={
+                p.demo
+                  ? "Av i demoläget"
+                  : p.syncToken
+                    ? "Krypterad synk är på · AES-256"
+                    : "Krypterad på enheten · AES-256"
+              }
+              onClick={() => setSync(true)}
+            />
+            {p.slots?.excelImport}
+          </Group>
+        </div>
 
-      <Group title="Övrigt">
-        <MoreRow
-          icon="⚡"
-          title="Automatisering"
-          subtitle="QR-koder, NFC-taggar och WiFi via Genvägar"
-          onClick={p.onOpenAutomation}
-        />
-        <MoreRow
-          icon="ℹ️"
-          title="Om appen"
-          subtitle={`Version ${__APP_VERSION__}`}
-          onClick={() => setAbout(true)}
-        />
-      </Group>
+        <div>
+          <Group title="Utseende">
+            <MoreRow
+              icon="🎨"
+              title="Tema och färger"
+              subtitle={appearanceSummary(look.theme, look.accent)}
+              onClick={() => setAppearance(true)}
+            />
+          </Group>
+
+          <Group title="Övrigt">
+            <MoreRow
+              icon="⚡"
+              title="Automatisering"
+              subtitle="QR-koder, NFC-taggar och WiFi via Genvägar"
+              onClick={p.onOpenAutomation}
+            />
+            <MoreRow
+              icon="ℹ️"
+              title="Om appen"
+              subtitle={`Version ${__APP_VERSION__}`}
+              onClick={() => setAbout(true)}
+            />
+          </Group>
+        </div>
+      </div>
 
       <AbsenceRulesSheet open={rules} onClose={() => setRules(false)} />
       <AboutSheet open={about} onClose={() => setAbout(false)} />
+      <AppearanceSheet open={appearance} onClose={() => setAppearance(false)} />
       <SyncSecuritySheet
         open={sync}
         onClose={() => setSync(false)}

@@ -12,6 +12,9 @@ All notable changes to **min-tid** are recorded here. Format loosely follows [Ke
 ## [Unreleased]
 
 - Sidans titel (flikrubrik, delningslänkar, hemskärmsnamn) är nu "min-tid – arbetstid och avvikelser" i stället för "Tidrapport – Dalslands Sparbank".
+- **Mörkt läge.** Appen följer enhetens ljusa/mörka läge (även när det byts medan appen är öppen). Under Mer → Utseende kan du i stället välja Ljust eller Mörkt.
+- **Färgteman.** Välj accentfärg under Mer → Utseende: Orange, Hav, Skog, Ljung eller Hallon. Valet gäller bara enheten.
+- **Bättre på datorn.** Från surfplattebredd får appen en sidomeny i stället för menyn längst ned, innehållet använder bredden (Idag i två kolumner, Mer i två kolumner) och alla bladen öppnas som centrerade dialogrutor.
 
 ## [1.0.0] — 2026-10-14
 
