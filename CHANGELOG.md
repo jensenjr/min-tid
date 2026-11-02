@@ -11,7 +11,7 @@ All notable changes to **min-tid** are recorded here. Format loosely follows [Ke
 
 ## [Unreleased]
 
-_Nothing yet._
+- Sidans titel (flikrubrik, delningslänkar, hemskärmsnamn) är nu "min-tid – arbetstid och avvikelser" i stället för "Tidrapport – Dalslands Sparbank".
 
 ## [1.0.0] — 2026-10-14
 

@@ -1,6 +1,6 @@
 {
-  "name": "min tid – Tidrapport",
-  "short_name": "min tid",
+  "name": "min-tid – arbetstid och avvikelser",
+  "short_name": "min-tid",
   "description": "Enkel tidsregistrering. Stämpla in, stämpla ut, dela rapport.",
   "lang": "sv",
   "start_url": "/",
