@@ -8,6 +8,7 @@ import {
   isDayLocked,
   isMonthLocked,
   mergeDayStatusState,
+  monthReview,
   migrateDayStatusState,
   unconfirmDay,
   unlockMonth,
@@ -62,16 +63,27 @@ describe("confirmMonth — schedule mode", () => {
       ...over,
     });
 
-  it("marks every unconfirmed day reported, locks the month and logs it", () => {
+  /** Every March weekday from the 5th marked "Enligt schema" (the first three have entries). */
+  const reviewed = Object.fromEntries(MARCH_WEEKDAYS.slice(2).map((d) => [d, true as const]));
+
+  it("refuses while days are not gone through and lists them — it never confirms days itself", () => {
+    const r = confirmMonth("2026-03", base(), { at: 1, by: "Anna" });
+    expect(r).toEqual({
+      ok: false,
+      reason: "unreviewed-days",
+      unreviewedDays: MARCH_WEEKDAYS.slice(3),
+    });
+  });
+
+  it("locks and logs once every day has a status", () => {
     const at0 = at("2026-04-02", "09:00");
-    const r = confirmMonth("2026-03", base(), { at: at0, by: "Anna" });
+    const c = base({ confirmedDays: reviewed });
+    const r = confirmMonth("2026-03", c, { at: at0, by: "Anna" });
     if (!r.ok) throw new Error(r.reason);
-    expect(r.confirmed).toEqual(MARCH_WEEKDAYS.slice(3));
-    expect(Object.keys(r.confirmedDays).sort()).toEqual(MARCH_WEEKDAYS.slice(2));
     expect(r.lockedMonths).toEqual({ "2026-03": { at: at0, by: "Anna" } });
     expect(r.auditLog).toEqual([{ at: at0, action: "confirm", month: "2026-03" }]);
 
-    const after = base({ confirmedDays: r.confirmedDays, lockedMonths: r.lockedMonths });
+    const after = { ...c, lockedMonths: r.lockedMonths };
     expect(evaluateDay("2026-03-05", after).status).toBe("reported");
     expect(computeFlex(after, { from: "2026-03-01", to: "2026-03-31" }).unconfirmedDays).toEqual(
       [],
@@ -80,22 +92,49 @@ describe("confirmMonth — schedule mode", () => {
 
   it("keeps earlier audit entries", () => {
     const earlier: AuditEntry[] = [{ at: 5, action: "unlock", month: "2026-02" }];
-    const r = confirmMonth("2026-03", base(), { at: 10, by: "Anna", auditLog: earlier });
+    const r = confirmMonth("2026-03", base({ confirmedDays: reviewed }), {
+      at: 10,
+      by: "Anna",
+      auditLog: earlier,
+    });
     expect(r.ok && r.auditLog).toEqual([
       ...earlier,
       { at: 10, action: "confirm", month: "2026-03" },
     ]);
   });
 
-  it("mid-month: confirms the past, the rest of the month reads as per schedule", () => {
+  it("mid-month: the past must be gone through, the rest of the month reads as per schedule", () => {
     const today = "2026-03-11";
     const c = ctx(today);
-    const r = confirmMonth("2026-03", c, { at: at(today, "12:00"), by: "Anna" });
+    const refused = confirmMonth("2026-03", c, { at: 1, by: "Anna" });
+    // 2nd–10th; today (no registration, before the end of the shift) is ongoing.
+    expect(refused).toEqual({
+      ok: false,
+      reason: "unreviewed-days",
+      unreviewedDays: MARCH_WEEKDAYS.slice(0, 7),
+    });
+    const done = {
+      ...c,
+      confirmedDays: Object.fromEntries(MARCH_WEEKDAYS.slice(0, 7).map((d) => [d, true as const])),
+    };
+    const r = confirmMonth("2026-03", done, { at: at(today, "12:00"), by: "Anna" });
     if (!r.ok) throw new Error(r.reason);
-    expect(r.confirmed).toEqual(MARCH_WEEKDAYS.slice(0, 7)); // 2nd–10th; today is ongoing
-    const locked = { ...c, confirmedDays: r.confirmedDays, lockedMonths: r.lockedMonths };
+    const locked = { ...done, lockedMonths: r.lockedMonths };
     expect(evaluateDay(today, locked).status).toBe("reported");
     expect(evaluateDay("2026-03-12", locked).status).toBe("off"); // future stays off
+  });
+
+  it("monthReview counts the days gone through", () => {
+    expect(monthReview("2026-03", base())).toEqual({
+      total: 22,
+      reviewed: 3,
+      open: MARCH_WEEKDAYS.slice(3),
+    });
+    expect(monthReview("2026-03", base({ confirmedDays: reviewed }))).toMatchObject({
+      total: 22,
+      reviewed: 22,
+      open: [],
+    });
   });
 
   it("refuses a month that is already locked", () => {
@@ -154,7 +193,6 @@ describe("confirmMonth — punch mode", () => {
     );
     expect(r).toMatchObject({
       ok: true,
-      confirmed: [],
       lockedMonths: { "2026-03": { at: 7, by: "Anna" } },
     });
   });
@@ -182,11 +220,14 @@ describe("unlockMonth", () => {
   });
 
   it("after unlocking, confirmed days stay reported and lock-only days are unconfirmed again", () => {
-    const r = confirmMonth("2026-03", ctx("2026-03-11"), { at: 1, by: "Anna" });
+    const confirmedDays = Object.fromEntries(
+      MARCH_WEEKDAYS.slice(0, 7).map((d) => [d, true as const]),
+    );
+    const r = confirmMonth("2026-03", ctx("2026-03-11", { confirmedDays }), { at: 1, by: "Anna" });
     if (!r.ok) throw new Error(r.reason);
     const u = unlockMonth("2026-03", r, { at: 2 });
     if (!u.ok) throw new Error(u.reason);
-    const later = ctx("2026-04-02", { confirmedDays: r.confirmedDays });
+    const later = ctx("2026-04-02", { confirmedDays });
     // While locked, a day that was still in the future at lock time reads as reported.
     expect(evaluateDay("2026-03-16", { ...later, lockedMonths: r.lockedMonths }).status).toBe(
       "reported",

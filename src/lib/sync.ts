@@ -46,6 +46,7 @@ export interface SyncState {
   expenses: unknown[];
   flexBaseMinutes: number;
   flexBaseDate?: string; // the flex balance is at the END of this day (Excel import)
+  flexAdjustments?: unknown; // FlexAdjustment[] (manual ± changes of the balance)
   vacation?: unknown; // VacationSettings (incl. the imported opening balance)
   trackingStartDate?: string;
   scheduleExceptions?: unknown;

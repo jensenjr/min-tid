@@ -1,7 +1,8 @@
 // Report builder: one row per day from evaluateDay, so the report, the CSV and the share
 // text always agree with the flex card and the calendar. Pure — no React, no DOM.
 import { addDaysStr, getEffectiveDayConfig } from "./schedule";
-import { hmLocal, weekKey } from "./dates";
+import { hmLocal, todayLocal, weekKey } from "./dates";
+import { flexAdjustmentsIn } from "./flexAdjust";
 import { ABSENCE_LABEL, absenceForDay } from "./absence";
 import {
   type DayContext,
@@ -14,7 +15,7 @@ import {
   sessionsOn,
 } from "./days";
 import { weekRangeLabel } from "./format";
-import type { AbsenceCategory, ExpenseCategory, ExpenseEntry } from "./types";
+import type { AbsenceCategory, ExpenseCategory, ExpenseEntry, FlexAdjustment } from "./types";
 
 // Same labels as EXPENSE_META in ExpenseModal.tsx (a test keeps them in step).
 export const EXPENSE_LABEL: Record<ExpenseCategory, string> = {
@@ -99,6 +100,8 @@ export type Report = {
   rows: ReportRow[];
   totals: ReportTotals;
   absences: AbsenceTotal[];
+  /** Manual flex adjustments dated in the period (up to today); inside totals.flexMin. */
+  flexAdjustments: FlexAdjustment[];
 };
 
 const isOpen = (s: { checkOut: number | null }) => s.checkOut === null || s.checkOut === undefined;
@@ -212,12 +215,18 @@ export function buildReport(ctx: DayContext, start: string, end: string): Report
     if (ev.status === "unconfirmed") totals.unconfirmedDays.push(date);
   }
 
+  // Same rule as computeFlex: on their date, never in the future.
+  const today = c.today ?? todayLocal();
+  const flexAdjustments = flexAdjustmentsIn(c.flexAdjustments, start, end < today ? end : today);
+  for (const a of flexAdjustments) totals.flexMin += a.minutes;
+
   return {
     start,
     end,
     rows,
     totals,
     absences: [...absByCat.values()].sort((a, b) => b.minutes - a.minutes),
+    flexAdjustments,
   };
 }
 
@@ -371,7 +380,15 @@ export function buildShareText(
     lines.push("");
   }
 
-  if (rows.length > 0) {
+  if (report.flexAdjustments.length > 0) {
+    lines.push(`── Manuella flexjusteringar ──`);
+    for (const a of report.flexAdjustments) {
+      lines.push(`  ${a.date}: ${fmtSignedDuration(a.minutes)}${a.note ? ` (${a.note})` : ""}`);
+    }
+    lines.push("");
+  }
+
+  if (rows.length > 0 || report.flexAdjustments.length > 0) {
     lines.push(
       `Total: ${fmtDuration(totals.workedMin)} · flex ${fmtSignedDuration(totals.flexMin)}`,
     );

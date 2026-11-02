@@ -13,6 +13,15 @@ export const CHANGELOG_URL = "https://github.com/jensenjr/min-tid/blob/omtag/v1/
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.2.0",
+    date: "2026-11-02",
+    notes: [
+      "Välj flera dagar i kalendern och sätt OK, sjuk, VAB, semester eller flex på alla på en gång.",
+      "Månaden låses först när alla dagar är genomgångna. Flexsaldot kan justeras manuellt.",
+      "Ljust/mörkt-knapp i sidhuvudet och en kalender som fyller skärmen på datorn.",
+    ],
+  },
+  {
     version: "1.1.0",
     date: "2026-11-02",
     notes: [

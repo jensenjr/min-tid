@@ -11,6 +11,7 @@ import {
   netDayMin,
 } from "./schedule";
 import { isYmd, todayLocal } from "./dates";
+import { sumFlexAdjustments } from "./flexAdjust";
 import {
   DEFAULT_AUTO_LUNCH_THRESHOLD_MIN,
   type DayContext,
@@ -25,10 +26,20 @@ export type FlexResult = { minutes: number; missingDays: string[]; unconfirmedDa
 
 /** Flex over a range (default: everything since trackingStartDate), clamped to today. */
 export function computeFlex(ctx: DayContext, range: FlexRange = {}): FlexResult {
-  const out: FlexResult = { minutes: 0, missingDays: [], unconfirmedDays: [] };
+  const today = ctx.today ?? todayLocal();
+  // Manual adjustments count on their date (inside the range, never in the future),
+  // independent of the flex start.
+  const out: FlexResult = {
+    minutes: sumFlexAdjustments(
+      ctx.flexAdjustments,
+      isYmd(range.from) ? range.from : undefined,
+      isYmd(range.to) && range.to < today ? range.to : today,
+    ),
+    missingDays: [],
+    unconfirmedDays: [],
+  };
   const start = ctx.trackingStartDate;
   if (!isYmd(start)) return out;
-  const today = ctx.today ?? todayLocal();
   // Freeze "today" and "now" so every day of the fold sees the same clock.
   const c: DayContext = { ...ctx, today, now: ctx.now ?? Date.now() };
   const from = isYmd(range.from) && range.from > start ? range.from : start;

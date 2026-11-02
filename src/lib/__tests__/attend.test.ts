@@ -132,8 +132,16 @@ describe("buildMonthPrompt — from the 25th", () => {
     expect(buildMonthPrompt(ctx("2026-10-24"), "2026-10-24")).toBeNull();
     const p = buildMonthPrompt(ctx("2026-10-25"), "2026-10-25");
     expect(p?.month).toBe("2026-10");
-    expect(p?.ready).toBe(true);
+    // Unconfirmed days must be gone through first.
+    expect(p?.ready).toBe(false);
     expect(p?.unconfirmedCount).toBeGreaterThan(0);
+  });
+
+  it("is ready once every past day has a status", () => {
+    const confirmedDays: Record<string, true> = {};
+    for (let d = 1; d <= 24; d++) confirmedDays[`2026-10-${String(d).padStart(2, "0")}`] = true;
+    const p = buildMonthPrompt(ctx("2026-10-25", { confirmedDays }), "2026-10-25");
+    expect(p).toMatchObject({ ready: true, unconfirmedCount: 0 });
   });
 
   it("is not ready while punch-mode days are missing", () => {
@@ -144,14 +152,13 @@ describe("buildMonthPrompt — from the 25th", () => {
   });
 
   it("disappears once the month is locked, and for a user without a start date", () => {
-    const c = ctx("2026-10-27");
+    const confirmedDays: Record<string, true> = {};
+    for (let d = 1; d <= 27; d++) confirmedDays[`2026-10-${String(d).padStart(2, "0")}`] = true;
+    const c = ctx("2026-10-27", { confirmedDays });
     const res = confirmMonth("2026-10", c, { at: 1, by: "Anna" });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
-    const locked = ctx("2026-10-27", {
-      confirmedDays: res.confirmedDays,
-      lockedMonths: res.lockedMonths,
-    });
+    const locked = ctx("2026-10-27", { confirmedDays, lockedMonths: res.lockedMonths });
     expect(buildMonthPrompt(locked, "2026-10-27")).toBeNull();
     expect(
       buildMonthPrompt(ctx("2026-10-27", { trackingStartDate: undefined }), "2026-10-27"),

@@ -13,6 +13,14 @@ All notable changes to **min-tid** are recorded here. Format loosely follows [Ke
 
 _Nothing yet._
 
+## [1.2.0] — 2026-11-02
+
+- **Välj flera dagar i kalendern.** Tryck på **Välj** i Kalender (månad eller lista), markera dagarna och sätt status på alla på en gång: OK (enligt schema), Sjuk, VAB, Semester, Flex eller någon annan frånvarotyp under Mer, eller ta bort statusen. Välj första och sista dagen och tryck **Fyll period** för en längre frånvaro; lediga dagar mellan valda dagar blir en sammanhängande period, och semester kan planeras framåt i tiden.
+- **Gå igenom månaden innan du låser den.** En månad kan bara bekräftas och låsas när varje dag hittills har en status. Kalendern visar hur många dagar som är genomgångna ("18 av 22"), och "Att åtgärda" leder till kalendern i stället för att låsa allt på en gång.
+- **Manuell flexjustering.** I flexbladet (tryck på saldot) finns **Justera saldo manuellt**: dra av eller lägg till timmar med datum och anteckning, t.ex. när övertid betalats ut. Justeringarna syns som egen historik, i veckorna och i rapporten.
+- **Ljust/mörkt i sidhuvudet.** En sol/måne-knapp byter läge direkt (Mer → Utseende har kvar "Följ enheten").
+- **Kalendern på datorn.** Rutorna växer neråt efter fönstrets höjd i stället för att bara dras ut på bredden, med större text, veckodagarnas namn och en sidokolumn för genomgång och val på breda skärmar. Vid hög zoom ser den ut som förut.
+
 ## [1.1.0] — 2026-11-02
 
 - Sidans titel (flikrubrik, delningslänkar, hemskärmsnamn) är nu "min-tid – arbetstid och avvikelser" i stället för "Tidrapport – Dalslands Sparbank".
@@ -392,7 +400,8 @@ First public beta. The app is feature-complete for time, absence and expense tra
 - **`nixpacks.toml`** overrides the default Caddy start command if Coolify falls back to Nixpacks instead of Dockerfile.
 - **Zero native deps** on the server — `better-sqlite3` was replaced with a plain JSON file store.
 
-[Unreleased]: https://github.com/jensenjr/min-tid/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/jensenjr/min-tid/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/jensenjr/min-tid/releases/tag/v1.2.0
 [1.1.0]: https://github.com/jensenjr/min-tid/releases/tag/v1.1.0
 [1.0.0]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0
 [1.0.0-beta.12]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.12

@@ -49,7 +49,7 @@ export function resolveDark(choice: ThemeChoice, systemDark: boolean): boolean {
   return choice === "dark" || (choice === "system" && systemDark);
 }
 
-function systemPrefersDark(): boolean {
+export function systemPrefersDark(): boolean {
   return (
     typeof window !== "undefined" && !!window.matchMedia?.("(prefers-color-scheme: dark)").matches
   );

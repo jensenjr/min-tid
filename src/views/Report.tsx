@@ -245,6 +245,18 @@ export default function Report({
             {fmtSignedDuration(totals.flexMin)}
           </span>
         </div>
+        {report.flexAdjustments.length > 0 && (
+          <div className="text-[12px] text-pc-muted font-medium mt-1">
+            Inkl. manuell flexjustering{" "}
+            {fmtSignedDuration(report.flexAdjustments.reduce((s, a) => s + a.minutes, 0))}
+            {report.flexAdjustments.some((a) => a.note)
+              ? ` (${report.flexAdjustments
+                  .map((a) => a.note)
+                  .filter(Boolean)
+                  .join(", ")})`
+              : ""}
+          </div>
+        )}
         {totals.unconfirmedDays.length > 0 && (
           <div className="mt-3 text-[12px] font-semibold text-gray-600 bg-gray-100 rounded-[12px] px-3 py-2">
             {totals.unconfirmedDays.length}{" "}

@@ -22,6 +22,7 @@ import { ABSENCE_LABEL, absenceForDay, getAbsencesForDate } from "./absence";
 import type {
   AbsenceEntry,
   DayAdjustment,
+  FlexAdjustment,
   LockedMonth,
   ReportingMode,
   ScheduleException,
@@ -69,6 +70,11 @@ export type DayContext = {
    * date <= flexBaseDate (worked time and norm are untouched).
    */
   flexBaseDate?: string;
+  /**
+   * Manual ± changes of the balance (flexAdjust.ts). Not part of any day: evaluateDay
+   * ignores them, computeFlex and buildReport add the ones dated inside their range.
+   */
+  flexAdjustments?: FlexAdjustment[];
   /** Local day key of "today". Defaults to todayLocal(). */
   today?: string;
   /** Current time in ms. Defaults to Date.now(). */
