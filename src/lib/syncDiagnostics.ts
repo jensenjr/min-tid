@@ -12,12 +12,12 @@ const MAX_LOG = 10;
 export const SUPPORT_EMAIL = "christian@krut.it";
 
 export type SyncFailure = {
-  at: number;       // ms
-  status: number;   // HTTP status, or 0 when the request never got a response
-  path: string;     // "/api/sync"
-  method: string;   // "GET" | "PUT" | …
-  message: string;  // server error text, or the fetch failure
-  online: boolean;  // navigator.onLine at the time
+  at: number; // ms
+  status: number; // HTTP status, or 0 when the request never got a response
+  path: string; // "/api/sync"
+  method: string; // "GET" | "PUT" | …
+  message: string; // server error text, or the fetch failure
+  online: boolean; // navigator.onLine at the time
 };
 
 export type SyncErrorExplanation = {
@@ -29,6 +29,17 @@ export type SyncErrorExplanation = {
   fixes: string[];
   /** True when switching network is the primary suggestion. */
   networkBlocked: boolean;
+  /**
+   * True when the fix is to log in to sync again on this device (expired session, no
+   * encryption key on the device, secret changed elsewhere, cloud copy won't decrypt).
+   * The settings sheet then offers "Logga in igen", which keeps and merges local data.
+   */
+  relogin: boolean;
+  /**
+   * True when the account no longer exists on the server (404): the fix is to set sync up
+   * again from this device ("Aktivera synk igen"), which uploads the local data.
+   */
+  recreate?: boolean;
 };
 
 export function explainSyncError(f: SyncFailure | null): SyncErrorExplanation {
@@ -41,6 +52,7 @@ export function explainSyncError(f: SyncFailure | null): SyncErrorExplanation {
         "Dina stämplingar sparas lokalt och laddas upp automatiskt när nätet är tillbaka.",
       ],
       networkBlocked: false,
+      relogin: false,
     };
   }
 
@@ -61,18 +73,73 @@ export function explainSyncError(f: SyncFailure | null): SyncErrorExplanation {
         "Fortsätter det på alla nät: skicka felloggen så kan vi kolla servern.",
       ],
       networkBlocked: true,
+      relogin: false,
     };
   }
 
+  // 401: the session expired (30 days) — or, since sync became end-to-end encrypted,
+  // this device has a session but no encryption key (it last synced with an older build).
   if (status === 401) {
     return {
-      headline: "Synk-sessionen har gått ut",
-      cause: "Servern känner inte längre igen den här enheten. Inloggningen är 30 dagar.",
+      headline: "Logga in igen för att synka",
+      cause:
+        "Den här enheten behöver logga in på synken igen — antingen har inloggningen gått ut (den gäller i 30 dagar), eller så saknar enheten nyckeln sedan synken blev krypterad.",
       fixes: [
-        "Öppna synk-inställningarna och logga in igen med ditt användarnamn och din synk-kod.",
-        "Dina lokala data ligger kvar — inget försvinner av att logga in på nytt.",
+        "Tryck ”Logga in igen” och ange ditt användarnamn och din synk-kod.",
+        "Dina lokala data ligger kvar — de slås ihop med molnet när du loggat in.",
       ],
       networkBlocked: false,
+      relogin: true,
+    };
+  }
+
+  // 409: the secret (and with it the encryption key) was changed on another device.
+  // Pre-encryption clients also get 409s from the server, but never run this code.
+  if (status === 409) {
+    return {
+      headline: "Synk-koden har bytts",
+      cause:
+        "Synk-koden har bytts på en annan enhet. Datan i molnet är krypterad med den nya koden, så den här enheten kan varken läsa eller skriva den.",
+      fixes: [
+        "Tryck ”Logga in igen” och ange den nya synk-koden.",
+        "Dina lokala data ligger kvar — de slås ihop med molnet när du loggat in.",
+      ],
+      networkBlocked: false,
+      relogin: true,
+    };
+  }
+
+  // 422: the envelope does not decrypt with this device's key (damaged or foreign).
+  if (status === 422) {
+    return {
+      headline: "Molnkopian kunde inte låsas upp",
+      cause:
+        "Den krypterade datan i molnet gick inte att dekryptera med nyckeln på den här enheten. Den kan ha skadats, eller krypterats med en annan nyckel.",
+      fixes: [
+        "Tryck ”Logga in igen” och ange din synk-kod.",
+        "Kvarstår det: skicka felloggen. Dina lokala data ligger kvar.",
+      ],
+      networkBlocked: false,
+      relogin: true,
+    };
+  }
+
+  // 404 on an authenticated call: the session is valid but the account is gone — the
+  // server's data file was reset (e.g. redeployed without a persistent volume) or the
+  // account was removed after 60 days without activity.
+  if (status === 404) {
+    return {
+      headline: "Ditt synk-konto finns inte på servern",
+      cause:
+        "Servern känner inte igen kontot längre. Det händer om servern har nollställts eller om kontot tagits bort efter lång tids inaktivitet. Dina tider på den här enheten finns kvar.",
+      fixes: [
+        "Tryck ”Aktivera synk igen” och skapa kontot på nytt – gärna med samma användarnamn.",
+        "Allt som finns på den här enheten laddas upp till det nya kontot.",
+        "Har du fler enheter: logga in på dem med det nya kontot efteråt.",
+      ],
+      networkBlocked: false,
+      relogin: false,
+      recreate: true,
     };
   }
 
@@ -86,6 +153,7 @@ export function explainSyncError(f: SyncFailure | null): SyncErrorExplanation {
         "Kvarstår det: skicka felloggen, det är ett serverfel och inget du kan lösa i appen.",
       ],
       networkBlocked: false,
+      relogin: false,
     };
   }
 
@@ -98,6 +166,7 @@ export function explainSyncError(f: SyncFailure | null): SyncErrorExplanation {
         "Kvarstår det: skicka felloggen så kan vi titta på servern.",
       ],
       networkBlocked: false,
+      relogin: false,
     };
   }
 
@@ -112,6 +181,7 @@ export function explainSyncError(f: SyncFailure | null): SyncErrorExplanation {
       "Kvarstår det: skicka felloggen.",
     ],
     networkBlocked: false,
+    relogin: false,
   };
 }
 
@@ -130,12 +200,20 @@ export function readSyncErrorLog(): SyncFailure[] {
 
 export function logSyncFailure(f: SyncFailure): SyncFailure[] {
   const next = [f, ...readSyncErrorLog()].slice(0, MAX_LOG);
-  try { localStorage.setItem(SYNC_ERROR_LOG_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+  try {
+    localStorage.setItem(SYNC_ERROR_LOG_KEY, JSON.stringify(next));
+  } catch {
+    /* ignore */
+  }
   return next;
 }
 
 export function clearSyncErrorLog() {
-  try { localStorage.removeItem(SYNC_ERROR_LOG_KEY); } catch { /* ignore */ }
+  try {
+    localStorage.removeItem(SYNC_ERROR_LOG_KEY);
+  } catch {
+    /* ignore */
+  }
 }
 
 // ─── Felanmälan ───────────────────────────────────────────────
@@ -144,22 +222,50 @@ const hhmm = (ms: number) =>
 const stamp = (ms: number) =>
   new Date(ms).toLocaleString("sv-SE", { dateStyle: "short", timeStyle: "short" });
 
-/**
- * Build the mailto: for a felanmälan. Includes what we know about the failure and
- * nothing else — never the sync token or the secret.
- */
-export function buildSyncReportMailto(opts: {
+/** What the debug panel knows about this device's sync session (no token, no key bytes). */
+export type SyncDebugContext = {
+  server?: string;
+  serverVersion?: string | null;
+  /** From GET /api/health; null = no answer. */
+  serverStorage?: "persistent" | "ephemeral" | "unknown" | null;
+  syncStatus?: string;
+  syncRev?: number | null;
+  tokenPresent?: boolean;
+  tokenExpiresAt?: number | null;
+  keyPresent?: boolean;
+  keyMatchesToken?: boolean;
+  keyId?: string | null;
+};
+
+export type SyncReportInput = {
   failure: SyncFailure | null;
   log: SyncFailure[];
   username?: string | null;
   version: string;
   lastSyncedAt?: number | null;
   pendingChanges: boolean;
-}): string {
-  const { failure, log, username, version, lastSyncedAt, pendingChanges } = opts;
+  debug?: SyncDebugContext;
+};
+
+export function storageText(s: SyncDebugContext["serverStorage"]): string {
+  if (s === "persistent") return "beständig";
+  if (s === "ephemeral") return "TILLFÄLLIG – alla konton försvinner vid nästa deploy";
+  if (s === "unknown") return "okänd (ingen Railway-volym att kontrollera)";
+  return "inget svar från /api/health";
+}
+
+const yesNo = (v: boolean | undefined) => (v === undefined ? "-" : v ? "ja" : "nej");
+const statusText = (s: number) => (s === 0 ? "ingen kontakt med servern" : "HTTP " + s);
+
+/**
+ * The felanmälan / felsökningsinfo as plain text — what "Kopiera" puts on the clipboard
+ * and what the mail body carries. Never includes the sync token or the secret.
+ */
+export function buildSyncReportText(opts: SyncReportInput): string {
+  const { failure, log, username, version, lastSyncedAt, pendingChanges, debug } = opts;
   const at = failure?.at ?? Date.now();
 
-  const lines = [
+  const lines: (string | null)[] = [
     "felanmälan app. får ingen sync.",
     "",
     "--- fellogg ---",
@@ -167,22 +273,40 @@ export function buildSyncReportMailto(opts: {
     `Tid:            ${stamp(at)}`,
     `Användare:      ${username ? "@" + username : "(ej inloggad på synk)"}`,
     failure
-      ? `Fel:            ${failure.status === 0 ? "ingen kontakt med servern" : "HTTP " + failure.status} (${failure.method} ${failure.path})`
+      ? `Fel:            ${statusText(failure.status)} (${failure.method} ${failure.path})`
       : "Fel:            (inget registrerat)",
     failure ? `Meddelande:     ${failure.message}` : null,
+    failure ? `Förklaring:     ${explainSyncError(failure).headline}` : null,
     `Nätverk:        ${failure ? (failure.online ? "online" : "offline") : "-"}`,
     `Senast synkat:  ${lastSyncedAt ? stamp(lastSyncedAt) : "aldrig"}`,
     `Osparade ändr.: ${pendingChanges ? "ja" : "nej"}`,
-    `Enhet:          ${typeof navigator !== "undefined" ? navigator.userAgent : "-"}`,
-  ].filter(Boolean) as string[];
+  ];
+  if (debug) {
+    lines.push(
+      `Server:         ${debug.server ?? "-"}${debug.serverVersion ? " (v" + debug.serverVersion + ")" : ""}`,
+      `Serverlagring:  ${storageText(debug.serverStorage)}`,
+      `Synkstatus:     ${debug.syncStatus ?? "-"}`,
+      `Server-rev:     ${debug.syncRev ? stamp(debug.syncRev) + " (" + debug.syncRev + ")" : "ingen"}`,
+      `Inloggning:     ${debug.tokenPresent ? "finns" + (debug.tokenExpiresAt ? ", giltig till " + stamp(debug.tokenExpiresAt) : "") : "saknas"}`,
+      `Nyckel på enh.: ${yesNo(debug.keyPresent)}${debug.keyPresent ? " (id " + (debug.keyId ?? "?") + (debug.keyMatchesToken === false ? ", TILLHÖR ANNAT KONTO" : "") + ")" : ""}`,
+    );
+  }
+  lines.push(`Enhet:          ${typeof navigator !== "undefined" ? navigator.userAgent : "-"}`);
 
   if (log.length > 1) {
     lines.push("", "Tidigare fel:");
     for (const e of log.slice(1)) {
-      lines.push(`  ${hhmm(e.at)}  ${e.status === 0 ? "ingen kontakt" : "HTTP " + e.status}  ${e.method} ${e.path}`);
+      lines.push(
+        `  ${hhmm(e.at)}  ${e.status === 0 ? "ingen kontakt" : "HTTP " + e.status}  ${e.method} ${e.path}  ${e.message}`,
+      );
     }
   }
+  return (lines.filter((l) => l !== null) as string[]).join("\n");
+}
 
+/** mailto: for the felanmälan. Same text as buildSyncReportText. */
+export function buildSyncReportMailto(opts: SyncReportInput): string {
+  const at = opts.failure?.at ?? Date.now();
   const subject = `mintid sync error kl ${hhmm(at)}`;
-  return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(lines.join("\n"))}`;
+  return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(buildSyncReportText(opts))}`;
 }
