@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> **Current version: 1.0.0.** Exposed to the UI via `__APP_VERSION__` (set by Vite from the root `package.json`) and shown in Mer → Om appen and at the bottom of the settings modal. Bump versions in both `package.json` and `server/package.json` together.
+> **Current version: 1.1.0.** Exposed to the UI via `__APP_VERSION__` (set by Vite from the root `package.json`) and shown in Mer → Om appen and at the bottom of the settings modal. Bump versions in both `package.json` and `server/package.json` together.
 
 ## Commands
 
@@ -600,7 +600,7 @@ This project follows semver. 1.0.0 shipped the omtag rework; the `-beta.N` suffi
 - Source of truth: root `package.json` `version` field.
 - `server/package.json` must be bumped in lockstep.
 - `vite.config.ts` reads `package.json` and exposes the version as the `__APP_VERSION__` global; `src/env.d.ts` declares the type.
-- The version is rendered in Mer → Om appen (`views/More.tsx`) and in the footer of `SettingsModal.tsx` as `min-tid v{__APP_VERSION__}`.
+- The version is rendered in Mer → Om appen (`views/More.tsx`, with "Nytt i versionen" from `src/lib/releaseNotes.ts`) and in the footer of `SettingsModal.tsx` as `min-tid v{__APP_VERSION__}`.
 
 ### Policy
 
@@ -620,9 +620,10 @@ Bump (and add a `CHANGELOG.md` section) whenever you ship anything user-visible 
 
 1. Edit `package.json` and `server/package.json` to the new version (lockstep).
 2. In `CHANGELOG.md`: move whatever is under `[Unreleased]` into a new `[X.Y.Z] — YYYY-MM-DD` section just above the previous release. Leave a fresh `_Nothing yet._` under `[Unreleased]`. Add the link at the bottom.
-3. `npm run build` to confirm Vite injects the new value.
-4. Commit (`package.json`, `server/package.json`, `CHANGELOG.md`, plus the actual change). Push.
-5. If publishing a GitHub release: tag `vX.Y.Z` and the changelog links resolve.
+3. Add the version to `RELEASE_NOTES` in `src/lib/releaseNotes.ts` (first in the list, same date): one to three short lines in plain Swedish about what is new or changed for the user. Mer → Om appen shows them under "Nytt i versionen" with a link to the full changelog (`CHANGELOG_URL`, the deployed branch). `releaseNotes.test.ts` fails if the version or a stable CHANGELOG section from 1.0.0 lacks an entry.
+4. `npm run build` to confirm Vite injects the new value.
+5. Commit (`package.json`, `server/package.json`, `CHANGELOG.md`, `releaseNotes.ts`, plus the actual change). Push.
+6. If publishing a GitHub release: tag `vX.Y.Z` and the changelog links resolve.
 
 ### When work is in flight
 

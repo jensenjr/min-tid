@@ -4,6 +4,7 @@ import AppearanceSheet from "../components/AppearanceSheet";
 import { appearanceSummary, useAppearance } from "../lib/useAppearance";
 import SyncSecuritySheet, { type SyncStatus } from "../components/SyncSecuritySheet";
 import { MoreRow, Sheet } from "../components/ui";
+import { CHANGELOG_URL, RELEASE_NOTES, fmtReleaseDate } from "../lib/releaseNotes";
 import type { ReportingMode } from "../lib/types";
 import type { MoreSlots } from "./types";
 
@@ -82,6 +83,50 @@ function AboutSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
           <b>Stämpla</b> betyder att du checkar in och ut. Du byter under Schema & rapportläge.
         </p>
       </div>
+
+      <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-pc-muted mb-2 px-1">
+        Nytt i versionen
+      </div>
+      <div className="space-y-3 mb-3">
+        {RELEASE_NOTES.map((r, i) => (
+          <div
+            key={r.version}
+            className={`rounded-[18px] border px-4 py-3 ${
+              i === 0 ? "border-pc-orange-line bg-pc-peach" : "border-pc-line bg-pc-apricot"
+            }`}
+          >
+            <div className="flex items-baseline justify-between gap-2 mb-1.5">
+              <span
+                className={`font-extrabold text-[14px] ${i === 0 ? "text-pc-orange-deep" : "text-pc-ink"}`}
+              >
+                v{r.version}
+                {r.version === __APP_VERSION__ && (
+                  <span className="ml-2 text-[11px] font-bold text-pc-muted">din version</span>
+                )}
+              </span>
+              <span className="text-[11px] font-semibold text-pc-muted shrink-0">
+                {fmtReleaseDate(r.date)}
+              </span>
+            </div>
+            <ul className="space-y-1 text-[13px] leading-snug text-pc-ink">
+              {r.notes.map((n) => (
+                <li key={n} className="flex gap-2">
+                  <span className="text-pc-muted shrink-0">•</span>
+                  <span>{n}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+      <a
+        href={CHANGELOG_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="block text-center text-[13px] font-bold text-pc-orange-deep underline mb-5"
+      >
+        Hela ändringsloggen på GitHub ↗
+      </a>
       <button
         onClick={onClose}
         className="pc-press w-full py-3.5 rounded-[16px] bg-pc-bg border border-pc-line font-bold text-[14px] text-pc-ink"
