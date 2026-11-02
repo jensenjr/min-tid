@@ -598,7 +598,6 @@ function Screen({ children, scroll = false }: { children: React.ReactNode; scrol
   return (
     <div className="fixed inset-0 z-50 bg-pc-bg flex flex-col">
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
         .ob-fade { animation: obFade 0.4s cubic-bezier(0.16,1,0.3,1); }
         @keyframes obFade { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
         .pc-press:active { transform: scale(0.96); }

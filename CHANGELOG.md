@@ -13,6 +13,17 @@ All notable changes to **min-tid** are recorded here. Format loosely follows [Ke
 
 _Nothing yet._
 
+## [1.2.1] — 2026-11-02
+
+Högre säkerhetsnivå. Inget ändras i hur appen räknar eller vad den sparar.
+
+- **Inga anrop till Google.** Typsnittet Inter ligger nu i appen i stället för att hämtas från Google Fonts, så användarnas IP-adresser skickas inte längre till Google.
+- **Spärr mot gissning.** Efter fem misslyckade inloggningar på samma användarnamn (eller 30 från samma IP-adress) inom 15 minuter spärras inloggningen i 15 minuter. En SMS-kod slutar gälla efter fem felaktiga försök.
+- **Säkerhetsheaders.** Servern skickar Content-Security-Policy (bara egna filer, plus temaskriptet via sin hash), HSTS, skydd mot inbäddning i andra sidor, `nosniff`, `Referrer-Policy: no-referrer` och `Permissions-Policy`. `X-Powered-By` är borttagen.
+- **Servern körs inte som root.** Containern lämnar över datakatalogen till användaren `node` och kör servern som den (`server/docker-entrypoint.sh`).
+- **Egen supportadress.** "Skicka fellogg" går till `VITE_SUPPORT_EMAIL` om den sätts vid bygget, annars som förut.
+- Länken till ändringsloggen i Om appen pekar nu på `main`.
+
 ## [1.2.0] — 2026-11-02
 
 - **Välj flera dagar i kalendern.** Tryck på **Välj** i Kalender (månad eller lista), markera dagarna och sätt status på alla på en gång: OK (enligt schema), Sjuk, VAB, Semester, Flex eller någon annan frånvarotyp under Mer, eller ta bort statusen. Välj första och sista dagen och tryck **Fyll period** för en längre frånvaro; lediga dagar mellan valda dagar blir en sammanhängande period, och semester kan planeras framåt i tiden.
@@ -23,7 +34,7 @@ _Nothing yet._
 
 ## [1.1.0] — 2026-11-02
 
-- Sidans titel (flikrubrik, delningslänkar, hemskärmsnamn) är nu "min-tid – arbetstid och avvikelser" i stället för "Tidrapport – Dalslands Sparbank".
+- Sidans titel (flikrubrik, delningslänkar, hemskärmsnamn) är nu "min-tid – arbetstid och avvikelser" i stället för den gamla titeln.
 - **Mörkt läge.** Appen följer enhetens ljusa/mörka läge (även när det byts medan appen är öppen). Under Mer → Utseende kan du i stället välja Ljust eller Mörkt.
 - **Färgteman.** Välj accentfärg under Mer → Utseende: Orange, Hav, Skog, Ljung eller Hallon. Valet gäller bara enheten.
 - **Nytt i versionen.** Mer → Om appen visar två–tre rader om vad som är nytt i varje version sedan 1.0, och länkar till hela ändringsloggen.
@@ -400,7 +411,8 @@ First public beta. The app is feature-complete for time, absence and expense tra
 - **`nixpacks.toml`** overrides the default Caddy start command if Coolify falls back to Nixpacks instead of Dockerfile.
 - **Zero native deps** on the server — `better-sqlite3` was replaced with a plain JSON file store.
 
-[Unreleased]: https://github.com/jensenjr/min-tid/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/jensenjr/min-tid/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/jensenjr/min-tid/releases/tag/v1.2.1
 [1.2.0]: https://github.com/jensenjr/min-tid/releases/tag/v1.2.0
 [1.1.0]: https://github.com/jensenjr/min-tid/releases/tag/v1.1.0
 [1.0.0]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0

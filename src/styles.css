@@ -80,8 +80,12 @@
   --color-pc-bg: var(--pc-bg);
   --color-pc-surface: var(--pc-surface);
   --color-pc-solid: var(--pc-solid);
+  /* Inter is bundled (@fontsource-variable/inter, imported in main.tsx) and served
+   * from our own origin: no request to Google Fonts, which would hand every user's
+   * IP address to Google. */
   --font-display:
-    "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+    "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui,
+    sans-serif;
 }
 
 :root {

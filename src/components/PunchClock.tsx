@@ -1480,7 +1480,6 @@ export default function PunchClock() {
   return (
     <div className="fixed inset-0 bg-pc-bg font-display text-pc-ink antialiased">
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
         .pc-fade { animation: pcFade 0.35s cubic-bezier(0.16,1,0.3,1); }
         @keyframes pcFade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         .pc-pop { animation: pcPop 0.4s cubic-bezier(0.34,1.56,0.64,1); }
