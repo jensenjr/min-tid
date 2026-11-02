@@ -11,7 +11,7 @@ const MAX_LOG = 10;
 /** Where to send a felanmälan. */
 /**
  * Where "Skicka fellogg" goes. Set VITE_SUPPORT_EMAIL at build time (e.g. the
- * bank's own IT support) so reports never leave the organisation; the default is
+ * organisation's own IT support) so reports never leave the organisation; the default is
  * the developer's address.
  */
 export const SUPPORT_EMAIL: string =

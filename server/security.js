@@ -1,8 +1,7 @@
 // Security headers and brute-force limits — pure, so they can be tested without Express.
 //
-// Both exist because the app is meant to run for a bank: the hosting checklist
-// (docs: "min-tid – krav på drift och hosting") lists them as the app's own job,
-// not the hosting provider's.
+// Part of a higher security standard for the server: these are the app's own
+// job, whichever hosting provider runs it.
 
 import crypto from "node:crypto";
 

@@ -349,7 +349,7 @@ removal of the "Resetimmar" category.
 
 ## Open questions to list in the report (do not guess beyond the defaults above)
 
-- Which collective agreement applies (bankavtalet)? Decides travel-time defaults, half-day vacation and
+- Which collective agreement applies? Decides travel-time defaults, half-day vacation and
   any flex cap.
 - Should the future admin app read employees' data? It conflicts with end-to-end encryption.
 - Recovery key vs. "restore only from another device" — default implemented: recovery key.

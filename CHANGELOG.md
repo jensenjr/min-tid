@@ -15,7 +15,7 @@ _Nothing yet._
 
 ## [1.2.1] — 2026-11-02
 
-Säkerhet inför drift hos en bank. Inget ändras i hur appen räknar eller vad den sparar.
+Högre säkerhetsnivå. Inget ändras i hur appen räknar eller vad den sparar.
 
 - **Inga anrop till Google.** Typsnittet Inter ligger nu i appen i stället för att hämtas från Google Fonts, så användarnas IP-adresser skickas inte längre till Google.
 - **Spärr mot gissning.** Efter fem misslyckade inloggningar på samma användarnamn (eller 30 från samma IP-adress) inom 15 minuter spärras inloggningen i 15 minuter. En SMS-kod slutar gälla efter fem felaktiga försök.
@@ -34,7 +34,7 @@ Säkerhet inför drift hos en bank. Inget ändras i hur appen räknar eller vad 
 
 ## [1.1.0] — 2026-11-02
 
-- Sidans titel (flikrubrik, delningslänkar, hemskärmsnamn) är nu "min-tid – arbetstid och avvikelser" i stället för "Tidrapport – Dalslands Sparbank".
+- Sidans titel (flikrubrik, delningslänkar, hemskärmsnamn) är nu "min-tid – arbetstid och avvikelser" i stället för den gamla titeln.
 - **Mörkt läge.** Appen följer enhetens ljusa/mörka läge (även när det byts medan appen är öppen). Under Mer → Utseende kan du i stället välja Ljust eller Mörkt.
 - **Färgteman.** Välj accentfärg under Mer → Utseende: Orange, Hav, Skog, Ljung eller Hallon. Valet gäller bara enheten.
 - **Nytt i versionen.** Mer → Om appen visar två–tre rader om vad som är nytt i varje version sedan 1.0, och länkar till hela ändringsloggen.
