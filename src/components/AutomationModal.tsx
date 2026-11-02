@@ -58,12 +58,12 @@ export default function AutomationModal({ open, onClose }: { open: boolean; onCl
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center"
-      style={{ background: "rgba(45,23,23,0.55)", animation: "pcOverlay 0.25s ease" }}
+      className="fixed inset-0 z-50 flex items-end md:items-center justify-center md:p-6"
+      style={{ background: "var(--pc-overlay)", animation: "pcOverlay 0.25s ease" }}
       onClick={onClose}
     >
       <div
-        className="bg-white w-full max-w-[480px] rounded-t-[28px] px-5 pt-6 overflow-y-auto"
+        className="pc-sheet bg-pc-surface w-full max-w-[480px] md:max-w-[560px] rounded-t-[28px] md:rounded-[28px] px-5 pt-6 overflow-y-auto"
         style={{
           paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)",
           animation: "pcSheet 0.32s cubic-bezier(0.32,0.72,0,1)",
@@ -71,7 +71,7 @@ export default function AutomationModal({ open, onClose }: { open: boolean; onCl
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="w-10 h-1 bg-pc-line rounded-full mx-auto mb-5" />
+        <div className="w-10 h-1 bg-pc-line rounded-full mx-auto md:hidden mb-5" />
 
         <div className="font-extrabold text-[22px] tracking-tight mb-1">Automatisering</div>
         <div className="text-[13px] text-pc-muted mb-6">
@@ -85,7 +85,7 @@ export default function AutomationModal({ open, onClose }: { open: boolean; onCl
           <p className="text-[13px] text-pc-muted mb-3">
             Skriv ut och sätt vid entrén. Skanna med mobilkameran så stämplas du in eller ut.
           </p>
-          <div className="flex bg-[#fdf6ee] border border-pc-line rounded-full p-0.5 mb-4">
+          <div className="flex bg-(--pc-apricot) border border-pc-line rounded-full p-0.5 mb-4">
             {QR_TABS.map((t) => (
               <button
                 key={t.action}
@@ -99,7 +99,7 @@ export default function AutomationModal({ open, onClose }: { open: boolean; onCl
             ))}
           </div>
           <div
-            className="w-[190px] mx-auto mb-3 rounded-[16px] border border-pc-line p-3 bg-white"
+            className="w-[190px] mx-auto mb-3 rounded-[16px] border border-pc-line p-3 bg-pc-surface"
             dangerouslySetInnerHTML={{ __html: renderSVG(qrUrl, { border: 1 }) }}
           />
           <div className="grid grid-cols-2 gap-3">
@@ -188,11 +188,11 @@ export default function AutomationModal({ open, onClose }: { open: boolean; onCl
           style={{
             padding: "15px",
             borderRadius: "16px",
-            background: "#fdf6ee",
-            border: "1.5px solid #ece6df",
+            background: "var(--pc-apricot)",
+            border: "1.5px solid var(--pc-line)",
             fontWeight: 700,
             fontSize: "15px",
-            color: "#2d1717",
+            color: "var(--pc-ink)",
           }}
         >
           Stäng
@@ -212,7 +212,7 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-[#fdf6ee] border border-[#ece6df] rounded-[20px] p-4 mb-3">
+    <div className="bg-(--pc-apricot) border border-(--pc-line) rounded-[20px] p-4 mb-3">
       <div className="text-[13px] font-extrabold text-pc-ink mb-2">
         <span className="mr-1.5">{emoji}</span>
         {title}
@@ -253,7 +253,7 @@ function CopyRow({
   return (
     <button
       onClick={() => onCopy(k, value)}
-      className="w-full text-left bg-white border border-pc-line rounded-[14px] px-3.5 py-2.5 mb-2 flex items-center gap-3"
+      className="w-full text-left bg-pc-surface border border-pc-line rounded-[14px] px-3.5 py-2.5 mb-2 flex items-center gap-3"
     >
       <div className="flex-1 min-w-0">
         <div className="text-[12px] font-bold text-pc-ink">{label}</div>
@@ -272,7 +272,7 @@ function SecondaryBtn({ onClick, children }: { onClick: () => void; children: Re
   return (
     <button
       onClick={onClick}
-      className="pc-press bg-white border border-pc-line rounded-[14px] py-2.5 font-bold text-[13px] text-pc-ink"
+      className="pc-press bg-pc-surface border border-pc-line rounded-[14px] py-2.5 font-bold text-[13px] text-pc-ink"
     >
       {children}
     </button>

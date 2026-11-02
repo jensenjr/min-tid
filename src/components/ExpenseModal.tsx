@@ -114,12 +114,12 @@ export default function ExpenseModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center"
-      style={{ background: "rgba(45,23,23,0.55)", animation: "pcOverlay 0.25s ease" }}
+      className="fixed inset-0 z-50 flex items-end md:items-center justify-center md:p-6"
+      style={{ background: "var(--pc-overlay)", animation: "pcOverlay 0.25s ease" }}
       onClick={onClose}
     >
       <div
-        className="bg-white w-full max-w-[480px] rounded-t-[28px] px-6 pt-6 overflow-y-auto"
+        className="pc-sheet bg-pc-surface w-full max-w-[480px] md:max-w-[560px] rounded-t-[28px] md:rounded-[28px] px-6 pt-6 overflow-y-auto"
         style={{
           paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)",
           animation: "pcSheet 0.32s cubic-bezier(0.32,0.72,0,1)",
@@ -127,13 +127,13 @@ export default function ExpenseModal({
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="w-10 h-1 bg-[#ece6df] rounded-full mx-auto mb-5" />
+        <div className="w-10 h-1 bg-(--pc-line) rounded-full mx-auto md:hidden mb-5" />
 
         <div className="font-extrabold text-[22px] tracking-tight mb-1">Lägg till utlägg</div>
-        <div className="text-[13px] text-[#9c7c5c] mb-6">Välj typ, datum och belopp.</div>
+        <div className="text-[13px] text-(--pc-taupe) mb-6">Välj typ, datum och belopp.</div>
 
         {/* Category grid */}
-        <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-3">
+        <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-(--pc-taupe) mb-3">
           Typ
         </div>
         <div className="grid grid-cols-3 gap-2 mb-5">
@@ -143,8 +143,8 @@ export default function ExpenseModal({
               onClick={() => setCategory(key)}
               className={`py-2.5 px-2 rounded-[14px] text-[12px] font-bold border transition-colors flex flex-col items-center gap-1 ${
                 category === key
-                  ? "bg-pc-orange text-white border-pc-orange shadow-[0_4px_12px_-4px_rgba(255,95,0,0.45)]"
-                  : "bg-[#fdf6ee] border-[#ece6df] text-[#2d1717]"
+                  ? "bg-pc-orange text-white border-pc-orange shadow-[0_4px_12px_-4px_rgb(var(--pc-orange-rgb)/0.45)]"
+                  : "bg-(--pc-apricot) border-(--pc-line) text-(--pc-ink)"
               }`}
             >
               <span className="text-[18px] leading-none">{meta.emoji}</span>
@@ -154,7 +154,7 @@ export default function ExpenseModal({
         </div>
 
         {/* Date */}
-        <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-2">
+        <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-(--pc-taupe) mb-2">
           Datum
         </div>
         <input
@@ -167,12 +167,12 @@ export default function ExpenseModal({
             WebkitAppearance: "none",
             padding: "12px 14px",
             borderRadius: "14px",
-            border: "1.5px solid #ece6df",
+            border: "1.5px solid var(--pc-line)",
             fontSize: "16px",
             outline: "none",
-            background: "#fdf6ee",
+            background: "var(--pc-apricot)",
             fontWeight: 600,
-            color: "#2d1717",
+            color: "var(--pc-ink)",
             marginBottom: "16px",
           }}
         />
@@ -180,7 +180,7 @@ export default function ExpenseModal({
         {/* km — only for milersattning */}
         {category === "milersattning" && (
           <>
-            <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-2">
+            <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-(--pc-taupe) mb-2">
               Antal km
             </div>
             <div className="relative mb-4">
@@ -197,23 +197,23 @@ export default function ExpenseModal({
                   boxSizing: "border-box",
                   padding: "12px 48px 12px 14px",
                   borderRadius: "14px",
-                  border: "1.5px solid #ece6df",
+                  border: "1.5px solid var(--pc-line)",
                   fontSize: "16px",
                   outline: "none",
-                  background: "#fdf6ee",
+                  background: "var(--pc-apricot)",
                   fontWeight: 600,
-                  color: "#2d1717",
+                  color: "var(--pc-ink)",
                 }}
                 onFocus={(e) => {
-                  e.currentTarget.style.borderColor = "#ff5f00";
-                  e.currentTarget.style.background = "#fff";
+                  e.currentTarget.style.borderColor = "var(--pc-orange)";
+                  e.currentTarget.style.background = "var(--pc-surface)";
                 }}
                 onBlur={(e) => {
-                  e.currentTarget.style.borderColor = "#ece6df";
-                  e.currentTarget.style.background = "#fdf6ee";
+                  e.currentTarget.style.borderColor = "var(--pc-line)";
+                  e.currentTarget.style.background = "var(--pc-apricot)";
                 }}
               />
-              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[14px] font-bold text-[#9c7c5c] pointer-events-none">
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[14px] font-bold text-(--pc-taupe) pointer-events-none">
                 km
               </span>
             </div>
@@ -221,10 +221,10 @@ export default function ExpenseModal({
         )}
 
         {/* Amount */}
-        <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-2">
+        <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-(--pc-taupe) mb-2">
           Belopp
           {category === "milersattning" && (
-            <span className="normal-case font-medium tracking-normal text-[#9c7c5c]">
+            <span className="normal-case font-medium tracking-normal text-(--pc-taupe)">
               {" "}
               (valfri — räcker med km)
             </span>
@@ -244,29 +244,29 @@ export default function ExpenseModal({
               boxSizing: "border-box",
               padding: "12px 48px 12px 14px",
               borderRadius: "14px",
-              border: "1.5px solid #ece6df",
+              border: "1.5px solid var(--pc-line)",
               fontSize: "16px",
               outline: "none",
-              background: "#fdf6ee",
+              background: "var(--pc-apricot)",
               fontWeight: 600,
-              color: "#2d1717",
+              color: "var(--pc-ink)",
             }}
             onFocus={(e) => {
-              e.currentTarget.style.borderColor = "#ff5f00";
-              e.currentTarget.style.background = "#fff";
+              e.currentTarget.style.borderColor = "var(--pc-orange)";
+              e.currentTarget.style.background = "var(--pc-surface)";
             }}
             onBlur={(e) => {
-              e.currentTarget.style.borderColor = "#ece6df";
-              e.currentTarget.style.background = "#fdf6ee";
+              e.currentTarget.style.borderColor = "var(--pc-line)";
+              e.currentTarget.style.background = "var(--pc-apricot)";
             }}
           />
-          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[14px] font-bold text-[#9c7c5c] pointer-events-none">
+          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[14px] font-bold text-(--pc-taupe) pointer-events-none">
             kr
           </span>
         </div>
 
         {/* Receipt toggle */}
-        <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-2">
+        <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-(--pc-taupe) mb-2">
           Kvitto
         </div>
         <div className="flex gap-2 mb-2">
@@ -275,8 +275,8 @@ export default function ExpenseModal({
             onClick={() => setHasReceipt(false)}
             className={`flex-1 py-2.5 rounded-[14px] text-[13px] font-bold border transition-colors ${
               !hasReceipt
-                ? "bg-pc-orange text-white border-pc-orange shadow-[0_4px_12px_-4px_rgba(255,95,0,0.45)]"
-                : "bg-[#fdf6ee] border-[#ece6df] text-[#2d1717]"
+                ? "bg-pc-orange text-white border-pc-orange shadow-[0_4px_12px_-4px_rgb(var(--pc-orange-rgb)/0.45)]"
+                : "bg-(--pc-apricot) border-(--pc-line) text-(--pc-ink)"
             }`}
           >
             Inget kvitto
@@ -286,24 +286,26 @@ export default function ExpenseModal({
             onClick={() => setHasReceipt(true)}
             className={`flex-1 py-2.5 rounded-[14px] text-[13px] font-bold border transition-colors ${
               hasReceipt
-                ? "bg-pc-orange text-white border-pc-orange shadow-[0_4px_12px_-4px_rgba(255,95,0,0.45)]"
-                : "bg-[#fdf6ee] border-[#ece6df] text-[#2d1717]"
+                ? "bg-pc-orange text-white border-pc-orange shadow-[0_4px_12px_-4px_rgb(var(--pc-orange-rgb)/0.45)]"
+                : "bg-(--pc-apricot) border-(--pc-line) text-(--pc-ink)"
             }`}
           >
             🧾 Kvitto finns
           </button>
         </div>
         {hasReceipt && (
-          <div className="text-[11px] text-[#9c7c5c] font-medium mb-4 leading-snug">
+          <div className="text-[11px] text-(--pc-taupe) font-medium mb-4 leading-snug">
             Du påminns att bifoga kvittot när du delar rapporten.
           </div>
         )}
         {!hasReceipt && <div className="mb-4" />}
 
         {/* Note */}
-        <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-2">
+        <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-(--pc-taupe) mb-2">
           Anteckning{" "}
-          <span className="normal-case font-medium tracking-normal text-[#9c7c5c]">(valfri)</span>
+          <span className="normal-case font-medium tracking-normal text-(--pc-taupe)">
+            (valfri)
+          </span>
         </div>
         <textarea
           rows={2}
@@ -315,23 +317,23 @@ export default function ExpenseModal({
             boxSizing: "border-box",
             padding: "12px 14px",
             borderRadius: "14px",
-            border: "1.5px solid #ece6df",
+            border: "1.5px solid var(--pc-line)",
             fontSize: "15px",
             outline: "none",
-            background: "#fdf6ee",
+            background: "var(--pc-apricot)",
             fontWeight: 500,
-            color: "#2d1717",
+            color: "var(--pc-ink)",
             resize: "none",
             marginBottom: "16px",
             fontFamily: "inherit",
           }}
           onFocus={(e) => {
-            e.currentTarget.style.borderColor = "#ff5f00";
-            e.currentTarget.style.background = "#fff";
+            e.currentTarget.style.borderColor = "var(--pc-orange)";
+            e.currentTarget.style.background = "var(--pc-surface)";
           }}
           onBlur={(e) => {
-            e.currentTarget.style.borderColor = "#ece6df";
-            e.currentTarget.style.background = "#fdf6ee";
+            e.currentTarget.style.borderColor = "var(--pc-line)";
+            e.currentTarget.style.background = "var(--pc-apricot)";
           }}
         />
 
@@ -343,11 +345,11 @@ export default function ExpenseModal({
             style={{
               padding: "16px",
               borderRadius: "16px",
-              background: "#fdf6ee",
-              border: "1.5px solid #ece6df",
+              background: "var(--pc-apricot)",
+              border: "1.5px solid var(--pc-line)",
               fontWeight: 700,
               fontSize: "15px",
-              color: "#2d1717",
+              color: "var(--pc-ink)",
             }}
           >
             Avbryt
@@ -357,11 +359,11 @@ export default function ExpenseModal({
             style={{
               padding: "16px",
               borderRadius: "16px",
-              background: "#ff5f00",
+              background: "var(--pc-orange)",
               color: "white",
               fontWeight: 700,
               fontSize: "15px",
-              boxShadow: "0 8px 20px -8px rgba(255,95,0,0.6)",
+              boxShadow: "0 8px 20px -8px rgb(var(--pc-orange-rgb) / 0.6)",
             }}
           >
             Spara

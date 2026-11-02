@@ -13,6 +13,14 @@ All notable changes to **min-tid** are recorded here. Format loosely follows [Ke
 
 _Nothing yet._
 
+## [1.1.0] — 2026-11-02
+
+- Sidans titel (flikrubrik, delningslänkar, hemskärmsnamn) är nu "min-tid – arbetstid och avvikelser" i stället för "Tidrapport – Dalslands Sparbank".
+- **Mörkt läge.** Appen följer enhetens ljusa/mörka läge (även när det byts medan appen är öppen). Under Mer → Utseende kan du i stället välja Ljust eller Mörkt.
+- **Färgteman.** Välj accentfärg under Mer → Utseende: Orange, Hav, Skog, Ljung eller Hallon. Valet gäller bara enheten.
+- **Nytt i versionen.** Mer → Om appen visar två–tre rader om vad som är nytt i varje version sedan 1.0, och länkar till hela ändringsloggen.
+- **Bättre på datorn.** Från surfplattebredd får appen en sidomeny i stället för menyn längst ned, innehållet använder bredden (Idag i två kolumner, Mer i två kolumner) och alla bladen öppnas som centrerade dialogrutor.
+
 ## [1.0.0] — 2026-10-14
 
 **min-tid 1.0.** Den här versionen är en genomgripande omarbetning. Det viktigaste:
@@ -384,7 +392,8 @@ First public beta. The app is feature-complete for time, absence and expense tra
 - **`nixpacks.toml`** overrides the default Caddy start command if Coolify falls back to Nixpacks instead of Dockerfile.
 - **Zero native deps** on the server — `better-sqlite3` was replaced with a plain JSON file store.
 
-[Unreleased]: https://github.com/jensenjr/min-tid/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/jensenjr/min-tid/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/jensenjr/min-tid/releases/tag/v1.1.0
 [1.0.0]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0
 [1.0.0-beta.12]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.12
 [1.0.0-beta.11]: https://github.com/jensenjr/min-tid/releases/tag/v1.0.0-beta.11

@@ -36,9 +36,9 @@ export default function RotationEditor({
             aria-pressed={n === count}
             className="w-9 h-9 rounded-xl text-[14px] font-extrabold transition-colors"
             style={{
-              background: n === count ? "#ff5f00" : "#fdf6ee",
-              color: n === count ? "#fff" : "#2d1717",
-              border: n === count ? "1.5px solid #ff5f00" : "1.5px solid #ece6df",
+              background: n === count ? "var(--pc-orange)" : "var(--pc-apricot)",
+              color: n === count ? "#fff" : "var(--pc-ink)",
+              border: n === count ? "1.5px solid var(--pc-orange)" : "1.5px solid var(--pc-line)",
             }}
           >
             {n}
@@ -66,16 +66,17 @@ export default function RotationEditor({
                 onClick={() => setTab(i)}
                 className="shrink-0 px-3 py-2 rounded-xl text-[13px] font-extrabold whitespace-nowrap transition-colors"
                 style={{
-                  background: i === active ? "#2d1717" : "#fdf6ee",
-                  color: i === active ? "#fff" : "#2d1717",
-                  border: i === active ? "1.5px solid #2d1717" : "1.5px solid #ece6df",
+                  background: i === active ? "var(--pc-solid)" : "var(--pc-apricot)",
+                  color: i === active ? "#fff" : "var(--pc-ink)",
+                  border:
+                    i === active ? "1.5px solid var(--pc-solid)" : "1.5px solid var(--pc-line)",
                 }}
               >
                 Vecka {i + 1}
                 {currentWeek === i + 1 && (
                   <span
                     className="inline-block w-1.5 h-1.5 rounded-full ml-1.5 align-middle"
-                    style={{ background: "#ff5f00" }}
+                    style={{ background: "var(--pc-orange)" }}
                     aria-label="den här veckan"
                   />
                 )}
@@ -84,7 +85,7 @@ export default function RotationEditor({
           </div>
           <button
             onClick={onCopyFirstToAll}
-            className="mb-3 px-3 py-2 rounded-[12px] border border-pc-orange text-pc-orange font-bold text-[12px] bg-white active:scale-[0.97] transition-transform"
+            className="mb-3 px-3 py-2 rounded-[12px] border border-pc-orange text-pc-orange font-bold text-[12px] bg-pc-surface active:scale-[0.97] transition-transform"
           >
             Kopiera vecka 1 till alla
           </button>

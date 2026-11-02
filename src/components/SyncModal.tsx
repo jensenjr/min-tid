@@ -213,48 +213,48 @@ export default function SyncModal({
     boxSizing: "border-box",
     padding: "12px 14px",
     borderRadius: "14px",
-    border: "1.5px solid #ece6df",
+    border: "1.5px solid var(--pc-line)",
     fontSize: "16px",
     outline: "none",
-    background: "#fdf6ee",
+    background: "var(--pc-apricot)",
     fontWeight: 600,
-    color: "#2d1717",
+    color: "var(--pc-ink)",
     marginBottom: "12px",
   };
 
   const focusStyle = {
     onFocus: (e: React.FocusEvent<HTMLInputElement>) => {
-      e.currentTarget.style.borderColor = "#ff5f00";
-      e.currentTarget.style.background = "#fff";
+      e.currentTarget.style.borderColor = "var(--pc-orange)";
+      e.currentTarget.style.background = "var(--pc-surface)";
     },
     onBlur: (e: React.FocusEvent<HTMLInputElement>) => {
-      e.currentTarget.style.borderColor = "#ece6df";
-      e.currentTarget.style.background = "#fdf6ee";
+      e.currentTarget.style.borderColor = "var(--pc-line)";
+      e.currentTarget.style.background = "var(--pc-apricot)";
     },
   };
 
   const primaryBtn = (disabled = loading): React.CSSProperties => ({
     padding: "14px",
     borderRadius: "14px",
-    background: disabled ? "#f0e8df" : "#ff5f00",
-    color: disabled ? "#c4a882" : "white",
+    background: disabled ? "var(--pc-line-2)" : "var(--pc-orange)",
+    color: disabled ? "var(--pc-sand)" : "white",
     fontWeight: 700,
     fontSize: "14px",
-    boxShadow: disabled ? "none" : "0 8px 20px -8px rgba(255,95,0,0.6)",
+    boxShadow: disabled ? "none" : "0 8px 20px -8px rgb(var(--pc-orange-rgb) / 0.6)",
   });
 
   const secondaryBtn: React.CSSProperties = {
     padding: "14px",
     borderRadius: "14px",
-    background: "#fdf6ee",
-    border: "1.5px solid #ece6df",
+    background: "var(--pc-apricot)",
+    border: "1.5px solid var(--pc-line)",
     fontWeight: 700,
     fontSize: "14px",
-    color: "#2d1717",
+    color: "var(--pc-ink)",
   };
 
   const label = (text: string) => (
-    <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9c7c5c] mb-2">
+    <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-(--pc-taupe) mb-2">
       {text}
     </div>
   );
@@ -295,7 +295,7 @@ export default function SyncModal({
   const encryptionStatus = (
     <div
       className="rounded-[16px] mb-5 overflow-hidden"
-      style={{ background: "#ecfdf5", border: "1.5px solid #a7f3d0" }}
+      style={{ background: "var(--pc-ok-bg)", border: "1.5px solid var(--pc-ok-line)" }}
     >
       <button
         onClick={() => setShowExplainer((v) => !v)}
@@ -303,15 +303,15 @@ export default function SyncModal({
         aria-expanded={showExplainer}
       >
         <span className="text-[16px]">🔒</span>
-        <span className="flex-1 text-[13px] font-extrabold" style={{ color: "#065f46" }}>
+        <span className="flex-1 text-[13px] font-extrabold" style={{ color: "var(--pc-ok)" }}>
           Krypterad på enheten · AES-256
         </span>
-        <span className="text-[11px] font-bold" style={{ color: "#047857" }}>
+        <span className="text-[11px] font-bold" style={{ color: "var(--pc-ok)" }}>
           {showExplainer ? "↑" : "Vad ser servern?"}
         </span>
       </button>
       {showExplainer && (
-        <div className="px-4 pb-4 text-[12px] leading-relaxed" style={{ color: "#064e3b" }}>
+        <div className="px-4 pb-4 text-[12px] leading-relaxed" style={{ color: "var(--pc-ok)" }}>
           <p className="mb-2">
             <b>Servern ser inte</b> dina tider, frånvaro, utlägg, namn eller schema. Allt krypteras
             på enheten innan det skickas, med en nyckel som tas fram ur din synk-kod och aldrig
@@ -338,7 +338,7 @@ export default function SyncModal({
         setConfirm("");
         setErr("");
       }}
-      className="text-[13px] font-semibold text-[#9c7c5c] mb-4 flex items-center gap-1"
+      className="text-[13px] font-semibold text-(--pc-taupe) mb-4 flex items-center gap-1"
     >
       ← Tillbaka
     </button>
@@ -350,10 +350,10 @@ export default function SyncModal({
         return (
           <>
             <div className="font-extrabold text-[18px] mb-1">📱 Återställ med SMS</div>
-            <p className="text-[13px] text-[#9c7c5c] mb-2 leading-relaxed">
+            <p className="text-[13px] text-(--pc-taupe) mb-2 leading-relaxed">
               Ange mobilnumret du kopplat till kontot så skickar vi en verifieringskod.
             </p>
-            <p className="text-[12px] text-[#7c2d12] mb-4 leading-relaxed font-semibold">
+            <p className="text-[12px] text-(--pc-orange-ink) mb-4 leading-relaxed font-semibold">
               SMS-koden ger dig tillbaka kontot. Dina data kan bara låsas upp med din
               återställningsnyckel.
             </p>
@@ -383,7 +383,7 @@ export default function SyncModal({
         return (
           <>
             <div className="font-extrabold text-[18px] mb-1">Ange verifieringskod</div>
-            <p className="text-[13px] text-[#9c7c5c] mb-4 leading-relaxed">
+            <p className="text-[13px] text-(--pc-taupe) mb-4 leading-relaxed">
               En 6-siffrig kod skickades till <span className="font-semibold">{recoverPhone}</span>.
             </p>
             <input
@@ -423,8 +423,8 @@ export default function SyncModal({
         return (
           <>
             <div className="font-extrabold text-[18px] mb-1">🔑 Lås upp dina data</div>
-            <p className="text-[13px] text-[#9c7c5c] mb-4 leading-relaxed">
-              Kontot <span className="font-bold text-[#ff5f00]">@{session?.username}</span> är
+            <p className="text-[13px] text-(--pc-taupe) mb-4 leading-relaxed">
+              Kontot <span className="font-bold text-(--pc-orange)">@{session?.username}</span> är
               återställt. Ange din återställningsnyckel (24 tecken) för att låsa upp datan i molnet.
             </p>
             <input
@@ -455,14 +455,14 @@ export default function SyncModal({
             >
               {loading ? "Låser upp…" : "Lås upp →"}
             </button>
-            <div className="mt-5 pt-4 border-t border-[#ece6df] text-center">
+            <div className="mt-5 pt-4 border-t border-(--pc-line) text-center">
               <button
                 onClick={() => {
                   setErr("");
                   setDiscardOk(false);
                   setRecoverStep("reset");
                 }}
-                className="text-[13px] font-bold text-[#9c7c5c] underline"
+                className="text-[13px] font-bold text-(--pc-taupe) underline"
               >
                 Jag har ingen återställningsnyckel
               </button>
@@ -475,7 +475,11 @@ export default function SyncModal({
             <div className="font-extrabold text-[18px] mb-1">Börja om utan molnets data?</div>
             <div
               className="rounded-[14px] px-4 py-3 mb-4 text-[12px] leading-relaxed"
-              style={{ background: "#fef2f2", border: "1.5px solid #fca5a5", color: "#7f1d1d" }}
+              style={{
+                background: "var(--pc-danger-bg)",
+                border: "1.5px solid var(--pc-danger-line)",
+                color: "var(--pc-danger-ink)",
+              }}
             >
               Utan återställningsnyckeln går datan i molnet inte att låsa upp — inte ens för oss. Du
               kan behålla kontot och börja om: molnkopian raderas och ersätts med datan på den här
@@ -491,9 +495,9 @@ export default function SyncModal({
                 checked={discardOk}
                 onChange={(e) => setDiscardOk(e.target.checked)}
                 className="mt-0.5 w-5 h-5 shrink-0"
-                style={{ accentColor: "#dc2626" }}
+                style={{ accentColor: "var(--pc-danger)" }}
               />
-              <span className="text-[13px] font-semibold text-[#2d1717] leading-snug">
+              <span className="text-[13px] font-semibold text-(--pc-ink) leading-snug">
                 Jag förstår att datan i molnet raderas.
               </span>
             </label>
@@ -511,9 +515,9 @@ export default function SyncModal({
                 disabled={!discardOk}
                 style={{
                   ...secondaryBtn,
-                  background: discardOk ? "#dc2626" : "#f0e8df",
+                  background: discardOk ? "var(--pc-danger)" : "var(--pc-line-2)",
                   border: "none",
-                  color: discardOk ? "white" : "#c4a882",
+                  color: discardOk ? "white" : "var(--pc-sand)",
                 }}
               >
                 Börja om
@@ -525,7 +529,7 @@ export default function SyncModal({
         return (
           <>
             <div className="font-extrabold text-[18px] mb-1">Välj en ny synk-kod</div>
-            <p className="text-[13px] text-[#9c7c5c] mb-4 leading-relaxed">
+            <p className="text-[13px] text-(--pc-taupe) mb-4 leading-relaxed">
               {discard
                 ? "Molnkopian ersätts med datan på den här enheten, krypterad med den nya koden."
                 : session?.needsRecoveryKey
@@ -550,12 +554,12 @@ export default function SyncModal({
     <>
       {open && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center"
-          style={{ background: "rgba(45,23,23,0.55)", animation: "pcOverlay 0.25s ease" }}
+          className="fixed inset-0 z-50 flex items-end md:items-center justify-center md:p-6"
+          style={{ background: "var(--pc-overlay)", animation: "pcOverlay 0.25s ease" }}
           onClick={handleClose}
         >
           <div
-            className="bg-white w-full max-w-[480px] rounded-t-[28px] px-6 pt-6 overflow-y-auto"
+            className="pc-sheet bg-pc-surface w-full max-w-[480px] md:max-w-[560px] rounded-t-[28px] md:rounded-[28px] px-6 pt-6 overflow-y-auto"
             style={{
               paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)",
               animation: "pcSheet 0.32s cubic-bezier(0.32,0.72,0,1)",
@@ -563,12 +567,12 @@ export default function SyncModal({
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="w-10 h-1 bg-[#ece6df] rounded-full mx-auto mb-5" />
+            <div className="w-10 h-1 bg-(--pc-line) rounded-full mx-auto md:hidden mb-5" />
 
             <div className="font-extrabold text-[22px] tracking-tight mb-1">
               {mode === "relogin" ? "🔑 Logga in igen" : "☁️ Synkronisering"}
             </div>
-            <div className="text-[13px] text-[#9c7c5c] mb-4 leading-relaxed">
+            <div className="text-[13px] text-(--pc-taupe) mb-4 leading-relaxed">
               {mode === "relogin"
                 ? "Synken på den här enheten behöver en ny inloggning. Dina lokala data ligger kvar och slås ihop med molnet."
                 : "Synka dina data mellan enheter med ett användarnamn och en hemlig kod — ingen e-post, inga konton."}
@@ -584,7 +588,7 @@ export default function SyncModal({
             ) : (
               <>
                 {mode === "setup" && (
-                  <div className="flex bg-[#fdf6ee] rounded-[16px] p-1 mb-5 border border-[#ece6df]">
+                  <div className="flex bg-(--pc-apricot) rounded-[16px] p-1 mb-5 border border-(--pc-line)">
                     {(["create", "restore"] as Tab[]).map((t) => (
                       <button
                         key={t}
@@ -596,7 +600,9 @@ export default function SyncModal({
                           setConfirm("");
                         }}
                         className={`flex-1 py-2 rounded-[12px] text-[13px] font-bold transition-colors ${
-                          tab === t ? "bg-white text-[#2d1717] shadow-sm" : "text-[#9c7c5c]"
+                          tab === t
+                            ? "bg-pc-surface text-(--pc-ink) shadow-sm"
+                            : "text-(--pc-taupe)"
                         }`}
                       >
                         {t === "create" ? "Ny synk-kod" : "Återställ"}
@@ -606,8 +612,8 @@ export default function SyncModal({
                 )}
 
                 {knownUser ? (
-                  <div className="text-[13px] text-[#9c7c5c] mb-3">
-                    Konto: <span className="font-bold text-[#ff5f00]">@{knownUser}</span>
+                  <div className="text-[13px] text-(--pc-taupe) mb-3">
+                    Konto: <span className="font-bold text-(--pc-orange)">@{knownUser}</span>
                   </div>
                 ) : (
                   <>
@@ -631,12 +637,12 @@ export default function SyncModal({
 
                 {mode === "setup" && tab === "create" ? (
                   <>
-                    <div className="text-[12px] text-[#9c7c5c] mb-3 leading-relaxed">
+                    <div className="text-[12px] text-(--pc-taupe) mb-3 leading-relaxed">
                       Välj en lång, unik fras. Du behöver den för att logga in på nya enheter, och
                       den är nyckeln till din krypterade data.
                     </div>
                     {newSecretFields}
-                    <div className="text-[12px] text-[#9c7c5c] mb-3 leading-relaxed">
+                    <div className="text-[12px] text-(--pc-taupe) mb-3 leading-relaxed">
                       När kontot skapas får du en <b>återställningsnyckel</b>. Spara den — utan den
                       går dina data inte att låsa upp om du glömmer synk-koden.
                     </div>
@@ -645,7 +651,7 @@ export default function SyncModal({
                   <>
                     {label("Din synk-kod")}
                     {mode === "setup" && (
-                      <div className="text-[12px] text-[#9c7c5c] mb-3 leading-relaxed">
+                      <div className="text-[12px] text-(--pc-taupe) mb-3 leading-relaxed">
                         Ange det användarnamn och den synk-kod du skapade på din andra enhet.
                       </div>
                     )}
@@ -686,8 +692,8 @@ export default function SyncModal({
                 </div>
 
                 {(mode === "relogin" || tab === "restore") && (
-                  <div className="mt-5 pt-4 border-t border-[#ece6df] text-center">
-                    <div className="text-[12px] text-[#9c7c5c] mb-2">
+                  <div className="mt-5 pt-4 border-t border-(--pc-line) text-center">
+                    <div className="text-[12px] text-(--pc-taupe) mb-2">
                       {mode === "relogin"
                         ? "Glömt synk-koden?"
                         : "Glömt ditt användarnamn eller synk-kod?"}
@@ -697,12 +703,12 @@ export default function SyncModal({
                         setRecovering(true);
                         setErr("");
                       }}
-                      className="text-[13px] font-bold text-[#ff5f00] underline"
+                      className="text-[13px] font-bold text-(--pc-orange) underline"
                     >
                       📱 Återställ med mobilnummer
                     </button>
                     {mode === "relogin" && (
-                      <div className="text-[11px] text-[#9c7c5c] mt-3">
+                      <div className="text-[11px] text-(--pc-taupe) mt-3">
                         Vill du byta konto? Koppla från under Inställningar först.
                       </div>
                     )}

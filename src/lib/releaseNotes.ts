@@ -1,0 +1,43 @@
+/**
+ * "Nytt i versionen" in Mer → Om appen: 1–3 short lines per release, newest
+ * first, from 1.0.0 on. The full history is CHANGELOG.md (CHANGELOG_URL).
+ *
+ * Every bump adds an entry here next to its CHANGELOG section; a test checks
+ * that package.json's version is the first entry and that every stable
+ * CHANGELOG version from 1.0.0 has one, with the same date.
+ */
+export type ReleaseNote = { version: string; date: string; notes: string[] };
+
+/** The branch that is deployed (see CLAUDE.md → Deployment). */
+export const CHANGELOG_URL = "https://github.com/jensenjr/min-tid/blob/omtag/v1/CHANGELOG.md";
+
+export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "1.1.0",
+    date: "2026-11-02",
+    notes: [
+      "Mörkt läge som följer enheten, och fem färgteman under Mer → Utseende.",
+      "Bättre på datorn: sidomeny, bredare innehåll och dialogrutor i stället för blad.",
+      "Om appen visar nu vad som är nytt i varje version.",
+    ],
+  },
+  {
+    version: "1.0.0",
+    date: "2026-10-14",
+    notes: [
+      "Omarbetad app: flikarna Idag, Kalender, Rapport och Mer, och rapportering Enligt schema eller med stämpling.",
+      "Rättad flexberäkning, roterande scheman, semestersaldo och restid.",
+      "Krypterad synk mellan enheter, Excel-import och -export, och ett demoläge.",
+    ],
+  },
+];
+
+/** "2 nov. 2026" */
+export function fmtReleaseDate(ymd: string): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("sv-SE", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}

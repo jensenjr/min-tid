@@ -205,12 +205,12 @@ export default function SettingsModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center"
-      style={{ background: "rgba(45,23,23,0.55)", animation: "pcOverlay 0.25s ease" }}
+      className="fixed inset-0 z-50 flex items-end md:items-center justify-center md:p-6"
+      style={{ background: "var(--pc-overlay)", animation: "pcOverlay 0.25s ease" }}
       onClick={onClose}
     >
       <div
-        className="bg-white w-full max-w-[480px] rounded-t-[28px] px-5 pt-6 overflow-y-auto"
+        className="pc-sheet bg-pc-surface w-full max-w-[480px] md:max-w-[560px] rounded-t-[28px] md:rounded-[28px] px-5 pt-6 overflow-y-auto"
         style={{
           paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)",
           animation: "pcSheet 0.32s cubic-bezier(0.32,0.72,0,1)",
@@ -218,7 +218,7 @@ export default function SettingsModal({
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="w-10 h-1 bg-pc-line rounded-full mx-auto mb-5" />
+        <div className="w-10 h-1 bg-pc-line rounded-full mx-auto md:hidden mb-5" />
 
         <div className="font-extrabold text-[22px] tracking-tight mb-1">Inställningar</div>
         <div className="text-[13px] text-pc-muted mb-6">Ändra namn och avdelning.</div>
@@ -250,10 +250,10 @@ export default function SettingsModal({
           placeholder="t.ex. Lager, Kontor…"
         />
 
-        <label className="flex items-center gap-3 rounded-[14px] border border-[#ece6df] bg-[#fdf6ee] px-4 py-3 mb-4 cursor-pointer">
+        <label className="flex items-center gap-3 rounded-[14px] border border-(--pc-line) bg-(--pc-apricot) px-4 py-3 mb-4 cursor-pointer">
           <div className="flex-1 min-w-0">
-            <div className="text-[13px] font-bold text-[#2d1717]">Felsökningsläge</div>
-            <div className="text-[11px] text-[#9c7c5c] font-medium">
+            <div className="text-[13px] font-bold text-(--pc-ink)">Felsökningsläge</div>
+            <div className="text-[11px] text-(--pc-taupe) font-medium">
               Visar teknisk info om synken och felrapport. Gäller bara den här enheten.
             </div>
           </div>
@@ -263,7 +263,7 @@ export default function SettingsModal({
             aria-label="Felsökningsläge"
             checked={debugMode}
             onChange={(e) => setDebugMode(e.target.checked)}
-            className="w-5 h-5 accent-[#ff5f00] shrink-0"
+            className="w-5 h-5 accent-(--pc-orange) shrink-0"
           />
         </label>
 
@@ -277,12 +277,12 @@ export default function SettingsModal({
             width: "100%",
             padding: "13px 16px",
             borderRadius: "14px",
-            border: "1.5px solid #ece6df",
+            border: "1.5px solid var(--pc-line)",
             fontSize: "14px",
             outline: "none",
-            background: "#fdf6ee",
+            background: "var(--pc-apricot)",
             fontWeight: 600,
-            color: "#2d1717",
+            color: "var(--pc-ink)",
             marginBottom: "16px",
             boxSizing: "border-box",
             textAlign: "left",
@@ -295,7 +295,7 @@ export default function SettingsModal({
           <span>⚡</span>
           <div>
             <div className="font-bold text-[13px]">Automatisera in/ut-checkning</div>
-            <div className="text-[11px] text-[#9c7c5c] font-medium">
+            <div className="text-[11px] text-(--pc-taupe) font-medium">
               QR-koder, NFC-taggar och WiFi via Genvägar
             </div>
           </div>
@@ -308,7 +308,7 @@ export default function SettingsModal({
         {syncToken ? (
           <>
             {/* Status card */}
-            <div className="bg-[#fdf6ee] border border-[#ece6df] rounded-[16px] px-4 py-3 mb-3 flex items-center gap-3">
+            <div className="bg-(--pc-apricot) border border-(--pc-line) rounded-[16px] px-4 py-3 mb-3 flex items-center gap-3">
               <span className="text-[20px] leading-none shrink-0">
                 {syncStatus === "syncing" || syncStatus === "pulling"
                   ? "⏳"
@@ -317,7 +317,7 @@ export default function SettingsModal({
                     : "☁️"}
               </span>
               <div className="flex-1 min-w-0">
-                <div className="text-[13px] font-bold text-[#2d1717] leading-tight">
+                <div className="text-[13px] font-bold text-(--pc-ink) leading-tight">
                   {syncStatus === "pulling"
                     ? "Hämtar från molnet…"
                     : syncStatus === "syncing"
@@ -329,8 +329,8 @@ export default function SettingsModal({
                           : "Synkronisering aktiv"}
                 </div>
                 {syncUsername && (
-                  <div className="text-[11px] text-[#9c7c5c] mt-0.5 font-semibold">
-                    Inloggad som: <span className="text-[#ff5f00]">@{syncUsername}</span>
+                  <div className="text-[11px] text-(--pc-taupe) mt-0.5 font-semibold">
+                    Inloggad som: <span className="text-(--pc-orange)">@{syncUsername}</span>
                   </div>
                 )}
                 {syncStatus === "error" && syncFailure && (
@@ -342,13 +342,13 @@ export default function SettingsModal({
               <button
                 onClick={onPullNow}
                 disabled={syncStatus === "pulling"}
-                className="shrink-0 text-[11px] font-bold text-[#ff5f00] underline"
+                className="shrink-0 text-[11px] font-bold text-(--pc-orange) underline"
               >
                 Hämta nu
               </button>
             </div>
 
-            <p className="text-[11px] text-[#9c7c5c] mb-3 leading-relaxed">
+            <p className="text-[11px] text-(--pc-taupe) mb-3 leading-relaxed">
               Data hämtas automatiskt när appen öppnas eller tas fram igen. Tryck{" "}
               <span className="font-bold">Hämta nu</span> om du precis stämplat på en annan enhet.
             </p>
@@ -358,7 +358,10 @@ export default function SettingsModal({
               <div
                 id="sync-help"
                 className="rounded-[16px] mb-3 overflow-hidden"
-                style={{ background: "#fef2f2", border: "1.5px solid #fca5a5" }}
+                style={{
+                  background: "var(--pc-danger-bg)",
+                  border: "1.5px solid var(--pc-danger-line)",
+                }}
               >
                 <button
                   onClick={() => setShowSyncHelp((v) => !v)}
@@ -366,10 +369,16 @@ export default function SettingsModal({
                 >
                   <span className="text-[16px]">⚠️</span>
                   <div className="flex-1">
-                    <div className="text-[13px] font-extrabold" style={{ color: "#b91c1c" }}>
+                    <div
+                      className="text-[13px] font-extrabold"
+                      style={{ color: "var(--pc-danger)" }}
+                    >
                       {explain.headline}
                     </div>
-                    <div className="text-[11px] font-semibold" style={{ color: "#9f1239" }}>
+                    <div
+                      className="text-[11px] font-semibold"
+                      style={{ color: "var(--pc-danger-ink)" }}
+                    >
                       Senast{" "}
                       {new Date(syncFailure!.at).toLocaleTimeString("sv-SE", {
                         hour: "2-digit",
@@ -381,20 +390,23 @@ export default function SettingsModal({
                           : " · ingen kontakt")}
                     </div>
                   </div>
-                  <span className="text-[11px] font-bold" style={{ color: "#b91c1c" }}>
+                  <span className="text-[11px] font-bold" style={{ color: "var(--pc-danger)" }}>
                     {showSyncHelp ? "↑" : "↓"}
                   </span>
                 </button>
 
                 {showSyncHelp && (
                   <div className="px-4 pb-4">
-                    <p className="text-[12px] leading-relaxed mb-3" style={{ color: "#7f1d1d" }}>
+                    <p
+                      className="text-[12px] leading-relaxed mb-3"
+                      style={{ color: "var(--pc-danger-ink)" }}
+                    >
                       {explain.cause}
                     </p>
 
                     <div
                       className="text-[11px] font-bold uppercase tracking-[0.1em] mb-1.5"
-                      style={{ color: "#b91c1c" }}
+                      style={{ color: "var(--pc-danger)" }}
                     >
                       Så löser du det
                     </div>
@@ -403,7 +415,7 @@ export default function SettingsModal({
                         <li
                           key={i}
                           className="flex gap-2 text-[12px] leading-snug"
-                          style={{ color: "#7f1d1d" }}
+                          style={{ color: "var(--pc-danger-ink)" }}
                         >
                           <span className="font-extrabold shrink-0">{i + 1}.</span>
                           <span>{f}</span>
@@ -413,9 +425,15 @@ export default function SettingsModal({
 
                     <div
                       className="rounded-[12px] px-3 py-2 mb-3"
-                      style={{ background: "#fff", border: "1px solid #fecaca" }}
+                      style={{
+                        background: "var(--pc-surface)",
+                        border: "1px solid var(--pc-danger-line)",
+                      }}
                     >
-                      <div className="text-[11px] font-semibold" style={{ color: "#7f1d1d" }}>
+                      <div
+                        className="text-[11px] font-semibold"
+                        style={{ color: "var(--pc-danger-ink)" }}
+                      >
                         {dirty
                           ? "Du har ändringar som ännu inte nått molnet. De ligger kvar på enheten och laddas upp automatiskt så fort synken fungerar igen."
                           : "Allt du stämplat finns sparat på enheten. Inget går förlorat."}
@@ -429,11 +447,11 @@ export default function SettingsModal({
                         style={{
                           padding: "11px",
                           borderRadius: "12px",
-                          background: "#fff",
-                          border: "1.5px solid #fca5a5",
+                          background: "var(--pc-surface)",
+                          border: "1.5px solid var(--pc-danger-line)",
                           fontWeight: 700,
                           fontSize: "13px",
-                          color: "#b91c1c",
+                          color: "var(--pc-danger)",
                         }}
                       >
                         Försök igen
@@ -441,14 +459,14 @@ export default function SettingsModal({
                       {explain.recreate ? (
                         <button
                           onClick={onRecreateSync ?? onSetupSync}
-                          className="py-[11px] rounded-[12px] bg-[#dc2626] text-white text-[13px] font-bold"
+                          className="py-[11px] rounded-[12px] bg-(--pc-danger) text-white text-[13px] font-bold"
                         >
                           Aktivera synk igen
                         </button>
                       ) : explain.relogin ? (
                         <button
                           onClick={onSetupSync}
-                          className="py-[11px] rounded-[12px] bg-[#dc2626] text-white text-[13px] font-bold"
+                          className="py-[11px] rounded-[12px] bg-(--pc-danger) text-white text-[13px] font-bold"
                         >
                           Logga in igen
                         </button>
@@ -464,8 +482,11 @@ export default function SettingsModal({
                               60,
                             );
                           }}
-                          className="py-[11px] rounded-[12px] bg-white text-[13px] font-bold"
-                          style={{ border: "1.5px solid #fca5a5", color: "#b91c1c" }}
+                          className="py-[11px] rounded-[12px] bg-pc-surface text-[13px] font-bold"
+                          style={{
+                            border: "1.5px solid var(--pc-danger-line)",
+                            color: "var(--pc-danger)",
+                          }}
                         >
                           Visa detaljer
                         </button>
@@ -513,12 +534,12 @@ export default function SettingsModal({
                 width: "100%",
                 padding: "13px 16px",
                 borderRadius: "14px",
-                border: "1.5px solid #ece6df",
+                border: "1.5px solid var(--pc-line)",
                 fontSize: "14px",
                 outline: "none",
-                background: showPin ? "#fff" : "#fdf6ee",
+                background: showPin ? "var(--pc-surface)" : "var(--pc-apricot)",
                 fontWeight: 600,
-                color: "#2d1717",
+                color: "var(--pc-ink)",
                 marginBottom: showPin ? "0" : "10px",
                 boxSizing: "border-box",
                 textAlign: "left",
@@ -531,13 +552,15 @@ export default function SettingsModal({
               <span>🔑</span>
               <div className="flex-1">
                 <div className="font-bold text-[13px]">Byt synk-kod</div>
-                <div className="text-[11px] text-[#9c7c5c] font-medium">Välj en ny hemlig kod</div>
+                <div className="text-[11px] text-(--pc-taupe) font-medium">
+                  Välj en ny hemlig kod
+                </div>
               </div>
-              <span className="text-[11px] text-[#9c7c5c]">{showPin ? "↑" : "↓"}</span>
+              <span className="text-[11px] text-(--pc-taupe)">{showPin ? "↑" : "↓"}</span>
             </button>
 
             {showPin && (
-              <div className="border border-[#ece6df] border-t-0 rounded-b-[14px] px-4 py-4 mb-3 bg-white">
+              <div className="border border-(--pc-line) border-t-0 rounded-b-[14px] px-4 py-4 mb-3 bg-pc-surface">
                 <input
                   type="password"
                   value={newSecret}
@@ -571,11 +594,11 @@ export default function SettingsModal({
                       flex: 1,
                       padding: "11px",
                       borderRadius: "12px",
-                      background: "#fdf6ee",
-                      border: "1.5px solid #ece6df",
+                      background: "var(--pc-apricot)",
+                      border: "1.5px solid var(--pc-line)",
                       fontWeight: 700,
                       fontSize: "13px",
-                      color: "#2d1717",
+                      color: "var(--pc-ink)",
                     }}
                   >
                     Avbryt
@@ -587,8 +610,8 @@ export default function SettingsModal({
                       flex: 1,
                       padding: "11px",
                       borderRadius: "12px",
-                      background: pinLoading ? "#f0e8df" : "#ff5f00",
-                      color: pinLoading ? "#c4a882" : "white",
+                      background: pinLoading ? "var(--pc-line-2)" : "var(--pc-orange)",
+                      color: pinLoading ? "var(--pc-sand)" : "white",
                       fontWeight: 700,
                       fontSize: "13px",
                     }}
@@ -600,17 +623,17 @@ export default function SettingsModal({
             )}
 
             {/* Phone recovery */}
-            <div className="border border-[#ece6df] rounded-[14px] px-4 py-3 mb-4">
+            <div className="border border-(--pc-line) rounded-[14px] px-4 py-3 mb-4">
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-[16px]">📱</span>
-                <div className="font-bold text-[13px] text-[#2d1717]">Återhämtningsnummer</div>
+                <div className="font-bold text-[13px] text-(--pc-ink)">Återhämtningsnummer</div>
               </div>
               {phoneStep === "idle" && (
                 <>
-                  <div className="text-[12px] text-[#9c7c5c] mb-2">
+                  <div className="text-[12px] text-(--pc-taupe) mb-2">
                     {syncPhone ? (
                       <>
-                        Nummer: <span className="font-semibold text-[#2d1717]">{syncPhone}</span>
+                        Nummer: <span className="font-semibold text-(--pc-ink)">{syncPhone}</span>
                       </>
                     ) : (
                       "Inget nummer kopplat. Lägg till för att kunna återhämta ditt konto via SMS."
@@ -622,7 +645,7 @@ export default function SettingsModal({
                       setPhoneErr("");
                       setPhoneInput("");
                     }}
-                    className="text-[12px] font-bold text-[#ff5f00] underline"
+                    className="text-[12px] font-bold text-(--pc-orange) underline"
                   >
                     {syncPhone ? "Ändra nummer" : "Lägg till nummer"}
                   </button>
@@ -630,7 +653,7 @@ export default function SettingsModal({
               )}
               {phoneStep === "enter" && (
                 <>
-                  <p className="text-[12px] text-[#9c7c5c] mb-2">
+                  <p className="text-[12px] text-(--pc-taupe) mb-2">
                     Ange ditt mobilnummer för att få en verifieringskod via SMS.
                   </p>
                   <input
@@ -656,11 +679,11 @@ export default function SettingsModal({
                         flex: 1,
                         padding: "10px",
                         borderRadius: "12px",
-                        background: "#fdf6ee",
-                        border: "1.5px solid #ece6df",
+                        background: "var(--pc-apricot)",
+                        border: "1.5px solid var(--pc-line)",
                         fontWeight: 700,
                         fontSize: "13px",
-                        color: "#2d1717",
+                        color: "var(--pc-ink)",
                       }}
                     >
                       Avbryt
@@ -672,8 +695,8 @@ export default function SettingsModal({
                         flex: 1,
                         padding: "10px",
                         borderRadius: "12px",
-                        background: phoneLoading ? "#f0e8df" : "#ff5f00",
-                        color: phoneLoading ? "#c4a882" : "white",
+                        background: phoneLoading ? "var(--pc-line-2)" : "var(--pc-orange)",
+                        color: phoneLoading ? "var(--pc-sand)" : "white",
                         fontWeight: 700,
                         fontSize: "13px",
                       }}
@@ -685,7 +708,7 @@ export default function SettingsModal({
               )}
               {phoneStep === "code" && (
                 <>
-                  <p className="text-[12px] text-[#9c7c5c] mb-2">
+                  <p className="text-[12px] text-(--pc-taupe) mb-2">
                     En 6-siffrig kod skickades till{" "}
                     <span className="font-semibold">{phoneInput}</span>.
                   </p>
@@ -720,11 +743,11 @@ export default function SettingsModal({
                         flex: 1,
                         padding: "10px",
                         borderRadius: "12px",
-                        background: "#fdf6ee",
-                        border: "1.5px solid #ece6df",
+                        background: "var(--pc-apricot)",
+                        border: "1.5px solid var(--pc-line)",
                         fontWeight: 700,
                         fontSize: "13px",
-                        color: "#2d1717",
+                        color: "var(--pc-ink)",
                       }}
                     >
                       ← Tillbaka
@@ -736,8 +759,8 @@ export default function SettingsModal({
                         flex: 1,
                         padding: "10px",
                         borderRadius: "12px",
-                        background: phoneLoading ? "#f0e8df" : "#ff5f00",
-                        color: phoneLoading ? "#c4a882" : "white",
+                        background: phoneLoading ? "var(--pc-line-2)" : "var(--pc-orange)",
+                        color: phoneLoading ? "var(--pc-sand)" : "white",
                         fontWeight: 700,
                         fontSize: "13px",
                       }}
@@ -761,7 +784,7 @@ export default function SettingsModal({
             <div className="flex items-center justify-between gap-3 mb-4">
               <button
                 onClick={onDisconnectSync}
-                className="text-[12px] font-semibold text-[#9c7c5c] underline"
+                className="text-[12px] font-semibold text-(--pc-taupe) underline"
               >
                 Koppla från här
               </button>
@@ -772,12 +795,12 @@ export default function SettingsModal({
                     onDeleteSyncAccount();
                   } else setConfirmDelete(true);
                 }}
-                className={`text-[12px] font-semibold underline ${confirmDelete ? "text-red-600" : "text-[#9c7c5c]"}`}
+                className={`text-[12px] font-semibold underline ${confirmDelete ? "text-red-600" : "text-(--pc-taupe)"}`}
               >
                 {confirmDelete ? "Tryck igen för att radera kontot" : "Radera synk-konto"}
               </button>
             </div>
-            <p className="text-[11px] text-[#9c7c5c] mb-4 leading-relaxed">
+            <p className="text-[11px] text-(--pc-taupe) mb-4 leading-relaxed">
               <span className="font-bold">Koppla från här</span> stänger bara av synk på den här
               enheten — kontot och dina data ligger kvar i molnet och du kan logga in igen.{" "}
               <span className="font-bold">Radera synk-konto</span> tar bort kontot och molnkopian
@@ -785,7 +808,7 @@ export default function SettingsModal({
             </p>
           </>
         ) : demo ? (
-          <p className="text-[12px] text-[#9c7c5c] mb-4 leading-relaxed">
+          <p className="text-[12px] text-(--pc-taupe) mb-4 leading-relaxed">
             Synk är avstängd i demoläget. Avsluta demon för att slå på krypterad synk.
           </p>
         ) : (
@@ -795,12 +818,12 @@ export default function SettingsModal({
               width: "100%",
               padding: "13px 16px",
               borderRadius: "14px",
-              border: "1.5px solid #ece6df",
+              border: "1.5px solid var(--pc-line)",
               fontSize: "14px",
               outline: "none",
-              background: "#fdf6ee",
+              background: "var(--pc-apricot)",
               fontWeight: 600,
-              color: "#2d1717",
+              color: "var(--pc-ink)",
               marginBottom: "16px",
               boxSizing: "border-box",
               textAlign: "left",
@@ -813,7 +836,7 @@ export default function SettingsModal({
             <span>☁️</span>
             <div>
               <div className="font-bold text-[13px]">Aktivera synkronisering</div>
-              <div className="text-[11px] text-[#9c7c5c] font-medium">
+              <div className="text-[11px] text-(--pc-taupe) font-medium">
                 Synka data mellan dina enheter
               </div>
             </div>
@@ -827,11 +850,11 @@ export default function SettingsModal({
             style={{
               padding: "15px",
               borderRadius: "16px",
-              background: "#fdf6ee",
-              border: "1.5px solid #ece6df",
+              background: "var(--pc-apricot)",
+              border: "1.5px solid var(--pc-line)",
               fontWeight: 700,
               fontSize: "15px",
-              color: "#2d1717",
+              color: "var(--pc-ink)",
             }}
           >
             Avbryt
@@ -841,11 +864,11 @@ export default function SettingsModal({
             style={{
               padding: "15px",
               borderRadius: "16px",
-              background: "#ff5f00",
+              background: "var(--pc-orange)",
               color: "white",
               fontWeight: 700,
               fontSize: "15px",
-              boxShadow: "0 8px 20px -8px rgba(255,95,0,0.6)",
+              boxShadow: "0 8px 20px -8px rgb(var(--pc-orange-rgb) / 0.6)",
             }}
           >
             Spara
@@ -872,12 +895,12 @@ const INPUT: React.CSSProperties = {
   width: "100%",
   padding: "13px 16px",
   borderRadius: "14px",
-  border: "1.5px solid #ece6df",
+  border: "1.5px solid var(--pc-line)",
   fontSize: "15px",
   outline: "none",
-  background: "#fdf6ee",
+  background: "var(--pc-apricot)",
   fontWeight: 600,
-  color: "#2d1717",
+  color: "var(--pc-ink)",
   marginBottom: "16px",
   boxSizing: "border-box",
 };

@@ -60,17 +60,26 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  /* Punch clock — Dalslands Sparbank brand */
-  --color-pc-orange: #ff5f00;
-  --color-pc-orange-deep: #fb4f00;
-  --color-pc-tangerine: #ff9100;
-  --color-pc-peach: #fff1cd;
-  --color-pc-apricot: #fdf6ee;
-  --color-pc-bark: #512b2b;
-  --color-pc-ink: #2d1717;
-  --color-pc-muted: #9a8a82;
-  --color-pc-line: #ece6df;
-  --color-pc-bg: #faf6f1;
+  /* min-tid colours. Values live in :root (light) and .dark below; never write
+   * a raw hex in a component — use these (bg-pc-surface, text-pc-ink,
+   * border-pc-line, or var(--pc-…) in inline styles). */
+  --color-pc-orange: var(--pc-orange);
+  --color-pc-orange-deep: var(--pc-orange-deep);
+  --color-pc-tangerine: var(--pc-tangerine);
+  --color-pc-peach: var(--pc-peach);
+  --color-pc-apricot: var(--pc-apricot);
+  --color-pc-bark: var(--pc-bark);
+  --color-pc-ink: var(--pc-ink);
+  --color-pc-ink-soft: var(--pc-ink-soft);
+  --color-pc-muted: var(--pc-muted);
+  --color-pc-taupe: var(--pc-taupe);
+  --color-pc-sand: var(--pc-sand);
+  --color-pc-line: var(--pc-line);
+  --color-pc-line-2: var(--pc-line-2);
+  --color-pc-line-strong: var(--pc-line-strong);
+  --color-pc-bg: var(--pc-bg);
+  --color-pc-surface: var(--pc-surface);
+  --color-pc-solid: var(--pc-solid);
   --font-display:
     "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
 }
@@ -144,6 +153,235 @@
   --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.551 0.027 264.364);
+}
+
+/* ── min-tid palette ──────────────────────────────────────────────
+ * Light is the original look. Dark keeps the brand orange and the warm
+ * brown family, inverted: the page is near-black brown, the ink is cream.
+ * `--pc-solid` is the dark chip behind white text (ink in light; a raised
+ * brown in dark, where the ink is light). */
+:root {
+  color-scheme: light;
+  --pc-orange: #ff5f00;
+  --pc-orange-rgb: 255 95 0;
+  --pc-orange-end: #e04d00;
+  --pc-orange-deep: #fb4f00;
+  --pc-tangerine: #ff9100;
+  --pc-peach: #fff1cd;
+  --pc-apricot: #fdf6ee;
+  --pc-bark: #512b2b;
+  --pc-ink: #2d1717;
+  --pc-ink-soft: #5b4a3f;
+  --pc-muted: #9a8a82;
+  --pc-taupe: #9c7c5c;
+  --pc-sand: #c4a882;
+  --pc-line: #ece6df;
+  --pc-line-2: #f0e8df;
+  --pc-line-strong: #cbbfb3;
+  --pc-bg: #faf6f1;
+  --pc-surface: #ffffff;
+  --pc-solid: #2d1717;
+  --pc-orange-tint: #fff3ec;
+  --pc-orange-line: #fed7aa;
+  --pc-orange-ink: #7c2d12;
+  --pc-danger-bg: #fef2f2;
+  --pc-danger-line: #fca5a5;
+  --pc-danger: #b91c1c;
+  --pc-danger-ink: #9f1239;
+  --pc-ok-bg: #ecfdf5;
+  --pc-ok-line: #a7f3d0;
+  --pc-ok: #065f46;
+  --pc-overlay: rgba(45, 23, 23, 0.55);
+}
+
+.dark {
+  color-scheme: dark;
+  --pc-orange: #ff6a14;
+  --pc-orange-rgb: 255 106 20;
+  --pc-orange-end: #e04d00;
+  --pc-orange-deep: #ff8a3d;
+  --pc-tangerine: #ffa033;
+  --pc-peach: #3a2414;
+  --pc-apricot: #261d18;
+  --pc-bark: #e8cfc4;
+  --pc-ink: #f3ebe4;
+  --pc-ink-soft: #d6c6bb;
+  --pc-muted: #a8968b;
+  --pc-taupe: #c9a98a;
+  --pc-sand: #7d6a5a;
+  --pc-line: #3a2e27;
+  --pc-line-2: #2f2520;
+  --pc-line-strong: #5a4a40;
+  --pc-bg: #17110e;
+  --pc-surface: #201814;
+  --pc-solid: #4a3a33;
+  --pc-orange-tint: #3a2214;
+  --pc-orange-line: #6b3a1a;
+  --pc-orange-ink: #fdba8c;
+  --pc-danger-bg: #3a1716;
+  --pc-danger-line: #7f2a28;
+  --pc-danger: #fca5a5;
+  --pc-danger-ink: #fecdd3;
+  --pc-ok-bg: #0f2c22;
+  --pc-ok-line: #1e5a44;
+  --pc-ok: #6ee7b7;
+  --pc-overlay: rgba(0, 0, 0, 0.6);
+
+  /* Status colours written as Tailwind palette classes (bg-red-50,
+   * text-amber-800, border-green-200 …) flip here, so every alert, chip and
+   * warning works in dark without a dark: variant on each one. Light tints
+   * become dark tints, dark text becomes light text; 400/500 stay. */
+  --color-red-50: oklch(27% 0.06 22);
+  --color-red-100: oklch(31% 0.08 22);
+  --color-red-200: oklch(40% 0.11 22);
+  --color-red-300: oklch(50% 0.15 24);
+  --color-red-600: oklch(70.4% 0.191 22.216);
+  --color-red-700: oklch(80.8% 0.114 19.571);
+  --color-red-800: oklch(88.5% 0.062 18.334);
+  --color-red-900: oklch(93.6% 0.032 17.717);
+  --color-amber-50: oklch(27% 0.045 70);
+  --color-amber-100: oklch(31% 0.06 70);
+  --color-amber-200: oklch(40% 0.08 70);
+  --color-amber-300: oklch(52% 0.11 70);
+  --color-amber-600: oklch(82.8% 0.189 84.429);
+  --color-amber-700: oklch(87.9% 0.169 91.605);
+  --color-amber-800: oklch(92.4% 0.12 95.746);
+  --color-amber-900: oklch(96.2% 0.059 95.617);
+  --color-green-50: oklch(26% 0.045 155);
+  --color-green-100: oklch(30% 0.06 155);
+  --color-green-200: oklch(39% 0.08 155);
+  --color-green-300: oklch(50% 0.11 155);
+  --color-green-600: oklch(79.2% 0.209 151.711);
+  --color-green-700: oklch(87.1% 0.15 154.449);
+  --color-green-800: oklch(92.5% 0.084 155.995);
+  --color-green-900: oklch(96.2% 0.044 156.743);
+  --color-emerald-50: oklch(26% 0.045 165);
+  --color-emerald-200: oklch(39% 0.08 165);
+  --color-emerald-600: oklch(76.5% 0.177 163.223);
+  --color-emerald-700: oklch(84.5% 0.143 164.978);
+  --color-emerald-800: oklch(90.5% 0.093 164.15);
+  --color-blue-50: oklch(27% 0.05 255);
+  --color-blue-100: oklch(31% 0.07 255);
+  --color-blue-200: oklch(40% 0.09 255);
+  --color-blue-600: oklch(70.7% 0.165 254.624);
+  --color-blue-700: oklch(80.9% 0.105 251.813);
+  --color-blue-800: oklch(88.2% 0.059 254.128);
+  --color-gray-100: oklch(30% 0.01 50);
+  --color-gray-200: oklch(36% 0.01 50);
+  --color-gray-300: oklch(45% 0.01 50);
+  --color-gray-600: oklch(80% 0.01 50);
+  --color-gray-700: oklch(87% 0.01 50);
+}
+
+/* ── Färgtema (accent) ────────────────────────────────────────────
+ * data-accent on <html> (src/lib/theme.ts) swaps the accent family; the
+ * warm neutrals stay. No attribute = Orange, the original. The tokens keep
+ * their "orange" names so no component has to know which accent is on. */
+:root[data-accent="hav"] {
+  --pc-orange: #2563eb;
+  --pc-orange-rgb: 37 99 235;
+  --pc-orange-end: #1e40af;
+  --pc-orange-deep: #1d4ed8;
+  --pc-tangerine: #3b82f6;
+  --pc-peach: #dbeafe;
+  --pc-orange-tint: #eff6ff;
+  --pc-orange-line: #bfdbfe;
+  --pc-orange-ink: #1e3a8a;
+}
+:root.dark[data-accent="hav"] {
+  --pc-orange: #3b82f6;
+  --pc-orange-rgb: 59 130 246;
+  --pc-orange-end: #1d4ed8;
+  --pc-orange-deep: #93c5fd;
+  --pc-tangerine: #60a5fa;
+  --pc-peach: #172554;
+  --pc-orange-tint: #172040;
+  --pc-orange-line: #1e3a8a;
+  --pc-orange-ink: #bfdbfe;
+}
+:root[data-accent="skog"] {
+  --pc-orange: #059669;
+  --pc-orange-rgb: 5 150 105;
+  --pc-orange-end: #065f46;
+  --pc-orange-deep: #047857;
+  --pc-tangerine: #10b981;
+  --pc-peach: #d1fae5;
+  --pc-orange-tint: #ecfdf5;
+  --pc-orange-line: #a7f3d0;
+  --pc-orange-ink: #064e3b;
+}
+:root.dark[data-accent="skog"] {
+  --pc-orange: #0d9f72;
+  --pc-orange-rgb: 13 159 114;
+  --pc-orange-end: #047857;
+  --pc-orange-deep: #6ee7b7;
+  --pc-tangerine: #34d399;
+  --pc-peach: #062e22;
+  --pc-orange-tint: #0a2a20;
+  --pc-orange-line: #065f46;
+  --pc-orange-ink: #a7f3d0;
+}
+:root[data-accent="ljung"] {
+  --pc-orange: #7c3aed;
+  --pc-orange-rgb: 124 58 237;
+  --pc-orange-end: #5b21b6;
+  --pc-orange-deep: #6d28d9;
+  --pc-tangerine: #8b5cf6;
+  --pc-peach: #ede9fe;
+  --pc-orange-tint: #f5f3ff;
+  --pc-orange-line: #ddd6fe;
+  --pc-orange-ink: #4c1d95;
+}
+:root.dark[data-accent="ljung"] {
+  --pc-orange: #8b5cf6;
+  --pc-orange-rgb: 139 92 246;
+  --pc-orange-end: #6d28d9;
+  --pc-orange-deep: #c4b5fd;
+  --pc-tangerine: #a78bfa;
+  --pc-peach: #2e1065;
+  --pc-orange-tint: #241046;
+  --pc-orange-line: #4c1d95;
+  --pc-orange-ink: #ddd6fe;
+}
+:root[data-accent="hallon"] {
+  --pc-orange: #db2777;
+  --pc-orange-rgb: 219 39 119;
+  --pc-orange-end: #9d174d;
+  --pc-orange-deep: #be185d;
+  --pc-tangerine: #ec4899;
+  --pc-peach: #fce7f3;
+  --pc-orange-tint: #fdf2f8;
+  --pc-orange-line: #fbcfe8;
+  --pc-orange-ink: #831843;
+}
+:root.dark[data-accent="hallon"] {
+  --pc-orange: #ec4899;
+  --pc-orange-rgb: 236 72 153;
+  --pc-orange-end: #be185d;
+  --pc-orange-deep: #f9a8d4;
+  --pc-tangerine: #f472b6;
+  --pc-peach: #3f0d27;
+  --pc-orange-tint: #36101f;
+  --pc-orange-line: #831843;
+  --pc-orange-ink: #fbcfe8;
+}
+
+/* Bottom sheets: a sheet slides up from the bottom on a phone; from md up it
+ * is a centred dialog (Bytefest's Sheet-on-mobile / Dialog-on-desktop). */
+@media (min-width: 768px) {
+  .pc-sheet {
+    animation: pcDialog 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  }
+}
+@keyframes pcDialog {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 @layer base {

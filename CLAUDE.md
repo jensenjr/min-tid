@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> **Current version: 1.0.0.** Exposed to the UI via `__APP_VERSION__` (set by Vite from the root `package.json`) and shown in Mer → Om appen and at the bottom of the settings modal. Bump versions in both `package.json` and `server/package.json` together.
+> **Current version: 1.1.0.** Exposed to the UI via `__APP_VERSION__` (set by Vite from the root `package.json`) and shown in Mer → Om appen and at the bottom of the settings modal. Bump versions in both `package.json` and `server/package.json` together.
 
 ## Commands
 
@@ -60,10 +60,12 @@ localStorage["sync_dirty"]    = "1"       // local edits the server hasn't ackno
 localStorage["sync_error_log"] = [...]    // last 10 sync failures (device-local, never synced)
 localStorage["punchclock_import_undo"] = {...}  // one pre-import snapshot (device-local, never synced)
 localStorage["punchclock_banner_dismissed"]     // per-day schedule-banner dismissals (device-local)
+localStorage["min-tid-theme"]  = "light"|"dark"  // absent = follow the device (device-local, see "Theme")
+localStorage["min-tid-accent"] = "hav"|…         // Färgtema; absent = orange (device-local)
 IndexedDB "min-tid-sync" / "keys"               // the sync encryption key (src/lib/keyStore.ts)
 ```
 
-Everything except the sync, undo and banner keys and IndexedDB is synced (as `SyncState`, encrypted). `onboardingDone` is never synced.
+Everything except the sync, undo, banner and theme keys and IndexedDB is synced (as `SyncState`, encrypted). `onboardingDone` is never synced.
 
 `trackingStartDate` (YYYY-MM-DD, optional) anchors flex accrual. It is set by the first registration (first punch-in, or "Enligt schema", an adjustment, a confirmation, added time or an absence; see "Flex anchor" below); for migrating users it's backfilled in `load()` from the earliest session date so historic flex stays sensible. It round-trips through sync (`SyncState.trackingStartDate`).
 
@@ -81,6 +83,15 @@ The bottom nav is **not** `fixed bottom-0` — that breaks on mobile Safari when
 - `<main>`: `flex-1 min-h-0 overflow-y-auto`
 
 This keeps the nav anchored to the visible viewport bottom while only the main area scrolls. Don't reintroduce `min-h-screen` + `fixed bottom-0`.
+
+### Desktop layout (md and up)
+
+Taken from Bytefest-app's DESIGN.md ("phone AND desktop, equally"). Below `md` (768 px) the app is the 480 px column above. From `md`:
+
+- The bottom nav is `md:hidden`; a left sidebar (`<aside>`, `SideNavItem`) holds the logo and Idag / Kalender / Rapport / Mer.
+- Header, sync banner and `<main>`'s content share one centred column: `md:max-w-3xl lg:max-w-5xl` (main keeps full width so its scrollbar sits at the window edge).
+- Views use the width: Today is two columns at `lg` (the day left, flex + "Att åtgärda" right); Mer puts its groups in two columns.
+- Every bottom sheet becomes a centred dialog (`md:items-center`, `md:max-w-[560px]`, `md:rounded-[28px]`, the drag handle `md:hidden`); `.pc-sheet` gets a fade-in instead of the slide-up (styles.css). New sheets: use `Sheet` from `ui.tsx`, or copy those classes.
 
 ### Navigation & views (PR 5)
 
@@ -313,7 +324,15 @@ useEffect(() => {
 
 ### Styling
 
-Tailwind CSS v4 with custom `pc-*` design tokens defined in `src/styles.css`. Key tokens: `pc-orange` (#ff5f00 — primary), `pc-ink` (#2d1717 — body text), `pc-bg` (#faf6f1 — background). All components use inline styles for dynamic values and Tailwind classes for layout/spacing.
+Tailwind CSS v4 with custom `pc-*` design tokens defined in `src/styles.css`. Key tokens: `pc-orange` (accent, #ff5f00 by default), `pc-ink` (body text), `pc-bg` (page), `pc-surface` (cards, sheets), `pc-apricot` (inputs, subtle fills), `pc-line`, `pc-muted`, `pc-taupe`, `pc-solid` (dark chip behind white text). All components use inline styles for dynamic values and Tailwind classes for layout/spacing.
+
+**Never write a raw colour in a component.** Use the tokens: `bg-pc-surface` (not `bg-white`), `text-pc-ink`, or `var(--pc-…)` in inline styles; the accent glow is `rgb(var(--pc-orange-rgb) / 0.4)`. Status colours (`--pc-danger*`, `--pc-ok*`) exist as tokens, and Tailwind's `red/amber/green/blue/gray/emerald` palette classes are re-mapped under `.dark` in styles.css, so `bg-amber-50 text-amber-800` works in both themes. `text-white` stays white (it sits on the accent). Exceptions: the print windows (RecoveryKeySheet, AutomationModal QR signs) and the brown "incheckad" clock gradient keep fixed colours.
+
+### Theme (`src/lib/theme.ts`, ported from Bytefest-app)
+
+- **Light/dark:** `.dark` on `<html>`. Choice in Mer → Utseende: "Följ enheten" (default, follows `prefers-color-scheme` live), "Ljust", "Mörkt". `index.html` runs `THEME_BOOT_SCRIPT` inline before first paint (no flash); `theme.test.ts` keeps the copy equal — after changing the script, paste the new output into index.html. `startThemeSync()` in `main.tsx` follows the device and other tabs. `color-scheme` is set per theme so native time pickers and scrollbars match.
+- **Färgtema:** `data-accent` on `<html>` = `hav` / `skog` / `ljung` / `hallon` (absent = orange). Each accent overrides the accent family (`--pc-orange`, `-rgb`, `-deep`, `-end`, `tangerine`, `peach`, `orange-tint/-line/-ink`) for light and for `.dark` in styles.css; the warm neutrals stay. Adding one: a row in `ACCENTS` plus both CSS blocks (the test checks).
+- Both are device-local display preferences: never synced, and also used in demo mode (they are not data).
 
 ---
 
@@ -581,7 +600,7 @@ This project follows semver. 1.0.0 shipped the omtag rework; the `-beta.N` suffi
 - Source of truth: root `package.json` `version` field.
 - `server/package.json` must be bumped in lockstep.
 - `vite.config.ts` reads `package.json` and exposes the version as the `__APP_VERSION__` global; `src/env.d.ts` declares the type.
-- The version is rendered in Mer → Om appen (`views/More.tsx`) and in the footer of `SettingsModal.tsx` as `min-tid v{__APP_VERSION__}`.
+- The version is rendered in Mer → Om appen (`views/More.tsx`, with "Nytt i versionen" from `src/lib/releaseNotes.ts`) and in the footer of `SettingsModal.tsx` as `min-tid v{__APP_VERSION__}`.
 
 ### Policy
 
@@ -601,9 +620,10 @@ Bump (and add a `CHANGELOG.md` section) whenever you ship anything user-visible 
 
 1. Edit `package.json` and `server/package.json` to the new version (lockstep).
 2. In `CHANGELOG.md`: move whatever is under `[Unreleased]` into a new `[X.Y.Z] — YYYY-MM-DD` section just above the previous release. Leave a fresh `_Nothing yet._` under `[Unreleased]`. Add the link at the bottom.
-3. `npm run build` to confirm Vite injects the new value.
-4. Commit (`package.json`, `server/package.json`, `CHANGELOG.md`, plus the actual change). Push.
-5. If publishing a GitHub release: tag `vX.Y.Z` and the changelog links resolve.
+3. Add the version to `RELEASE_NOTES` in `src/lib/releaseNotes.ts` (first in the list, same date): one to three short lines in plain Swedish about what is new or changed for the user. Mer → Om appen shows them under "Nytt i versionen" with a link to the full changelog (`CHANGELOG_URL`, the deployed branch). `releaseNotes.test.ts` fails if the version or a stable CHANGELOG section from 1.0.0 lacks an entry.
+4. `npm run build` to confirm Vite injects the new value.
+5. Commit (`package.json`, `server/package.json`, `CHANGELOG.md`, `releaseNotes.ts`, plus the actual change). Push.
+6. If publishing a GitHub release: tag `vX.Y.Z` and the changelog links resolve.
 
 ### When work is in flight
 

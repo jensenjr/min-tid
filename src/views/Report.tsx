@@ -139,11 +139,11 @@ export default function Report({
   const seg = (active: boolean) =>
     `flex-1 py-2.5 rounded-[14px] text-[13px] font-bold border transition-colors ${
       active
-        ? "bg-pc-orange text-white border-pc-orange shadow-[0_4px_12px_-4px_rgba(255,95,0,0.45)]"
-        : "bg-white border-pc-line text-pc-ink"
+        ? "bg-pc-orange text-white border-pc-orange shadow-[0_4px_12px_-4px_rgb(var(--pc-orange-rgb)/0.45)]"
+        : "bg-pc-surface border-pc-line text-pc-ink"
     }`;
   const outlineBtn =
-    "pc-press py-3.5 rounded-[16px] bg-white border border-pc-line text-pc-ink font-bold text-[14px]";
+    "pc-press py-3.5 rounded-[16px] bg-pc-surface border border-pc-line text-pc-ink font-bold text-[14px]";
 
   const byDate: Record<string, ExpenseEntry[]> = {};
   for (const e of periodExpenses) (byDate[e.date] ??= []).push(e);
@@ -365,7 +365,7 @@ export default function Report({
         </div>
         <button
           onClick={generate}
-          className="pc-press w-full py-4 rounded-[18px] bg-pc-orange text-white font-bold text-[15px] shadow-[0_8px_20px_-8px_rgba(255,95,0,0.6)]"
+          className="pc-press w-full py-4 rounded-[18px] bg-pc-orange text-white font-bold text-[15px] shadow-[0_8px_20px_-8px_rgb(var(--pc-orange-rgb)/0.6)]"
         >
           Skapa textrapport
         </button>
@@ -375,7 +375,7 @@ export default function Report({
             <textarea
               readOnly
               value={text}
-              className="w-full min-h-[240px] border border-pc-line rounded-[18px] p-4 text-[12px] leading-[1.7] bg-white text-pc-ink resize-none outline-none"
+              className="w-full min-h-[240px] border border-pc-line rounded-[18px] p-4 text-[12px] leading-[1.7] bg-pc-surface text-pc-ink resize-none outline-none"
               style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}
             />
             <div className="grid grid-cols-2 gap-3 mt-3">

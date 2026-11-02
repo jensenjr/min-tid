@@ -125,19 +125,19 @@ export default function ScheduleEditorModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center pc-overlay"
-      style={{ background: "rgba(45,23,23,0.55)" }}
+      className="fixed inset-0 z-50 flex items-end md:items-center justify-center md:p-6 pc-overlay"
+      style={{ background: "var(--pc-overlay)" }}
       onClick={onClose}
     >
       <div
-        className="pc-sheet bg-white w-full max-w-[480px] rounded-t-[28px] px-5 pt-6 overflow-y-auto"
+        className="pc-sheet bg-pc-surface w-full max-w-[480px] md:max-w-[560px] rounded-t-[28px] md:rounded-[28px] px-5 pt-6 overflow-y-auto"
         style={{
           paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)",
           maxHeight: "92dvh",
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="w-10 h-1 bg-pc-line rounded-full mx-auto mb-5" />
+        <div className="w-10 h-1 bg-pc-line rounded-full mx-auto md:hidden mb-5" />
         <div className="font-extrabold text-[22px] tracking-tight mb-1">Planera dagar</div>
         <div className="text-[13px] text-pc-muted mb-5">
           Ange arbetstider och lunch per dag. Norm/vecka{count > 1 ? " (snitt)" : ""}:{" "}
@@ -182,7 +182,7 @@ export default function ScheduleEditorModal({
               <select
                 value={startWeek}
                 onChange={(e) => setStartWeekChoice(Number(e.target.value))}
-                className="shrink-0 rounded-[10px] border border-pc-line bg-white px-2 py-1.5 text-[14px] font-bold text-pc-ink"
+                className="shrink-0 rounded-[10px] border border-pc-line bg-pc-surface px-2 py-1.5 text-[14px] font-bold text-pc-ink"
               >
                 {Array.from({ length: Math.min(count, MAX_ROTATION_WEEKS) }, (_, i) => (
                   <option key={i} value={i + 1}>
@@ -207,13 +207,13 @@ export default function ScheduleEditorModal({
                   onClick={() => setModeChoice(o.key)}
                   className="text-left rounded-[16px] px-3 py-3 transition-colors"
                   style={{
-                    background: on ? "#fff3ec" : "#fdf6ee",
-                    border: on ? "1.5px solid #ff5f00" : "1.5px solid #ece6df",
+                    background: on ? "var(--pc-orange-tint)" : "var(--pc-apricot)",
+                    border: on ? "1.5px solid var(--pc-orange)" : "1.5px solid var(--pc-line)",
                   }}
                 >
                   <div
                     className="text-[14px] font-extrabold mb-1"
-                    style={{ color: on ? "#ff5f00" : "#2d1717" }}
+                    style={{ color: on ? "var(--pc-orange)" : "var(--pc-ink)" }}
                   >
                     {o.title}
                   </div>
@@ -230,11 +230,11 @@ export default function ScheduleEditorModal({
             style={{
               padding: "15px",
               borderRadius: "16px",
-              background: "#fdf6ee",
-              border: "1.5px solid #ece6df",
+              background: "var(--pc-apricot)",
+              border: "1.5px solid var(--pc-line)",
               fontWeight: 700,
               fontSize: "15px",
-              color: "#2d1717",
+              color: "var(--pc-ink)",
             }}
           >
             Avbryt
@@ -245,11 +245,11 @@ export default function ScheduleEditorModal({
             style={{
               padding: "15px",
               borderRadius: "16px",
-              background: "#ff5f00",
+              background: "var(--pc-orange)",
               color: "white",
               fontWeight: 700,
               fontSize: "15px",
-              boxShadow: "0 8px 20px -8px rgba(255,95,0,0.6)",
+              boxShadow: "0 8px 20px -8px rgb(var(--pc-orange-rgb) / 0.6)",
               opacity: dateValid ? 1 : 0.5,
             }}
           >

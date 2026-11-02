@@ -37,7 +37,7 @@ export function ScheduleBanner({
   onDismiss: () => void;
 }) {
   return (
-    <div className="mt-4 bg-white border border-pc-orange/30 rounded-[20px] p-4 pc-pop shadow-[0_4px_16px_rgba(255,95,0,0.12)]">
+    <div className="mt-4 bg-pc-surface border border-pc-orange/30 rounded-[20px] p-4 pc-pop shadow-[0_4px_16px_rgb(var(--pc-orange-rgb)/0.12)]">
       <div className="flex items-start gap-3">
         <span className="text-[20px] leading-none mt-0.5">{emoji}</span>
         <div className="flex-1 text-[13px] font-semibold text-pc-ink leading-snug">{text}</div>
@@ -62,7 +62,9 @@ export function ScheduleBanner({
         <button
           onClick={primary.onClick}
           className="pc-press py-2.5 rounded-[14px] text-white font-bold text-[13px]"
-          style={{ background: "linear-gradient(135deg, #ff5f00 0%, #e04d00 100%)" }}
+          style={{
+            background: "linear-gradient(135deg, var(--pc-orange) 0%, var(--pc-orange-end) 100%)",
+          }}
         >
           {primary.label}
         </button>

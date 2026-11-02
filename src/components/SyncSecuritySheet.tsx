@@ -62,7 +62,7 @@ export default function SyncSecuritySheet({
     >
       <div
         className="rounded-[16px] mb-4 overflow-hidden"
-        style={{ background: "#ecfdf5", border: "1.5px solid #a7f3d0" }}
+        style={{ background: "var(--pc-ok-bg)", border: "1.5px solid var(--pc-ok-line)" }}
       >
         <button
           onClick={() => setExplain((v) => !v)}
@@ -70,15 +70,15 @@ export default function SyncSecuritySheet({
           aria-expanded={explain}
         >
           <span className="text-[16px]">🔒</span>
-          <span className="flex-1 text-[13px] font-extrabold" style={{ color: "#065f46" }}>
+          <span className="flex-1 text-[13px] font-extrabold" style={{ color: "var(--pc-ok)" }}>
             Krypterad på enheten · AES-256
           </span>
-          <span className="text-[11px] font-bold" style={{ color: "#047857" }}>
+          <span className="text-[11px] font-bold" style={{ color: "var(--pc-ok)" }}>
             {explain ? "↑" : "Vad ser servern?"}
           </span>
         </button>
         {explain && (
-          <div className="px-4 pb-4 text-[12px] leading-relaxed" style={{ color: "#064e3b" }}>
+          <div className="px-4 pb-4 text-[12px] leading-relaxed" style={{ color: "var(--pc-ok)" }}>
             <p className="mb-2">
               <b>Servern ser inte</b> dina tider, frånvaro, utlägg, namn eller schema. Allt
               krypteras på enheten innan det skickas, med en nyckel som tas fram ur din synk-kod och
