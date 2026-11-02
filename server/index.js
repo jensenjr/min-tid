@@ -7,6 +7,13 @@ import path from "node:path";
 import fs from "node:fs";
 import { createCore, PROTOCOL_HEADER, PROTOCOL_VERSION } from "./core.js";
 import { resolveServerConfig } from "./config.js";
+import {
+  buildCsp,
+  createAttemptLimiter,
+  inlineScriptHashes,
+  LOCKED_MESSAGE,
+  securityHeaders,
+} from "./security.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -152,6 +159,7 @@ const otpStore = new Map();
 const rateLimits = new Map();
 
 const OTP_TTL_MS = 10 * 60 * 1000;
+const OTP_MAX_WRONG = 5;
 const OTP_COOLDOWN = parseInt(process.env.SMS_RESEND_COOLDOWN_SEC ?? "60", 10) * 1000;
 const OTP_MAX_HOUR = parseInt(process.env.SMS_MAX_PER_HOUR ?? "3", 10);
 const OTP_MAX_DAY = parseInt(process.env.SMS_MAX_PER_DAY ?? "10", 10);
@@ -189,7 +197,7 @@ function recordSend(phone) {
 function storeOtp(phone, userId) {
   const code = String(crypto.randomInt(100000, 1000000));
   const codeHash = hashCode(code);
-  otpStore.set(phone, { codeHash, expiresAt: Date.now() + OTP_TTL_MS, userId });
+  otpStore.set(phone, { codeHash, expiresAt: Date.now() + OTP_TTL_MS, userId, wrong: 0 });
   return code;
 }
 
@@ -200,8 +208,17 @@ function verifyOtp(phone, userCode) {
     otpStore.delete(phone);
     return { ok: false, reason: "Koden har gått ut. Begär en ny." };
   }
-  if (hashCode(userCode) !== entry.codeHash)
+  if (hashCode(userCode) !== entry.codeHash) {
+    // A 6-digit code must not be guessable within its 10 minutes: after
+    // OTP_MAX_WRONG wrong tries it is gone and a new one has to be requested
+    // (which the per-phone SMS limits above throttle).
+    entry.wrong = (entry.wrong ?? 0) + 1;
+    if (entry.wrong >= OTP_MAX_WRONG) {
+      otpStore.delete(phone);
+      return { ok: false, reason: "För många felaktiga försök. Begär en ny kod." };
+    }
     return { ok: false, reason: "Fel kod. Kontrollera och försök igen." };
+  }
   const { userId } = entry;
   otpStore.delete(phone);
   return { ok: true, userId };
@@ -217,6 +234,51 @@ setInterval(
 
 // ─── App ──────────────────────────────────────────────────────
 const app = express();
+app.disable("x-powered-by");
+// Behind the hosting provider's proxy, req.ip must be the client's address (the
+// login limiter keys on it). TRUST_PROXY = number of proxy hops (default 1 in
+// production, none in development) or an Express trust-proxy value; "0" = none.
+{
+  const raw = process.env.TRUST_PROXY ?? (PROD ? "1" : "0");
+  app.set("trust proxy", /^\d+$/.test(raw) ? Number(raw) : raw);
+}
+
+// Security headers on every response. The CSP allows the inline theme script in
+// the built index.html by its hash, so it is computed from that file at startup.
+{
+  let hashes = [];
+  if (PROD) {
+    try {
+      hashes = inlineScriptHashes(
+        fs.readFileSync(path.join(__dirname, "../dist/index.html"), "utf8"),
+      );
+    } catch {
+      console.warn("[security] dist/index.html saknas — CSP utan skript-hashar.");
+    }
+  }
+  const headers = securityHeaders({ csp: buildCsp(hashes), prod: PROD });
+  app.use((_req, res, next) => {
+    res.set(headers);
+    next();
+  });
+}
+
+// Brute-force limits for POST /api/auth/login: per account name and per client IP.
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const loginByName = createAttemptLimiter({
+  max: 5,
+  windowMs: LOGIN_WINDOW_MS,
+  lockMs: LOGIN_WINDOW_MS,
+});
+const loginByIp = createAttemptLimiter({
+  max: 30,
+  windowMs: LOGIN_WINDOW_MS,
+  lockMs: LOGIN_WINDOW_MS,
+});
+setInterval(() => {
+  loginByName.prune();
+  loginByIp.prune();
+}, LOGIN_WINDOW_MS).unref();
 // Envelopes are base64 (+33 %) of the JSON state, so allow more than the plaintext needed.
 app.use(express.json({ limit: "8mb" }));
 
@@ -255,7 +317,23 @@ app.post(
 app.post(
   "/api/auth/login",
   wrap(async (req, res) => {
-    send(res, await core.login({ body: req.body, e2e: isE2E(req) }));
+    const name =
+      typeof req.body?.username === "string" ? req.body.username.trim().toLowerCase() : "";
+    const ip = req.ip ?? "";
+    for (const blocked of [loginByIp.check(ip), name ? loginByName.check(name) : { ok: true }]) {
+      if (!blocked.ok) {
+        res.set("Retry-After", String(blocked.retryAfterSec));
+        return res.status(429).json({ error: LOCKED_MESSAGE });
+      }
+    }
+    const r = await core.login({ body: req.body, e2e: isE2E(req) });
+    if (r.status === 401) {
+      loginByIp.fail(ip);
+      if (name) loginByName.fail(name);
+    } else if (r.status === 200 && name) {
+      loginByName.succeed(name);
+    }
+    send(res, r);
   }),
 );
 

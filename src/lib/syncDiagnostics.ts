@@ -9,7 +9,13 @@ export const SYNC_ERROR_LOG_KEY = "sync_error_log";
 const MAX_LOG = 10;
 
 /** Where to send a felanmälan. */
-export const SUPPORT_EMAIL = "christian@krut.it";
+/**
+ * Where "Skicka fellogg" goes. Set VITE_SUPPORT_EMAIL at build time (e.g. the
+ * bank's own IT support) so reports never leave the organisation; the default is
+ * the developer's address.
+ */
+export const SUPPORT_EMAIL: string =
+  (import.meta.env?.VITE_SUPPORT_EMAIL as string | undefined)?.trim() || "christian@krut.it";
 
 export type SyncFailure = {
   at: number; // ms

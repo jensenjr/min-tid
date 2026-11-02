@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> **Current version: 1.2.0.** Exposed to the UI via `__APP_VERSION__` (set by Vite from the root `package.json`) and shown in Mer → Om appen and at the bottom of the settings modal. Bump versions in both `package.json` and `server/package.json` together.
+> **Current version: 1.2.1.** Exposed to the UI via `__APP_VERSION__` (set by Vite from the root `package.json`) and shown in Mer → Om appen and at the bottom of the settings modal. Bump versions in both `package.json` and `server/package.json` together.
 
 ## Commands
 
@@ -441,6 +441,16 @@ recovery key (24 Crockford base32 = 120 bits) ──HKDF──► AES-KW key ─
 
 Phone endpoints (`/api/auth/phone`, `/phone/verify`, `/recover/request`) are unchanged. Login errors are deliberately ambiguous ("Fel användarnamn eller synk-kod") and an unknown username costs a bcrypt compare like a known one. Registration does reveal that a name is taken (by design — you need to know to pick another).
 
+### Security hardening (1.2.1, `server/security.js`)
+
+Written for running at a bank; tests in `server/__tests__/security.test.js`.
+
+- **Headers on every response** (`securityHeaders`, set in `index.js`): Content-Security-Policy, HSTS (production only), `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: no-referrer`, `Permissions-Policy`, COOP/CORP same-origin; `x-powered-by` off. The CSP (`buildCsp`) allows only our own origin. The one inline script (the theme boot script in `index.html`) is allowed by its sha256, computed from `dist/index.html` at startup (`inlineScriptHashes`), so changing `THEME_BOOT_SCRIPT` needs no CSP edit. Styles keep `'unsafe-inline'` (style attributes and components' `<style>` blocks). **Never load anything from another origin** — no CDN, no Google Fonts: the CSP blocks it, and for a bank it leaks users' IP addresses. Fonts come from `@fontsource-variable/inter` (imported in `main.tsx`, family "Inter Variable").
+- **Login limiter** (`createAttemptLimiter`, in memory): `POST /api/auth/login` → 429 + `Retry-After` after 5 failed logins per username or 30 per IP within 15 min, locked for 15 min; a success clears the username. `req.ip` comes from `TRUST_PROXY` (proxy hops, default 1 in production).
+- **SMS codes** die after `OTP_MAX_WRONG` (5) wrong tries (`verifyOtp` in `index.js`).
+- **Non-root container**: `server/docker-entrypoint.sh` chowns the data directory (`/app/data`, `RAILWAY_VOLUME_MOUNT_PATH`, `dirname DATA_PATH`) to `node` and `exec setpriv`s to it, because mounted volumes are root-owned.
+- **Support address**: `SUPPORT_EMAIL` in `syncDiagnostics.ts` = `VITE_SUPPORT_EMAIL` at build time, else the developer's.
+
 **Never log request bodies** — they carry auth keys, ciphertext and phone numbers. `core.js` has no logging at all; `index.js` replaces Express's default error handler (which would print a JSON parse error including a body excerpt) and logs only method, path and error name for 5xx. The one remaining log of user data is the dev-only SMS fallback (`[sms] … would send to <phone>: <code>` when 46elks credentials are missing).
 
 ### Environment variables
@@ -457,6 +467,8 @@ All of them are documented in `.env.example`. Resolution lives in `server/config
 | `DATA_PERSISTENT`                               | —                                                                         | `1` = the data disk survives restarts outside Railway (docker-compose bind mount)                          |
 | `RAILWAY_VOLUME_MOUNT_PATH`                     | set by Railway                                                            | Present only when a volume is attached; the server stores `data.json` there                                |
 | `ELKS_API_USERNAME` / `_PASSWORD` / `ELKS_FROM` | —                                                                         | SMS recovery via 46elks; without them the code is logged (dev only)                                        |
+| `TRUST_PROXY`                                   | `1` (production) / `0`                                                    | Proxy hops in front of the server, so the login limiter sees the client IP                                 |
+| `VITE_SUPPORT_EMAIL` (build time)               | developer's address                                                       | Where "Skicka fellogg" is mailed                                                                           |
 
 **Storage check.** `GET /api/health` (no auth) → `{ ok, version, storage }` where `storage` is
 `persistent` / `ephemeral` / `unknown`. On Railway without a volume the server logs
@@ -522,7 +534,7 @@ its proxy answers **403 on `/api`**.
   `explainSyncError()` maps a `SyncFailure` to `{ headline, cause, fixes[], networkBlocked, relogin }`
   in plain Swedish (403/407/451/0 → "byt nät"; 401/409/422 → logga in igen, `relogin: true`;
   405 → deploy pågår; 5xx → serverfel), a rolling 10-entry log in `localStorage["sync_error_log"]`, and
-  `buildSyncReportMailto()` which composes the felanmälan to `christian@krut.it`
+  `buildSyncReportMailto()` which composes the felanmälan to `SUPPORT_EMAIL` (`VITE_SUPPORT_EMAIL`, default `christian@krut.it`)
   (subject `mintid sync error kl HH:MM`). **The report never includes the JWT or the secret.**
 - `PunchClock.noteSyncFailure()` is the single funnel: every failed pull/push records the
   failure, appends to the log, and sets `syncStatus = "error"`. `clearSyncFailure()` runs on
@@ -626,7 +638,7 @@ Bump (and add a `CHANGELOG.md` section) whenever you ship anything user-visible 
 
 1. Edit `package.json` and `server/package.json` to the new version (lockstep).
 2. In `CHANGELOG.md`: move whatever is under `[Unreleased]` into a new `[X.Y.Z] — YYYY-MM-DD` section just above the previous release. Leave a fresh `_Nothing yet._` under `[Unreleased]`. Add the link at the bottom.
-3. Add the version to `RELEASE_NOTES` in `src/lib/releaseNotes.ts` (first in the list, same date): one to three short lines in plain Swedish about what is new or changed for the user. Mer → Om appen shows them under "Nytt i versionen" with a link to the full changelog (`CHANGELOG_URL`, the deployed branch). `releaseNotes.test.ts` fails if the version or a stable CHANGELOG section from 1.0.0 lacks an entry.
+3. Add the version to `RELEASE_NOTES` in `src/lib/releaseNotes.ts` (first in the list, same date): one to three short lines in plain Swedish about what is new or changed for the user. Mer → Om appen shows them under "Nytt i versionen" with a link to the full changelog (`CHANGELOG_URL`, `main`). `releaseNotes.test.ts` fails if the version or a stable CHANGELOG section from 1.0.0 lacks an entry.
 4. `npm run build` to confirm Vite injects the new value.
 5. Commit (`package.json`, `server/package.json`, `CHANGELOG.md`, `releaseNotes.ts`, plus the actual change). Push.
 6. If publishing a GitHub release: tag `vX.Y.Z` and the changelog links resolve.

@@ -8,10 +8,18 @@
  */
 export type ReleaseNote = { version: string; date: string; notes: string[] };
 
-/** The branch that is deployed (see CLAUDE.md → Deployment). */
-export const CHANGELOG_URL = "https://github.com/jensenjr/min-tid/blob/omtag/v1/CHANGELOG.md";
+/** The default branch, which is deployed (see CLAUDE.md → Deployment). */
+export const CHANGELOG_URL = "https://github.com/jensenjr/min-tid/blob/main/CHANGELOG.md";
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "1.2.1",
+    date: "2026-11-02",
+    notes: [
+      "Säkrare: typsnittet hämtas inte längre från Google och inloggningen spärras efter upprepade felförsök.",
+      "Servern skickar säkerhetsheaders och körs inte som administratör.",
+    ],
+  },
   {
     version: "1.2.0",
     date: "2026-11-02",
