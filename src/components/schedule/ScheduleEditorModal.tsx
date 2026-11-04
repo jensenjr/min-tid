@@ -14,21 +14,7 @@ import {
   weeksBetween,
 } from "../../lib/schedule";
 import { ymdLocal } from "../../lib/dates";
-import type { ReportingMode } from "../../lib/types";
 import RotationEditor from "./RotationEditor";
-
-const MODE_OPTIONS: { key: ReportingMode; title: string; text: string }[] = [
-  {
-    key: "schedule",
-    title: "Enligt schema",
-    text: "Schemat är din tid. Du anger bara det som avviker.",
-  },
-  {
-    key: "punch",
-    title: "Stämpla",
-    text: "Du stämplar in och ut. Schemat är normen att jämföra mot.",
-  },
-];
 
 function Label({ children }: { children: React.ReactNode }) {
   return (
@@ -43,15 +29,13 @@ function Label({ children }: { children: React.ReactNode }) {
 export default function ScheduleEditorModal({
   open,
   schedules,
-  reportingMode,
   onClose,
   onSave,
 }: {
   open: boolean;
   schedules: SchedulePeriod[];
-  reportingMode?: ReportingMode;
   onClose: () => void;
-  onSave: (schedules: SchedulePeriod[], reportingMode?: ReportingMode) => void;
+  onSave: (schedules: SchedulePeriod[]) => void;
 }) {
   const [validFrom, setValidFrom] = useState(() => ymdLocal(new Date()));
   const [weeks, setWeeks] = useState<WeekSchedule[]>(
@@ -59,7 +43,6 @@ export default function ScheduleEditorModal({
   );
   const [count, setCount] = useState(weeks.length);
   const [startWeekChoice, setStartWeekChoice] = useState<number | null>(null);
-  const [modeChoice, setModeChoice] = useState<ReportingMode | null>(null);
 
   // Reset the draft whenever the sheet opens (the instance stays mounted while closed).
   const prevOpen = useRef(false);
@@ -71,7 +54,6 @@ export default function ScheduleEditorModal({
       setWeeks([...base]);
       setCount(base.length);
       setStartWeekChoice(null);
-      setModeChoice(null);
     }
     prevOpen.current = open;
   }, [open, schedules]);
@@ -101,7 +83,6 @@ export default function ScheduleEditorModal({
 
   const normMin = visible.reduce((sum, w) => sum + weeklyNetMin(w), 0) / visible.length;
   const replaces = dateValid && schedules.some((p) => p.validFrom === validFrom);
-  const shownMode: ReportingMode = modeChoice ?? reportingMode ?? "punch";
 
   function changeCount(n: number) {
     setWeeks((prev) => {
@@ -120,7 +101,7 @@ export default function ScheduleEditorModal({
       anchorMonday,
       rotation: { weeks: visible },
     };
-    onSave(appendPeriod(schedules, period), modeChoice ?? undefined);
+    onSave(appendPeriod(schedules, period));
   }
 
   return (
@@ -193,36 +174,6 @@ export default function ScheduleEditorModal({
             </label>
           </div>
         )}
-
-        <div className="mt-6">
-          <Label>Hur ska dagarna registreras?</Label>
-          <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Registrering">
-            {MODE_OPTIONS.map((o) => {
-              const on = shownMode === o.key;
-              return (
-                <button
-                  key={o.key}
-                  role="radio"
-                  aria-checked={on}
-                  onClick={() => setModeChoice(o.key)}
-                  className="text-left rounded-[16px] px-3 py-3 transition-colors"
-                  style={{
-                    background: on ? "var(--pc-orange-tint)" : "var(--pc-apricot)",
-                    border: on ? "1.5px solid var(--pc-orange)" : "1.5px solid var(--pc-line)",
-                  }}
-                >
-                  <div
-                    className="text-[14px] font-extrabold mb-1"
-                    style={{ color: on ? "var(--pc-orange)" : "var(--pc-ink)" }}
-                  >
-                    {o.title}
-                  </div>
-                  <div className="text-[11px] leading-snug text-pc-muted">{o.text}</div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
 
         <div className="grid grid-cols-2 gap-3 mt-6">
           <button
