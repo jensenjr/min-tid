@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState, useEffect, useRef, type ReactNode } from "react";
+import { APP_NAME } from "../lib/brand";
 import Onboarding, { type OnboardingResult } from "./Onboarding";
 import ScheduleEditorModal from "./schedule/ScheduleEditorModal";
 import AbsenceModal, { ABSENCE_META, type AbsenceEntry } from "./AbsenceModal";
@@ -1517,7 +1518,7 @@ export default function PunchClock() {
               <ClockGlyph />
             </div>
             <div className="min-w-0">
-              <div className="text-[16px] font-extrabold leading-tight text-pc-ink">min-tid</div>
+              <div className="text-[16px] font-extrabold leading-tight text-pc-ink">{APP_NAME}</div>
               <div className="text-[11px] font-semibold text-pc-muted truncate">
                 Arbetstid och avvikelser
               </div>
@@ -1538,7 +1539,7 @@ export default function PunchClock() {
             ))}
           </nav>
           <div className="mt-auto px-3 text-[11px] font-semibold text-pc-muted">
-            min-tid v{__APP_VERSION__}
+            {APP_NAME} v{__APP_VERSION__}
           </div>
         </aside>
 

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { APP_NAME } from "../lib/brand";
 import { syncChangeSecret, syncSendPhoneCode, syncVerifyPhone, SYNC_PHONE_KEY } from "../lib/sync";
 import { explainSyncError, type SyncFailure } from "../lib/syncDiagnostics";
 import { useDebugMode } from "../lib/debugMode";
@@ -876,7 +877,7 @@ export default function SettingsModal({
         </div>
 
         <div className="text-center text-[11px] text-pc-muted mt-5 font-medium">
-          min-tid v{__APP_VERSION__}
+          {APP_NAME} v{__APP_VERSION__}
         </div>
       </div>
     </div>

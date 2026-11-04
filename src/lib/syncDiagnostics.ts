@@ -5,6 +5,8 @@
 // files) but a proxy answers 403 on /api. The app keeps working offline, so without
 // a visible signal the user has no idea their hours never left the phone.
 
+import { APP_NAME } from "./brand";
+
 export const SYNC_ERROR_LOG_KEY = "sync_error_log";
 const MAX_LOG = 10;
 
@@ -275,7 +277,7 @@ export function buildSyncReportText(opts: SyncReportInput): string {
     "felanmälan app. får ingen sync.",
     "",
     "--- fellogg ---",
-    `App:            min-tid v${version}`,
+    `App:            ${APP_NAME} v${version}`,
     `Tid:            ${stamp(at)}`,
     `Användare:      ${username ? "@" + username : "(ej inloggad på synk)"}`,
     failure
@@ -313,6 +315,6 @@ export function buildSyncReportText(opts: SyncReportInput): string {
 /** mailto: for the felanmälan. Same text as buildSyncReportText. */
 export function buildSyncReportMailto(opts: SyncReportInput): string {
   const at = opts.failure?.at ?? Date.now();
-  const subject = `mintid sync error kl ${hhmm(at)}`;
+  const subject = `${APP_NAME} sync error kl ${hhmm(at)}`;
   return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(buildSyncReportText(opts))}`;
 }

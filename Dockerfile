@@ -6,6 +6,9 @@ COPY package*.json ./
 COPY vendor ./vendor
 RUN npm ci
 COPY . .
+# Product name for a derived product (Timsam): docker build --build-arg VITE_APP_NAME=Timsam
+ARG VITE_APP_NAME
+ENV VITE_APP_NAME=$VITE_APP_NAME
 RUN npm run build
 
 # Install server dependencies (pure JS, no native modules)

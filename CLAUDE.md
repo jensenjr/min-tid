@@ -328,6 +328,14 @@ useEffect(() => {
 }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 ```
 
+### Product name (branding)
+
+The visible product name is configurable so a derived product (Timsam, a private fork that merges this repo) needs **no code changes**. Default `min-tid`.
+
+- **Client:** `VITE_APP_NAME` at build time. React code uses `APP_NAME` from `src/lib/brand.ts`; `index.html` and `public/manifest.webmanifest` hold the placeholder `__APP_NAME__`, which the `brand` plugin in `vite.config.ts` fills in (dev server and build). Pure helpers in `src/lib/brandText.ts`, test in `__tests__/brand.test.ts`. Docker: `--build-arg VITE_APP_NAME=Timsam` (`.dockerignore` excludes `.env.*`, so use the build arg).
+- **Server:** `APP_NAME` at runtime for SMS texts and the startup log; `ELKS_FROM` is the SMS sender.
+- **Never put a fixed product name in `src/` or in those two files.** Use `APP_NAME` / the placeholder. Storage keys, IndexedDB `min-tid-sync`, crypto labels `min-tid/v1/*` and `min-tid-importmall.xlsx` are data/protocol identifiers and are **not** branded.
+
 ### Styling
 
 Tailwind CSS v4 with custom `pc-*` design tokens defined in `src/styles.css`. Key tokens: `pc-orange` (accent, #ff5f00 by default), `pc-ink` (body text), `pc-bg` (page), `pc-surface` (cards, sheets), `pc-apricot` (inputs, subtle fills), `pc-line`, `pc-muted`, `pc-taupe`, `pc-solid` (dark chip behind white text). All components use inline styles for dynamic values and Tailwind classes for layout/spacing.

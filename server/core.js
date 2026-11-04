@@ -29,7 +29,7 @@ const DUMMY_HASH = "$2a$12$invalidhashpaddingtomatchcost000000000000000000000000
 
 export const MESSAGES = {
   needsUpdate:
-    "Synken är nu krypterad och kräver en nyare version av min-tid. Uppdatera appen (stäng den helt och öppna den igen) och logga sedan in på nytt. Dina data på enheten finns kvar.",
+    "Synken är nu krypterad och kräver en nyare version av appen. Uppdatera appen (stäng den helt och öppna den igen) och logga sedan in på nytt. Dina data på enheten finns kvar.",
   keyChanged:
     "Synk-koden har bytts på en annan enhet. Logga in igen med den nya synk-koden — dina data på enheten finns kvar.",
   notMigrated:

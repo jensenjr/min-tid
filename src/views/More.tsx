@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { APP_NAME } from "../lib/brand";
 import { ABSENCE_META, type AbsenceCategory } from "../components/AbsenceModal";
 import AppearanceSheet from "../components/AppearanceSheet";
 import { appearanceSummary, useAppearance } from "../lib/useAppearance";
@@ -71,9 +72,14 @@ function AbsenceRulesSheet({ open, onClose }: { open: boolean; onClose: () => vo
 
 function AboutSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   return (
-    <Sheet open={open} onClose={onClose} title="Om appen" subtitle={`min-tid v${__APP_VERSION__}`}>
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title="Om appen"
+      subtitle={`${APP_NAME} v${__APP_VERSION__}`}
+    >
       <div className="space-y-3 text-[13px] leading-snug mb-5">
-        <p>min-tid är din egen tidrapport: schema, frånvaro, flex och utlägg på ett ställe.</p>
+        <p>{APP_NAME} är din egen tidrapport: schema, frånvaro, flex och utlägg på ett ställe.</p>
         <p>
           <b>Din data ligger på enheten.</b> Synk mellan enheter är valfri och krypteras på enheten
           innan den skickas — servern kan inte läsa den.
