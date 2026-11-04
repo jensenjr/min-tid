@@ -11,7 +11,7 @@ All notable changes to **min-tid** are recorded here. Format loosely follows [Ke
 
 ## [Unreleased]
 
-_Nothing yet._
+- The product name is configurable (`VITE_APP_NAME` for the client, `APP_NAME` for the server) so derived products can merge min-tid without code changes. Default unchanged. The "nyare version" sync message no longer names the app.
 
 ## [1.3.0] — 2026-11-04
 

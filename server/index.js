@@ -123,6 +123,8 @@ function findByPhone(phone) {
 const ELKS_USERNAME = process.env.ELKS_API_USERNAME;
 const ELKS_PASSWORD = process.env.ELKS_API_PASSWORD;
 const ELKS_FROM = process.env.ELKS_FROM ?? "MinTid";
+// Product name in SMS texts and the startup log. Defaults to min-tid; a derived product sets APP_NAME.
+const APP_NAME = (process.env.APP_NAME ?? "").trim() || "min-tid";
 
 function toE164Swedish(raw) {
   const digits = String(raw).replace(/\D/g, "");
@@ -394,7 +396,7 @@ app.post(
     if (!rl.ok) return res.status(429).json({ error: rl.reason });
     const code = storeOtp(phone, req.userId);
     try {
-      await sendSms(phone, `Din verifieringskod för min-tid: ${code}`);
+      await sendSms(phone, `Din verifieringskod för ${APP_NAME}: ${code}`);
       recordSend(phone);
       res.json({ ok: true });
     } catch (e) {
@@ -441,7 +443,7 @@ app.post(
     }
     const code = storeOtp(phone, userEntry[1].id);
     try {
-      await sendSms(phone, `Din återhämtningskod för min-tid: ${code}`);
+      await sendSms(phone, `Din återhämtningskod för ${APP_NAME}: ${code}`);
       recordSend(phone);
       res.json({ ok: true });
     } catch (e) {
@@ -489,6 +491,6 @@ app.use((err, req, res, _next) => {
 
 app.listen(PORT, () => {
   console.log(
-    `min-tid server v${SERVER_VERSION} :${PORT} (${PROD ? "production" : "development"}) · data ${DATA_PATH} · lagring ${CONFIG.storage}`,
+    `${APP_NAME} server v${SERVER_VERSION} :${PORT} (${PROD ? "production" : "development"}) · data ${DATA_PATH} · lagring ${CONFIG.storage}`,
   );
 });

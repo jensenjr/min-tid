@@ -1,6 +1,6 @@
 {
-  "name": "min-tid – arbetstid och avvikelser",
-  "short_name": "min-tid",
+  "name": "__APP_NAME__ – arbetstid och avvikelser",
+  "short_name": "__APP_NAME__",
   "description": "Enkel tidsregistrering. Stämpla in, stämpla ut, dela rapport.",
   "lang": "sv",
   "start_url": "/",

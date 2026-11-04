@@ -14,13 +14,13 @@
     <meta name="color-scheme" content="light dark" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="apple-mobile-web-app-title" content="min-tid" />
+    <meta name="apple-mobile-web-app-title" content="__APP_NAME__" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <!-- Theme before first paint (src/lib/theme.ts THEME_BOOT_SCRIPT; a test keeps them equal) -->
     <script>(function(){try{var s=localStorage.getItem('min-tid-theme');var d=s==='dark'||(s!=='light'&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.classList.toggle('dark',d);var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute('content',d?'#17110e':'#faf6f1');var a=localStorage.getItem('min-tid-accent');if(['hav','skog','ljung','hallon'].indexOf(a)>=0)document.documentElement.setAttribute('data-accent',a);}catch(e){}})();</script>
-    <title>min-tid – arbetstid och avvikelser</title>
+    <title>__APP_NAME__ – arbetstid och avvikelser</title>
     <script type="module" src="/src/main.tsx"></script>
   </head>
   <body>

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { APP_NAME } from "../lib/brand";
 import { renderSVG } from "uqr";
 import { actionUrl, type PunchAction } from "../lib/actions";
 
@@ -45,7 +46,8 @@ export default function AutomationModal({ open, onClose }: { open: boolean; onCl
         <div style="font:600 15px/1.4 -apple-system,sans-serif;color:#9c7c5c;margin-bottom:20px;">Skanna med mobilkameran</div>
         <div style="width:260px;margin:0 auto;">${renderSVG(actionUrl(action, "qr"), { border: 2 })}</div>
       </div>`;
-    w.document.write(`<!DOCTYPE html><html><head><title>min tid – QR-skyltar</title></head><body>
+    w.document
+      .write(`<!DOCTYPE html><html><head><title>${APP_NAME} – QR-skyltar</title></head><body>
       ${sign("✅ Checka in", "in")}
       ${sign("🏁 Checka ut", "out")}
     </body></html>`);

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { APP_NAME } from "../lib/brand";
 import {
   acknowledgeRecoveryKey,
   getPendingRecoveryKey,
@@ -31,13 +32,13 @@ const escapeHtml = (s: string) =>
 
 function printKey(p: PendingRecoveryKey) {
   const date = new Date().toLocaleDateString("sv-SE", { dateStyle: "long" });
-  const html = `<!doctype html><html lang="sv"><head><meta charset="utf-8"><title>min-tid – återställningsnyckel</title>
+  const html = `<!doctype html><html lang="sv"><head><meta charset="utf-8"><title>${APP_NAME} – återställningsnyckel</title>
 <style>body{font-family:system-ui,sans-serif;color:#2d1717;padding:32px;max-width:560px}
 h1{font-size:20px;margin:0 0 4px}.meta{color:#6b5a4a;font-size:13px;margin-bottom:24px}
 .key{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:26px;font-weight:700;letter-spacing:2px;
 border:2px solid #2d1717;border-radius:12px;padding:18px;text-align:center;margin-bottom:24px}
 p{font-size:13px;line-height:1.5;margin:0 0 10px}</style></head><body>
-<h1>min-tid – återställningsnyckel</h1>
+<h1>${APP_NAME} – återställningsnyckel</h1>
 <div class="meta">Konto: @${escapeHtml(p.username)} · Utskriven ${escapeHtml(date)}</div>
 <div class="key">${escapeHtml(formatRecoveryKey(p.key))}</div>
 <p><b>Behövs om du glömmer din synk-kod.</b> Då kan du få tillbaka kontot via SMS, men dina data låses bara upp igen med den här nyckeln. Utan den går molnkopian inte att läsa — inte ens för oss.</p>
