@@ -5,6 +5,7 @@ import { appearanceSummary, useAppearance } from "../lib/useAppearance";
 import SyncSecuritySheet, { type SyncStatus } from "../components/SyncSecuritySheet";
 import { MoreRow, Sheet } from "../components/ui";
 import { CHANGELOG_URL, RELEASE_NOTES, fmtReleaseDate } from "../lib/releaseNotes";
+import { REPORT_STYLES, reportStyle, reportStyleSummary } from "../lib/reportStyle";
 import type { ReportingMode } from "../lib/types";
 import type { MoreSlots } from "./types";
 
@@ -69,6 +70,67 @@ function AbsenceRulesSheet({ open, onClose }: { open: boolean; onClose: () => vo
   );
 }
 
+/** Mer → "Hur du rapporterar": Stämplare or Justerare. Applied at once. */
+function ReportStyleSheet({
+  open,
+  mode,
+  onChange,
+  onClose,
+}: {
+  open: boolean;
+  mode: ReportingMode;
+  onChange: (mode: ReportingMode) => void;
+  onClose: () => void;
+}) {
+  return (
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title="Hur du rapporterar"
+      subtitle="Avgör vad startsidan visar först. Du kan alltid göra båda, och flexen räknas likadant."
+    >
+      <div className="space-y-3 mb-5" role="radiogroup" aria-label="Hur du rapporterar">
+        {REPORT_STYLES.map((o) => {
+          const on = mode === o.key;
+          return (
+            <button
+              key={o.key}
+              role="radio"
+              aria-checked={on}
+              onClick={() => onChange(o.key)}
+              className="pc-press w-full text-left rounded-[18px] px-4 py-3.5 flex items-start gap-3"
+              style={{
+                background: on ? "var(--pc-orange-tint)" : "var(--pc-apricot)",
+                border: on ? "2px solid var(--pc-orange)" : "2px solid var(--pc-line)",
+              }}
+            >
+              <span className="text-[22px] leading-none mt-0.5 shrink-0">{o.icon}</span>
+              <span className="flex-1">
+                <span className="block text-[11px] font-bold uppercase tracking-[0.12em] text-pc-muted">
+                  {o.role}
+                </span>
+                <span
+                  className="block font-extrabold text-[15px] leading-tight mb-1"
+                  style={{ color: on ? "var(--pc-orange-deep)" : "var(--pc-ink)" }}
+                >
+                  {o.title}
+                </span>
+                <span className="block text-[12px] text-pc-muted leading-snug">{o.text}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <button
+        onClick={onClose}
+        className="pc-press w-full py-3.5 rounded-[16px] bg-pc-orange text-white font-bold text-[14px]"
+      >
+        Klar
+      </button>
+    </Sheet>
+  );
+}
+
 function AboutSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   return (
     <Sheet open={open} onClose={onClose} title="Om appen" subtitle={`min-tid v${__APP_VERSION__}`}>
@@ -79,8 +141,8 @@ function AboutSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
           innan den skickas — servern kan inte läsa den.
         </p>
         <p>
-          <b>Enligt schema</b> betyder att schemat är din tid och du bara anger det som avviker.{" "}
-          <b>Stämpla</b> betyder att du checkar in och ut. Du byter under Schema & rapportläge.
+          <b>Stämplare</b> checkar in och ut och får exakta minuter. <b>Justerare</b> följer schemat
+          och anger bara avvikelser. Båda kan göra båda; du byter under Hur du rapporterar.
         </p>
       </div>
 
@@ -160,8 +222,10 @@ export type MoreProps = {
   syncDirty: boolean;
   /** Edit name and department (SettingsModal). */
   onOpenProfile: () => void;
-  /** "Schema & rapportläge" (ScheduleEditorModal). */
+  /** "Schema" (ScheduleEditorModal). */
   onOpenSchedule: () => void;
+  /** "Hur du rapporterar": Stämplare ("punch") or Justerare ("schedule"). */
+  onSetMode: (mode: ReportingMode) => void;
   /** Activate sync / log in again (SyncModal). */
   onSetupSync: () => void;
   /** Sync code, phone, disconnect, troubleshooting (SettingsModal). */
@@ -183,6 +247,7 @@ export default function More(p: MoreProps) {
   const [about, setAbout] = useState(false);
   const [sync, setSync] = useState(false);
   const [appearance, setAppearance] = useState(false);
+  const [style, setStyle] = useState(false);
   const look = useAppearance();
   const initial = (p.name.trim()[0] ?? "?").toUpperCase();
 
@@ -211,11 +276,15 @@ export default function More(p: MoreProps) {
         <div>
           <Group title="Tid och regler">
             <MoreRow
+              icon={reportStyle(p.mode).icon}
+              title="Hur du rapporterar"
+              subtitle={reportStyleSummary(p.mode)}
+              onClick={() => setStyle(true)}
+            />
+            <MoreRow
               icon="📅"
-              title="Schema & rapportläge"
-              subtitle={
-                p.mode === "schedule" ? "Rapportläge: Enligt schema" : "Rapportläge: Stämpla"
-              }
+              title="Schema"
+              subtitle="Arbetstider, rotation och perioder"
               onClick={p.onOpenSchedule}
             />
             <MoreRow
@@ -274,6 +343,12 @@ export default function More(p: MoreProps) {
 
       <AbsenceRulesSheet open={rules} onClose={() => setRules(false)} />
       <AboutSheet open={about} onClose={() => setAbout(false)} />
+      <ReportStyleSheet
+        open={style}
+        mode={p.mode}
+        onChange={p.onSetMode}
+        onClose={() => setStyle(false)}
+      />
       <AppearanceSheet open={appearance} onClose={() => setAppearance(false)} />
       <SyncSecuritySheet
         open={sync}

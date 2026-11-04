@@ -13,6 +13,12 @@ All notable changes to **min-tid** are recorded here. Format loosely follows [Ke
 
 _Nothing yet._
 
+## [1.3.0] — 2026-11-04
+
+- **Stämplare eller Justerare.** Välj hur du huvudsakligen rapporterar, i onboardingen och under Mer → **Hur du rapporterar**. Stämplare checkar in och ut och får exakta minuter. Justerare följer schemat och anger bara avvikelser. Valet gäller direkt och ändrar inte hur flexen räknas.
+- **Startsidan följer valet.** Stämplare får den stora in/ut-knappen och en mindre knapp **Inga avvikelser – enligt schema** under den. Justerare får den stora **Enligt schema**-knappen och en mindre **Checka in** bredvid. Pågående pass visar alltid klockan, så du kan checka ut.
+- **Schema** under Mer handlar nu bara om arbetstider, rotation och perioder. Att byta stil skapar inte längre en ny schemaperiod.
+
 ## [1.2.1] — 2026-11-02
 
 Högre säkerhetsnivå. Inget ändras i hur appen räknar eller vad den sparar.
@@ -411,7 +417,8 @@ First public beta. The app is feature-complete for time, absence and expense tra
 - **`nixpacks.toml`** overrides the default Caddy start command if Coolify falls back to Nixpacks instead of Dockerfile.
 - **Zero native deps** on the server — `better-sqlite3` was replaced with a plain JSON file store.
 
-[Unreleased]: https://github.com/jensenjr/min-tid/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/jensenjr/min-tid/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/jensenjr/min-tid/releases/tag/v1.3.0
 [1.2.1]: https://github.com/jensenjr/min-tid/releases/tag/v1.2.1
 [1.2.0]: https://github.com/jensenjr/min-tid/releases/tag/v1.2.0
 [1.1.0]: https://github.com/jensenjr/min-tid/releases/tag/v1.1.0

@@ -1105,8 +1105,10 @@ export default function PunchClock() {
       setName(result.name);
       setSchedules([periodFromWeek(result.schedule)]);
       setDepartment(result.department);
+      if (result.reportingMode) setReportingMode(result.reportingMode);
       // Enligt schema users never punch, so nothing else would start the flex clock.
-      if (resolvedMode === "schedule") setTrackingStartDate((prev) => prev ?? todayStr());
+      if ((result.reportingMode ?? resolvedMode) === "schedule")
+        setTrackingStartDate((prev) => prev ?? todayStr());
     }
     setOnboardingDone(true);
   }
@@ -1669,6 +1671,11 @@ export default function PunchClock() {
                   slots={moreSlots}
                   onOpenProfile={() => setSettingsModal(true)}
                   onOpenSchedule={() => setScheduleModal(true)}
+                  onSetMode={(mode) => {
+                    setReportingMode(mode);
+                    // Schedule-mode users never punch: anchor the flex start so days count.
+                    if (mode === "schedule") anchorTracking(todayDate);
+                  }}
                   demo={demo}
                   onSetupSync={() => !demo && setSyncModal(true)}
                   onOpenSyncAccount={() => setSettingsModal(true)}
@@ -1802,15 +1809,9 @@ export default function PunchClock() {
       <ScheduleEditorModal
         open={scheduleModal}
         schedules={schedules}
-        reportingMode={reportingMode}
         onClose={() => setScheduleModal(false)}
-        onSave={(next, mode) => {
+        onSave={(next) => {
           setSchedules(next);
-          if (mode) {
-            setReportingMode(mode);
-            // Schedule-mode users never punch: anchor the flex start so days start counting.
-            if (mode === "schedule") anchorTracking(todayDate);
-          }
           setScheduleModal(false);
         }}
       />

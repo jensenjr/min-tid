@@ -1,3 +1,4 @@
+import { todayLayout } from "../lib/reportStyle";
 import type { ReactNode } from "react";
 import AttendCard from "../components/AttendCard";
 import { StatusChip } from "../components/dayUi";
@@ -113,8 +114,11 @@ function AbsenceTile({
 }
 
 /**
- * Idag. Schedule mode: three big actions — "Enligt schema ✓", "Justera dag", "Frånvaro" —
- * and "Du kan gå kl. HH:MM". Punch mode (or any open session): the punch clock.
+ * Idag, laid out by report style (todayLayout). Stämplare: the big punch clock,
+ * plus a small "Inga avvikelser – enligt schema" on an untouched scheduled day.
+ * Justerare: the big "Enligt schema ✓" with a small "Checka in" beside it, then
+ * "Justera dag" / "Frånvaro" and "Du kan gå kl. HH:MM". A running session always
+ * shows the clock.
  */
 export default function Today(p: TodayProps) {
   const { mode, evaluation: ev, cfg, actions, today } = p;
@@ -127,7 +131,17 @@ export default function Today(p: TodayProps) {
         total: p.attend.total - p.attend.longSessions.length,
       }
     : p.attend;
-  const showClock = mode === "punch" || !!p.activeSession;
+  const registered = p.sessions.length > 0 || !!p.adjustment || p.absences.length > 0;
+  // Stämplare get the big clock, Justerare the big "Enligt schema"; each keeps
+  // the other action as a smaller button (src/lib/reportStyle.ts).
+  const layout = todayLayout({
+    mode,
+    checkedIn: !!p.activeSession,
+    scheduled,
+    registered,
+    confirmed: p.confirmed,
+  });
+  const showClock = layout.primary === "clock";
   // A scheduled day nothing has been said about yet (or the flex clock has not started).
   const awaiting =
     scheduled &&
@@ -155,7 +169,7 @@ export default function Today(p: TodayProps) {
               </span>
               <div className="flex-1 text-[13px] font-semibold text-amber-800 leading-snug">
                 {lockedText} Du kan inte ändra dagar förrän du låst upp månaden.
-                {mode === "punch" && " Stämpling i realtid fungerar som vanligt."}
+                {" Stämpling i realtid fungerar som vanligt."}
               </div>
             </div>
             <button
@@ -240,6 +254,32 @@ export default function Today(p: TodayProps) {
                 )}
               </div>
             )}
+            {layout.secondaryOk && (
+              <button
+                onClick={() => actions.enligtSchema(today)}
+                disabled={p.locked}
+                className="pc-press mt-6 inline-flex items-center gap-2 rounded-full border border-pc-line bg-pc-surface px-4 py-2.5 text-[13px] font-bold text-pc-ink disabled:opacity-50"
+              >
+                <span className="text-green-600">✓</span>
+                Inga avvikelser – enligt schema
+                <span className="text-pc-muted font-semibold tabular-nums">
+                  {cfg.startTime}–{cfg.endTime}
+                </span>
+              </button>
+            )}
+            {layout.okDone && (
+              <div className="mt-6 inline-flex items-center gap-3 rounded-full bg-green-50 border border-green-200 px-4 py-2.5 text-[13px] font-bold text-green-700">
+                ✓ Bekräftad enligt schema
+                {!p.locked && (
+                  <button
+                    onClick={() => actions.undoSchema(today)}
+                    className="text-[12px] underline"
+                  >
+                    Ångra
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         ) : (
           <div className="mt-6 mb-4">
@@ -304,44 +344,62 @@ export default function Today(p: TodayProps) {
         {/* The three schedule-mode actions */}
         {!showClock && (
           <div className="mb-3">
-            {p.confirmed && !p.adjustment ? (
-              <div className="rounded-[22px] bg-green-50 border border-green-200 p-4 flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-[16px] font-extrabold text-green-700">
-                    ✓ Bekräftad enligt schema
+            <div className="flex gap-3 items-stretch">
+              <div className="flex-1 min-w-0">
+                {p.confirmed && !p.adjustment ? (
+                  <div className="rounded-[22px] bg-green-50 border border-green-200 p-4 flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-[16px] font-extrabold text-green-700">
+                        ✓ Bekräftad enligt schema
+                      </div>
+                      <div className="text-[12px] text-green-700/80 font-medium mt-0.5">
+                        Arbetat {fmtDuration(ev.workedMin)} · flex {fmtSignedDuration(ev.flexDelta)}
+                      </div>
+                    </div>
+                    {!p.locked && (
+                      <button
+                        onClick={() => actions.undoSchema(today)}
+                        className="shrink-0 text-[12px] font-bold text-green-700 underline"
+                      >
+                        Ångra
+                      </button>
+                    )}
                   </div>
-                  <div className="text-[12px] text-green-700/80 font-medium mt-0.5">
-                    Arbetat {fmtDuration(ev.workedMin)} · flex {fmtSignedDuration(ev.flexDelta)}
-                  </div>
-                </div>
-                {!p.locked && (
+                ) : (
                   <button
-                    onClick={() => actions.undoSchema(today)}
-                    className="shrink-0 text-[12px] font-bold text-green-700 underline"
+                    onClick={() => actions.enligtSchema(today)}
+                    disabled={p.locked || !scheduled}
+                    className="pc-press w-full rounded-[22px] py-5 px-5 text-white text-left disabled:opacity-50"
+                    style={{
+                      background:
+                        "linear-gradient(135deg, var(--pc-orange) 0%, var(--pc-orange-end) 100%)",
+                      boxShadow: "0 8px 24px -8px rgb(var(--pc-orange-rgb) / 0.55)",
+                    }}
                   >
-                    Ångra
+                    <div className="text-[20px] font-extrabold tracking-tight">Enligt schema ✓</div>
+                    <div className="text-[12px] font-semibold opacity-90 mt-0.5">
+                      {scheduled
+                        ? `Jag jobbade ${cfg.startTime}–${cfg.endTime}`
+                        : "Ledig dag – inget att bekräfta"}
+                    </div>
                   </button>
                 )}
               </div>
-            ) : (
-              <button
-                onClick={() => actions.enligtSchema(today)}
-                disabled={p.locked || !scheduled}
-                className="pc-press w-full rounded-[22px] py-5 px-5 text-white text-left disabled:opacity-50"
-                style={{
-                  background:
-                    "linear-gradient(135deg, var(--pc-orange) 0%, var(--pc-orange-end) 100%)",
-                  boxShadow: "0 8px 24px -8px rgb(var(--pc-orange-rgb) / 0.55)",
-                }}
-              >
-                <div className="text-[20px] font-extrabold tracking-tight">Enligt schema ✓</div>
-                <div className="text-[12px] font-semibold opacity-90 mt-0.5">
-                  {scheduled
-                    ? `Jag jobbade ${cfg.startTime}–${cfg.endTime}`
-                    : "Ledig dag – inget att bekräfta"}
-                </div>
-              </button>
-            )}
+              {layout.secondaryPunch && (
+                <button
+                  onClick={p.onPunch}
+                  aria-label="Checka in"
+                  className="pc-press shrink-0 w-[84px] rounded-[22px] bg-pc-surface border border-pc-line flex flex-col items-center justify-center gap-1.5 text-pc-ink"
+                >
+                  <span className="w-9 h-9 rounded-full bg-pc-solid text-white flex items-center justify-center">
+                    <svg viewBox="0 0 24 24" className="w-4 h-4" aria-hidden>
+                      <polygon points="7 5 19 12 7 19 7 5" fill="currentColor" />
+                    </svg>
+                  </span>
+                  <span className="text-[12px] font-bold leading-tight">Checka in</span>
+                </button>
+              )}
+            </div>
             <div className="grid grid-cols-2 gap-3 mt-3">
               <button
                 onClick={() => actions.adjust(today)}

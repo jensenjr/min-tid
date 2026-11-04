@@ -1,3 +1,5 @@
+import { REPORT_STYLES } from "../lib/reportStyle";
+import type { ReportingMode } from "../lib/types";
 import { useEffect, useState } from "react";
 import {
   type DayKey,
@@ -30,9 +32,11 @@ export type OnboardingResult = {
   syncUsername?: string;
   restoredState?: SyncState;
   syncRev?: number;
+  /** Stämplare ("punch") or Justerare ("schedule"); unset for a returning user. */
+  reportingMode?: ReportingMode;
 };
 
-type Step = "welcome" | "login" | "info" | "choice" | "schedule" | "sync";
+type Step = "welcome" | "login" | "info" | "style" | "choice" | "schedule" | "sync";
 
 // ─── TimePicker — compact TimeField (type a time, or tap the clock) ─────
 function TimePicker({
@@ -290,6 +294,7 @@ export default function Onboarding({ onComplete }: { onComplete: (r: OnboardingR
   const [nameErr, setNameErr] = useState("");
   const [department, setDepartment] = useState("");
   const [schedule, setSchedule] = useState<WeekSchedule>(DEFAULT_SCHEDULE);
+  const [mode, setMode] = useState<ReportingMode>("punch");
 
   function finish(
     sched: WeekSchedule,
@@ -306,6 +311,7 @@ export default function Onboarding({ onComplete }: { onComplete: (r: OnboardingR
       syncUsername,
       restoredState,
       syncRev,
+      reportingMode: mode,
     });
   }
 
@@ -434,7 +440,7 @@ export default function Onboarding({ onComplete }: { onComplete: (r: OnboardingR
                 setNameErr("");
               }}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && name.trim()) setStep("choice");
+                if (e.key === "Enter" && name.trim()) setStep("style");
               }}
               className="ob-input"
             />
@@ -454,7 +460,7 @@ export default function Onboarding({ onComplete }: { onComplete: (r: OnboardingR
               value={department}
               onChange={(e) => setDepartment(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && name.trim()) setStep("choice");
+                if (e.key === "Enter" && name.trim()) setStep("style");
               }}
               className="ob-input"
             />
@@ -466,7 +472,7 @@ export default function Onboarding({ onComplete }: { onComplete: (r: OnboardingR
                 setNameErr("Ange ditt namn för att fortsätta.");
                 return;
               }
-              setStep("choice");
+              setStep("style");
             }}
             className="ob-btn-primary w-full"
           >
@@ -480,15 +486,69 @@ export default function Onboarding({ onComplete }: { onComplete: (r: OnboardingR
     );
 
   // ── Step: Set schedule or skip ───────────────────────────────
+  // ── Step: Report style — Stämplare or Justerare ────────────
+  if (step === "style")
+    return (
+      <Screen>
+        <StepDots current={1} total={4} />
+        <h2 className="text-[24px] font-extrabold tracking-tight text-pc-ink mb-1 text-center">
+          Hur vill du rapportera?
+        </h2>
+        <p className="text-[13px] text-pc-muted mb-7 text-center leading-relaxed">
+          Det avgör vad startsidan visar först. Du kan alltid göra båda, och byta under Mer.
+        </p>
+
+        <div className="w-full space-y-3" role="radiogroup" aria-label="Hur vill du rapportera?">
+          {REPORT_STYLES.map((o) => {
+            const on = mode === o.key;
+            return (
+              <button
+                key={o.key}
+                role="radio"
+                aria-checked={on}
+                onClick={() => setMode(o.key)}
+                className="pc-press w-full text-left rounded-[20px] px-5 py-4 flex items-start gap-4"
+                style={{
+                  background: on ? "var(--pc-orange-tint)" : "var(--pc-surface)",
+                  border: on ? "2px solid var(--pc-orange)" : "2px solid var(--pc-line)",
+                }}
+              >
+                <span className="text-[26px] leading-none mt-0.5 shrink-0">{o.icon}</span>
+                <div className="flex-1">
+                  <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-pc-muted mb-0.5">
+                    {o.role}
+                  </div>
+                  <div
+                    className="font-extrabold text-[16px] leading-tight mb-1"
+                    style={{ color: on ? "var(--pc-orange-deep)" : "var(--pc-ink)" }}
+                  >
+                    {o.title}
+                  </div>
+                  <div className="text-[12px] text-pc-muted leading-snug">{o.text}</div>
+                </div>
+              </button>
+            );
+          })}
+
+          <button onClick={() => setStep("choice")} className="ob-btn-primary w-full mt-2">
+            Fortsätt
+          </button>
+          <button onClick={() => setStep("info")} className="ob-btn-ghost w-full">
+            ← Tillbaka
+          </button>
+        </div>
+      </Screen>
+    );
+
   if (step === "choice")
     return (
       <Screen>
-        <StepDots current={1} total={3} />
+        <StepDots current={2} total={4} />
         <h2 className="text-[24px] font-extrabold tracking-tight text-pc-ink mb-1 text-center">
           Vill du sätta ditt schema?
         </h2>
         <p className="text-[13px] text-pc-muted mb-7 text-center leading-relaxed">
-          Du kan alltid ändra det senare under Mer → Schema & rapportläge.
+          Du kan alltid ändra det senare under Mer → Schema.
         </p>
 
         <div className="w-full space-y-3">
@@ -547,7 +607,7 @@ export default function Onboarding({ onComplete }: { onComplete: (r: OnboardingR
             </svg>
           </button>
 
-          <button onClick={() => setStep("info")} className="ob-btn-ghost w-full">
+          <button onClick={() => setStep("style")} className="ob-btn-ghost w-full">
             ← Tillbaka
           </button>
         </div>
@@ -558,7 +618,7 @@ export default function Onboarding({ onComplete }: { onComplete: (r: OnboardingR
   if (step === "schedule")
     return (
       <Screen scroll>
-        <StepDots current={2} total={3} />
+        <StepDots current={3} total={4} />
         <h2 className="text-[22px] font-extrabold tracking-tight text-pc-ink mb-1 text-center">
           Din arbetsvecka
         </h2>
@@ -852,7 +912,7 @@ function SyncStep({
   if (sub === "choose")
     return (
       <Screen>
-        <StepDots current={3} total={3} />
+        <StepDots current={4} total={4} />
         <h2 className="text-[24px] font-extrabold tracking-tight text-pc-ink mb-1 text-center">
           Synkronisera enheter
         </h2>
@@ -953,7 +1013,7 @@ function SyncStep({
 
     return (
       <Screen>
-        <StepDots current={3} total={3} />
+        <StepDots current={4} total={4} />
         <h2 className="text-[22px] font-extrabold tracking-tight text-pc-ink mb-1 text-center">
           Skapa synk-konto
         </h2>
@@ -1067,7 +1127,7 @@ function SyncStep({
 
     return (
       <Screen>
-        <StepDots current={3} total={3} />
+        <StepDots current={4} total={4} />
         <h2 className="text-[22px] font-extrabold tracking-tight text-pc-ink mb-1 text-center">
           Återställ från synk
         </h2>
@@ -1153,7 +1213,7 @@ function SyncStep({
 
     return (
       <Screen>
-        <StepDots current={3} total={3} />
+        <StepDots current={4} total={4} />
         <RecoveryKeySheet />
         <h2 className="text-[22px] font-extrabold tracking-tight text-pc-ink mb-1 text-center">
           Återhämtningsnummer
@@ -1247,7 +1307,7 @@ function SyncStep({
 
     return (
       <Screen>
-        <StepDots current={3} total={3} />
+        <StepDots current={4} total={4} />
         <h2 className="text-[22px] font-extrabold tracking-tight text-pc-ink mb-1 text-center">
           Bekräfta nummer
         </h2>

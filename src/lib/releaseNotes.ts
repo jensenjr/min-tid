@@ -13,6 +13,14 @@ export const CHANGELOG_URL = "https://github.com/jensenjr/min-tid/blob/main/CHAN
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.3.0",
+    date: "2026-11-04",
+    notes: [
+      "Välj om du är Stämplare eller Justerare, i onboardingen och under Mer → Hur du rapporterar.",
+      "Startsidan anpassar sig: en stor in/ut-knapp eller en stor Enligt schema-knapp, med den andra som mindre knapp.",
+    ],
+  },
+  {
     version: "1.2.1",
     date: "2026-11-02",
     notes: [
