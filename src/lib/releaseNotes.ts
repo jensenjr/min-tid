@@ -13,6 +13,14 @@ export const CHANGELOG_URL = "https://github.com/jensenjr/min-tid/blob/main/CHAN
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.4.0",
+    date: "2026-11-19",
+    notes: [
+      "Rastregel under Mer → Frånvaroregler: minst 30 min rast per 5 h arbete i följd, räknas efter 3 h. Av som standard.",
+      "Är rasten för kort dras det som fattas; korta pauser räknas inte ihop.",
+    ],
+  },
+  {
     version: "1.3.0",
     date: "2026-11-04",
     notes: [

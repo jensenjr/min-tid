@@ -65,6 +65,7 @@ export type ExportState = Pick<
       | "reportingMode"
       | "trackingStartDate"
       | "autoLunchThresholdMin"
+      | "minBreak"
       | "confirmedDays"
       | "lockedMonths"
       | "dayAdjustments"
@@ -134,6 +135,7 @@ export function buildReportSheets(
     today,
     now,
     autoLunchThresholdMin: state.autoLunchThresholdMin,
+    minBreak: state.minBreak ?? undefined,
     confirmedDays: state.confirmedDays,
     lockedMonths: state.lockedMonths,
     dayAdjustments: state.dayAdjustments,

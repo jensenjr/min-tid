@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> **Current version: 1.3.0.** Exposed to the UI via `__APP_VERSION__` (set by Vite from the root `package.json`) and shown in Mer → Om appen and at the bottom of the settings modal. Bump versions in both `package.json` and `server/package.json` together.
+> **Current version: 1.4.0.** Exposed to the UI via `__APP_VERSION__` (set by Vite from the root `package.json`) and shown in Mer → Om appen and at the bottom of the settings modal. Bump versions in both `package.json` and `server/package.json` together.
 
 ## Commands
 
@@ -173,7 +173,7 @@ evaluateDay(date, ctx) → { status, normMin, workedMin, breakMin,
   absence: { flexMin, excusedMin }, travel: { inScheduleMin, outsideMin, payrollMin, flexMin }, flexDelta,
   explanation: string[] }  // "Norm 8 h (08:00–17:00, lunch 1 h)", "Arbetat 7 h 40 min", "Flex −20 min"
 ctx = { sessions, absences, schedule /* WeekSchedule | SchedulePeriod[] */, exceptions, reportingMode,
-  trackingStartDate, today?, now?, autoLunchThresholdMin?, confirmedDays?, lockedMonths?,
+  trackingStartDate, today?, now?, autoLunchThresholdMin?, minBreak?, confirmedDays?, lockedMonths?,
   dayAdjustments?, travelFor? /* Restid hook, see "Travel time"; travel.flexMin is added to flexDelta */ }
 computeFlex(ctx, { from?, to? }) → { minutes, missingDays, unconfirmedDays } // trackingStartDate..today
 ```
@@ -184,6 +184,7 @@ computeFlex(ctx, { from?, to? }) → { minutes, missingDays, unconfirmedDays } /
 - `normMin` = net schedule minutes from `getEffectiveDayConfig` (rotations, periods and exceptions apply). A day is "scheduled" when that is > 0.
 - Absence (`absence.ts`): only on scheduled days (ignored on days off). `hours` is per day, undefined = the whole norm. Non-flex categories are `excusedMin` (lower the norm); `flex` is `flexMin` (paid by the bank). Together capped at the norm, excused first.
 - **Break:** if any session (or the adjustment) carries `breakMinutes` / `breakMin`, that is used. Otherwise the schedule lunch is deducted only when the day has **exactly one** session **longer than** `autoLunchThresholdMin` (default 300). Two or more sessions = the user punched out over lunch → nothing deducted. `computeDayMinutes` (history, share text, CSV) uses the same rule.
+- **Break rule** (`ctx.minBreak = { afterMin, minMin, earliestMin? }`, off when undefined; `AppState.minBreak`, `null` = off, set in Mer → Frånvaroregler → "Rastregel", suggested `DEFAULT_BREAK_RULE` = 30 min per 5 h in a row, counted from 3 h): at most `afterMin` minutes of work in a row without a break of at least `minMin`. Time stamped out counts as that break only after `earliestMin` worked minutes (before that it is only unworked time, i.e. flex minus); a shorter break is topped up, a missing one is deducted in full, short pauses never add up, and a long day needs one break per stretch. Registered breaks and the auto-lunch count as breaks placed where needed. The added minutes are `DayEvaluation.breakTopUpMin` and the explanation line "Rastregel 30 min per 5 h arbete i följd (räknas efter 3 h): 15 min till dras" (`breakRuleTopUp` in days.ts). Examples: 08–12 + 12:15–16 → 15 min more; a break 09:00–09:30 then work to 16:30 → 30 min more; lunch at 14 after 6 h → 30 min more. Persisted and synced via `migrateDayStatusState` / `mergeDayStatusState` (local wins, also `null`); `computeDayMinutes` and the Excel export take the same rule. It applies to every day, also back in time. Tests: `__tests__/minBreak.test.ts`.
 - **flexDelta = worked − (norm − excused)**. A flex absence explains the missing time; it is not deducted on top (that was the 2× bug).
 - What counts as worked, in precedence order: open session → `ongoing` (flex 0, `workedMin` live) · `dayAdjustments[date]` (missing start/end fall back to the schedule; on a day off both are required) · completed sessions · `confirmedDays[date]` or a locked month → per schedule · nothing.
 

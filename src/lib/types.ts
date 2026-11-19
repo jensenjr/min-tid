@@ -1,5 +1,6 @@
 // Shared data types for the time/flex logic. Pure type module — no runtime code.
 import type { WeekSchedule, SchedulePeriod } from "./schedule";
+import type { MinBreakRule } from "./days";
 import type { ActionSource } from "./actions";
 import type { AbsenceEntry } from "../components/AbsenceModal";
 import type { ExpenseEntry } from "../components/ExpenseModal";
@@ -104,6 +105,7 @@ export type AppState = {
   scheduleExceptions: Record<string, ScheduleException>; // YYYY-MM-DD → override
   // Day status (PR 3). All optional so old data loads; load() fills the defaults.
   autoLunchThresholdMin?: number; // default 300: one session longer than this gets the schedule lunch
+  minBreak?: MinBreakRule | null; // break rule, e.g. 30 min per 5 h in a row; null/absent = off
   confirmedDays?: Record<string, true>; // YYYY-MM-DD → "Enligt schema" confirmed
   lockedMonths?: Record<string, LockedMonth>; // YYYY-MM → lock
   dayAdjustments?: Record<string, DayAdjustment>; // YYYY-MM-DD → adjustment
