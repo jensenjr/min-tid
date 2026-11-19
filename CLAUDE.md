@@ -173,7 +173,7 @@ evaluateDay(date, ctx) → { status, normMin, workedMin, breakMin,
   absence: { flexMin, excusedMin }, travel: { inScheduleMin, outsideMin, payrollMin, flexMin }, flexDelta,
   explanation: string[] }  // "Norm 8 h (08:00–17:00, lunch 1 h)", "Arbetat 7 h 40 min", "Flex −20 min"
 ctx = { sessions, absences, schedule /* WeekSchedule | SchedulePeriod[] */, exceptions, reportingMode,
-  trackingStartDate, today?, now?, autoLunchThresholdMin?, confirmedDays?, lockedMonths?,
+  trackingStartDate, today?, now?, autoLunchThresholdMin?, minBreak?, confirmedDays?, lockedMonths?,
   dayAdjustments?, travelFor? /* Restid hook, see "Travel time"; travel.flexMin is added to flexDelta */ }
 computeFlex(ctx, { from?, to? }) → { minutes, missingDays, unconfirmedDays } // trackingStartDate..today
 ```
@@ -184,6 +184,7 @@ computeFlex(ctx, { from?, to? }) → { minutes, missingDays, unconfirmedDays } /
 - `normMin` = net schedule minutes from `getEffectiveDayConfig` (rotations, periods and exceptions apply). A day is "scheduled" when that is > 0.
 - Absence (`absence.ts`): only on scheduled days (ignored on days off). `hours` is per day, undefined = the whole norm. Non-flex categories are `excusedMin` (lower the norm); `flex` is `flexMin` (paid by the bank). Together capped at the norm, excused first.
 - **Break:** if any session (or the adjustment) carries `breakMinutes` / `breakMin`, that is used. Otherwise the schedule lunch is deducted only when the day has **exactly one** session **longer than** `autoLunchThresholdMin` (default 300). Two or more sessions = the user punched out over lunch → nothing deducted. `computeDayMinutes` (history, share text, CSV) uses the same rule.
+- **Minimum break** (`ctx.minBreak = { afterMin, minMin }`, off when undefined, so min-tid never sets it): on a day with more than `afterMin` worked minutes (sessions or an adjustment), the break taken (the deducted break plus time stamped out between sessions) is topped up to `minMin`; only the shortfall is deducted, reported as `DayEvaluation.breakTopUpMin` and the explanation line "Minsta rast 30 min efter 5 h arbete: du tog 15 min, 15 min till dras". Example (30 min after 5 h): 08:00–12:00 + 12:15–16:00 → 7 h 30 min. A derived product (Timsam) turns it on per organisation; `computeDayMinutes` takes the same rule. Tests: `__tests__/minBreak.test.ts`.
 - **flexDelta = worked − (norm − excused)**. A flex absence explains the missing time; it is not deducted on top (that was the 2× bug).
 - What counts as worked, in precedence order: open session → `ongoing` (flex 0, `workedMin` live) · `dayAdjustments[date]` (missing start/end fall back to the schedule; on a day off both are required) · completed sessions · `confirmedDays[date]` or a locked month → per schedule · nothing.
 
