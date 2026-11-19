@@ -33,7 +33,7 @@ describe("minsta rast", () => {
     expect(ev.breakTopUpMin).toBe(15);
     expect(ev.flexDelta).toBe(-30);
     expect(ev.explanation).toContain(
-      "Minsta rast 30 min efter 5 h arbete: du tog 15 min, 15 min till dras",
+      "Minsta rast 30 min efter 5 h arbete: längsta rasten var 15 min, 15 min till dras",
     );
     // Without the rule (min-tid's default) the same day counts all 7 h 45 min.
     const off = evaluateDay(DAY, ctx({ sessions, minBreak: undefined }));
@@ -62,20 +62,37 @@ describe("minsta rast", () => {
     expect(ev.breakTopUpMin).toBeUndefined();
   });
 
-  it("flera korta raster räknas ihop", () => {
+  it("korta raster räknas inte ihop: tre pauser på 10 min ger ingen 30-minutersrast", () => {
     const ev = evaluateDay(
       DAY,
       ctx({
         sessions: [
           session(DAY, "08:00", "10:00"),
           session(DAY, "10:10", "12:00"),
-          session(DAY, "12:10", "16:00"),
+          session(DAY, "12:10", "14:00"),
+          session(DAY, "14:10", "16:30"),
         ],
       }),
     );
-    // Raw 2 h + 1 h 50 + 3 h 50 = 7 h 40; taken 20 → 10 more.
-    expect(ev.breakTopUpMin).toBe(10);
-    expect(ev.workedMin).toBe(7 * 60 + 30);
+    // Raw 2 h + 1 h 50 + 1 h 50 + 2 h 20 = 8 h; longest break 10 → 20 more.
+    expect(ev.breakTopUpMin).toBe(20);
+    expect(ev.workedMin).toBe(7 * 60 + 40);
+    expect(ev.explanation.join(" ")).toMatch(/längsta rasten var 10 min, 20 min till dras/);
+  });
+
+  it("en lång rast räcker även om det finns korta pauser", () => {
+    const ev = evaluateDay(
+      DAY,
+      ctx({
+        sessions: [
+          session(DAY, "08:00", "10:00"),
+          session(DAY, "10:10", "12:00"),
+          session(DAY, "12:30", "16:30"),
+        ],
+      }),
+    );
+    expect(ev.breakTopUpMin).toBeUndefined();
+    expect(ev.workedMin).toBe(2 * 60 + 110 + 240);
   });
 
   it("ett långt pass utan schemalunch fylls upp till minimum", () => {

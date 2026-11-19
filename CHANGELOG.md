@@ -12,7 +12,7 @@ All notable changes to **min-tid** are recorded here. Format loosely follows [Ke
 ## [Unreleased]
 
 - The product name is configurable (`VITE_APP_NAME` for the client, `APP_NAME` for the server) so derived products can merge min-tid without code changes. Default unchanged. The "nyare version" sync message no longer names the app.
-- `evaluateDay` can enforce a minimum break (`DayContext.minBreak = { afterMin, minMin }`, e.g. 30 min after 5 h): the break taken, including time stamped out between sessions, is topped up to the minimum. Off by default; min-tid itself does not set it, so nothing changes for its users. For derived products that need an employer's break rule.
+- `evaluateDay` can enforce a minimum break (`DayContext.minBreak = { afterMin, minMin }`, e.g. 30 min after 5 h): the longest single break (stamped out, registered or the auto-lunch) is topped up to the minimum; short pauses do not add up. Off by default; min-tid itself does not set it, so nothing changes for its users. For derived products that need an employer's break rule.
 
 ## [1.3.0] — 2026-11-04
 

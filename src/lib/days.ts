@@ -9,8 +9,9 @@
 //   and it is longer than `autoLunchThresholdMin` (default 300). Several sessions = the
 //   user punched out over lunch → nothing is deducted.
 // - Minimum break (`minBreak`, off unless set, e.g. 30 min after 5 h): on a day with more
-//   than `afterMin` worked minutes, the break taken (deducted break + time stamped out
-//   between sessions) is topped up to `minMin`. Only the shortfall is deducted.
+//   than `afterMin` worked minutes, the longest single break (a deducted break or a time
+//   stamped out between sessions; short pauses do not add up) is topped up to `minMin`.
+//   Only the shortfall is deducted.
 // - flexDelta = worked − (norm − excused absence). A flex absence is "not worked" time
 //   that the bank pays for, so it is never deducted on top (it was counted twice before).
 // - Precedence for what was worked: open session (ongoing) > adjustment > completed
@@ -85,8 +86,9 @@ export type DayContext = {
   autoLunchThresholdMin?: number;
   /**
    * Minimum break (off when undefined, so min-tid is unchanged): a day with more than
-   * `afterMin` worked minutes must have at least `minMin` break. Time stamped out between
-   * sessions and any deducted break count as taken; the shortfall is deducted.
+   * `afterMin` worked minutes must have one uninterrupted break of at least `minMin`. The
+   * longest single break (stamped out, registered or auto-lunch) counts; short pauses do
+   * not add up. The shortfall is deducted.
    */
   minBreak?: MinBreakRule;
   confirmedDays?: Record<string, true>;
@@ -163,17 +165,17 @@ export function validMinBreak(v: unknown): MinBreakRule | undefined {
     : undefined;
 }
 
-/** Minutes stamped out between a day's sessions (open sessions end at `now`). */
-function gapMinutes(sessions: Session[], now: number): number {
+/** The longest single time stamped out between a day's sessions (open sessions end at `now`). */
+function longestGap(sessions: Session[], now: number): number {
   const sorted = [...sessions].sort((a, b) => a.checkIn - b.checkIn);
-  let gaps = 0;
+  let longest = 0;
   let end = -Infinity;
   for (const s of sorted) {
     const a = minuteOf(s.checkIn);
-    if (end !== -Infinity && a > end) gaps += a - end;
+    if (end !== -Infinity && a > end) longest = Math.max(longest, a - end);
     end = Math.max(end, minuteOf(isOpen(s) ? now : (s.checkOut as number)));
   }
-  return gaps;
+  return longest;
 }
 
 /** The minimum-break shortfall for a day: how much more break must be deducted. */
@@ -268,7 +270,13 @@ export function workedFromSessions(
   } else {
     rule = sessions.length === 1 ? "short" : "none";
   }
-  const takenMin = breakMin + gapMinutes(sessions, now);
+  // The minimum break must be ONE uninterrupted break: short pauses do not add up. A
+  // registered break per session or the auto-lunch counts as one break each.
+  const longestRegistered =
+    rule === "registered"
+      ? Math.max(0, ...sessions.map((s) => validBreak(s.breakMinutes) ?? 0))
+      : breakMin;
+  const takenMin = Math.max(longestRegistered, longestGap(sessions, now));
   const topUpMin = breakTopUp(rawMin, takenMin, minBreak);
   breakMin += topUpMin;
   return { rawMin, breakMin, workedMin: Math.max(0, rawMin - breakMin), rule, topUpMin, takenMin };
@@ -355,7 +363,7 @@ function normLine(cfg: DayConfig, normMin: number): string {
 }
 
 function topUpLine(rule: MinBreakRule, takenMin: number, topUpMin: number): string {
-  return `Minsta rast ${fmtDuration(rule.minMin)} efter ${fmtDuration(rule.afterMin)} arbete: du tog ${fmtDuration(takenMin)}, ${fmtDuration(topUpMin)} till dras`;
+  return `Minsta rast ${fmtDuration(rule.minMin)} efter ${fmtDuration(rule.afterMin)} arbete: längsta rasten var ${fmtDuration(takenMin)}, ${fmtDuration(topUpMin)} till dras`;
 }
 
 function breakLine(rule: BreakRule, breakMin: number, thresholdMin: number): string | null {
