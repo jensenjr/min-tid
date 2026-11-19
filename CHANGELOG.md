@@ -11,8 +11,12 @@ All notable changes to **min-tid** are recorded here. Format loosely follows [Ke
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [1.4.0] — 2026-11-19
+
+- **Rastregel** (Mer → Frånvaroregler, av som standard): kräv en rast på minst 30 min per 5 h arbete i följd. Stämplar du ut innan du arbetat 3 h räknas det inte som rasten, bara som flex. Är rasten för kort fylls den upp, saknas den dras hela. Korta pauser räknas inte ihop. Alla tre värden går att ändra. Synkas mellan enheter; ett lokalt val (även "av") vinner vid sammanslagning.
 - The product name is configurable (`VITE_APP_NAME` for the client, `APP_NAME` for the server) so derived products can merge min-tid without code changes. Default unchanged. The "nyare version" sync message no longer names the app.
-- `evaluateDay` can enforce a minimum break (`DayContext.minBreak = { afterMin, minMin }`, e.g. 30 min after 5 h): the longest single break (stamped out, registered or the auto-lunch) is topped up to the minimum; short pauses do not add up. Off by default; min-tid itself does not set it, so nothing changes for its users. For derived products that need an employer's break rule.
 
 ## [1.3.0] — 2026-11-04
 
@@ -418,7 +422,8 @@ First public beta. The app is feature-complete for time, absence and expense tra
 - **`nixpacks.toml`** overrides the default Caddy start command if Coolify falls back to Nixpacks instead of Dockerfile.
 - **Zero native deps** on the server — `better-sqlite3` was replaced with a plain JSON file store.
 
-[Unreleased]: https://github.com/jensenjr/min-tid/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/jensenjr/min-tid/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/jensenjr/min-tid/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/jensenjr/min-tid/releases/tag/v1.3.0
 [1.2.1]: https://github.com/jensenjr/min-tid/releases/tag/v1.2.1
 [1.2.0]: https://github.com/jensenjr/min-tid/releases/tag/v1.2.0

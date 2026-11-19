@@ -270,6 +270,7 @@ describe("migrateDayStatusState (load() / sync tolerate old data)", () => {
     expect(migrateDayStatusState(oldUser)).toEqual({
       reportingMode: "punch",
       autoLunchThresholdMin: 300,
+      minBreak: null,
       confirmedDays: {},
       lockedMonths: {},
       dayAdjustments: {},
@@ -318,6 +319,7 @@ describe("migrateDayStatusState (load() / sync tolerate old data)", () => {
     expect(r).toEqual({
       reportingMode: "schedule",
       autoLunchThresholdMin: 240,
+      minBreak: null,
       confirmedDays: { "2026-03-02": true },
       lockedMonths: { "2026-03": { at: 5, by: "Anna" }, "2026-02": { at: 3, by: "" } },
       dayAdjustments: {
@@ -377,6 +379,7 @@ describe("mergeDayStatusState (dirty sync merge)", () => {
     };
     expect(mergeDayStatusState(server, local)).toEqual({
       autoLunchThresholdMin: 240,
+      minBreak: null,
       confirmedDays: { "2026-03-02": true, "2026-03-03": true, "2026-03-04": true },
       lockedMonths: { "2026-01": { at: 1, by: "server" }, "2026-02": { at: 3, by: "local" } },
       dayAdjustments: {
@@ -394,10 +397,25 @@ describe("mergeDayStatusState (dirty sync merge)", () => {
   it("tolerates a server state without any of the new fields", () => {
     expect(mergeDayStatusState({}, { confirmedDays: { "2026-03-02": true } })).toEqual({
       autoLunchThresholdMin: 300,
+      minBreak: null,
       confirmedDays: { "2026-03-02": true },
       lockedMonths: {},
       dayAdjustments: {},
       auditLog: [],
     });
+  });
+});
+
+describe("rastregeln (minBreak) i load() och sync", () => {
+  const RULE = { afterMin: 300, minMin: 30, earliestMin: 180 };
+  it("load() behåller en giltig regel och ger null för gammal eller trasig data", () => {
+    expect(migrateDayStatusState({ minBreak: RULE }).minBreak).toEqual(RULE);
+    expect(migrateDayStatusState({}).minBreak).toBeNull();
+    expect(migrateDayStatusState({ minBreak: { afterMin: "x" } }).minBreak).toBeNull();
+  });
+  it("lokalt val vinner, även ett uttryckligt av (null)", () => {
+    expect(mergeDayStatusState({ minBreak: RULE }, { minBreak: null }).minBreak).toBeNull();
+    expect(mergeDayStatusState({ minBreak: null }, { minBreak: RULE }).minBreak).toEqual(RULE);
+    expect(mergeDayStatusState({ minBreak: RULE }, {}).minBreak).toEqual(RULE);
   });
 });

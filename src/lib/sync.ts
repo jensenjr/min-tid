@@ -51,6 +51,7 @@ export interface SyncState {
   trackingStartDate?: string;
   scheduleExceptions?: unknown;
   autoLunchThresholdMin?: unknown; // minutes; one session longer than this gets the schedule lunch
+  minBreak?: unknown; // break rule ({ afterMin, minMin, earliestMin? }) or null = off
   confirmedDays?: unknown; // Record<YYYY-MM-DD, true>
   lockedMonths?: unknown; // Record<YYYY-MM, { at, by }>
   dayAdjustments?: unknown; // Record<YYYY-MM-DD, DayAdjustment>

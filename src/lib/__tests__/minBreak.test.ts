@@ -32,9 +32,7 @@ describe("minsta rast", () => {
     expect(ev.breakMin).toBe(15);
     expect(ev.breakTopUpMin).toBe(15);
     expect(ev.flexDelta).toBe(-30);
-    expect(ev.explanation).toContain(
-      "Minsta rast 30 min efter 5 h arbete: längsta rasten var 15 min, 15 min till dras",
-    );
+    expect(ev.explanation).toContain("Rastregel 30 min per 5 h arbete i följd: 15 min till dras");
     // Without the rule (min-tid's default) the same day counts all 7 h 45 min.
     const off = evaluateDay(DAY, ctx({ sessions, minBreak: undefined }));
     expect(off.workedMin).toBe(7 * 60 + 45);
@@ -77,7 +75,9 @@ describe("minsta rast", () => {
     // Raw 2 h + 1 h 50 + 1 h 50 + 2 h 20 = 8 h; longest break 10 → 20 more.
     expect(ev.breakTopUpMin).toBe(20);
     expect(ev.workedMin).toBe(7 * 60 + 40);
-    expect(ev.explanation.join(" ")).toMatch(/längsta rasten var 10 min, 20 min till dras/);
+    expect(ev.explanation.join(" ")).toMatch(
+      /Rastregel 30 min per 5 h arbete i följd: 20 min till dras/,
+    );
   });
 
   it("en lång rast räcker även om det finns korta pauser", () => {
@@ -141,5 +141,65 @@ describe("minsta rast", () => {
     expect(validMinBreak({ afterMin: 300, minMin: 500 })).toBeUndefined();
     expect(validMinBreak({ afterMin: "300", minMin: 30 })).toBeUndefined();
     expect(validMinBreak({ afterMin: 300, minMin: 30 })).toEqual(RULE);
+  });
+
+  describe("räknas efter 3 h (ägarens regel: 30 min per 5 h i följd)", () => {
+    const OWNER = { afterMin: 300, minMin: 30, earliestMin: 180 };
+    const day = (...pairs: [string, string][]) =>
+      evaluateDay(
+        DAY,
+        ctx({ minBreak: OWNER, sessions: pairs.map(([a, b]) => session(DAY, a, b)) }),
+      );
+
+    it("lunch 12:00–12:30 efter 4 h räknas", () => {
+      const ev = day(["08:00", "12:00"], ["12:30", "16:30"]);
+      expect(ev.breakTopUpMin).toBeUndefined();
+      expect(ev.workedMin).toBe(480);
+    });
+
+    it("rast före 3 h (09:00) är bara flexminus; lunchen dras ändå", () => {
+      const ev = day(["08:00", "09:00"], ["09:30", "16:30"]);
+      expect(ev.breakTopUpMin).toBe(30);
+      expect(ev.workedMin).toBe(60 + 420 - 30);
+      expect(ev.explanation).toContain(
+        "Rastregel 30 min per 5 h arbete i följd (räknas efter 3 h): 30 min till dras",
+      );
+    });
+
+    it("för sen lunch (14:00 efter 6 h) räknas inte", () => {
+      const ev = day(["08:00", "14:00"], ["14:30", "17:00"]);
+      expect(ev.breakTopUpMin).toBe(30);
+    });
+
+    it("börjar 06, lunch 10:30 efter 4 h 30 räknas", () => {
+      const ev = day(["06:00", "10:30"], ["11:00", "15:00"]);
+      expect(ev.breakTopUpMin).toBeUndefined();
+    });
+
+    it("lång dag 07–19 med en lunch behöver en rast till", () => {
+      const ev = day(["07:00", "12:00"], ["12:30", "19:00"]);
+      // 5 h, lunch, then 6 h 30 in a row → a second 30 min break is deducted.
+      expect(ev.breakTopUpMin).toBe(30);
+      const ok = day(["07:00", "12:00"], ["12:30", "16:00"], ["16:30", "19:00"]);
+      expect(ok.breakTopUpMin).toBeUndefined();
+    });
+
+    it("kort rast efter 3 h fylls upp, som ägarens första exempel", () => {
+      const ev = day(["08:00", "12:00"], ["12:15", "16:00"]);
+      expect(ev.breakTopUpMin).toBe(15);
+      expect(ev.workedMin).toBe(450);
+    });
+
+    it("ett 5 h-pass utan rast behöver ingen rast", () => {
+      expect(day(["08:00", "13:00"]).breakTopUpMin).toBeUndefined();
+    });
+
+    it("validMinBreak behåller earliestMin bara om den är mindre än afterMin", () => {
+      expect(validMinBreak(OWNER)).toEqual(OWNER);
+      expect(validMinBreak({ afterMin: 300, minMin: 30, earliestMin: 400 })).toEqual({
+        afterMin: 300,
+        minMin: 30,
+      });
+    });
   });
 });

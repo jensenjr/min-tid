@@ -9,9 +9,10 @@
 //   and it is longer than `autoLunchThresholdMin` (default 300). Several sessions = the
 //   user punched out over lunch → nothing is deducted.
 // - Minimum break (`minBreak`, off unless set, e.g. 30 min after 5 h): on a day with more
-//   than `afterMin` worked minutes, the longest single break (a deducted break or a time
-//   stamped out between sessions; short pauses do not add up) is topped up to `minMin`.
-//   Only the shortfall is deducted.
+//   than `afterMin` minutes worked in a row needs a break of at least `minMin`. A time
+//   stamped out counts as that break only after `earliestMin` worked minutes (before
+//   that it is just unworked time); a shorter break is topped up, a missing one is
+//   deducted in full. Short pauses never add up. See breakRuleTopUp.
 // - flexDelta = worked − (norm − excused absence). A flex absence is "not worked" time
 //   that the bank pays for, so it is never deducted on top (it was counted twice before).
 // - Precedence for what was worked: open session (ongoing) > adjustment > completed
@@ -85,10 +86,9 @@ export type DayContext = {
   now?: number;
   autoLunchThresholdMin?: number;
   /**
-   * Minimum break (off when undefined, so min-tid is unchanged): a day with more than
-   * `afterMin` worked minutes must have one uninterrupted break of at least `minMin`. The
-   * longest single break (stamped out, registered or auto-lunch) counts; short pauses do
-   * not add up. The shortfall is deducted.
+   * Break rule (off when undefined): at most `afterMin` minutes of work in a row without
+   * a break of at least `minMin`; a break counts only after `earliestMin` worked minutes.
+   * The shortfall is deducted (see breakRuleTopUp).
    */
   minBreak?: MinBreakRule;
   confirmedDays?: Record<string, true>;
@@ -102,7 +102,11 @@ export type DayContext = {
   travelFor?: (date: string, cfg: DayConfig) => TravelMinutes | undefined;
 };
 
-export type MinBreakRule = { afterMin: number; minMin: number };
+/**
+ * "30 min per 5 h worked in a row, counted from 3 h": `{ afterMin: 300, minMin: 30,
+ * earliestMin: 180 }`. `earliestMin` defaults to 0.
+ */
+export type MinBreakRule = { afterMin: number; minMin: number; earliestMin?: number };
 
 export type DayEvaluation = {
   status: DayStatus;
@@ -160,28 +164,68 @@ export function validMinBreak(v: unknown): MinBreakRule | undefined {
   const r = v as Partial<MinBreakRule> | null | undefined;
   const after = validThreshold(r?.afterMin);
   const min = validThreshold(r?.minMin);
-  return after !== undefined && min !== undefined && min <= 240
-    ? { afterMin: after, minMin: min }
-    : undefined;
+  if (after === undefined || min === undefined || min > 240) return undefined;
+  const earliest = validBreak(r?.earliestMin);
+  return earliest !== undefined && earliest > 0 && earliest < after
+    ? { afterMin: after, minMin: min, earliestMin: earliest }
+    : { afterMin: after, minMin: min };
 }
 
-/** The longest single time stamped out between a day's sessions (open sessions end at `now`). */
-function longestGap(sessions: Session[], now: number): number {
-  const sorted = [...sessions].sort((a, b) => a.checkIn - b.checkIn);
-  let longest = 0;
+/**
+ * How much break the rule adds to a day. `intervals` are the day's worked stretches in
+ * minutes (sorted); `unplaced` are breaks with no clock time (a registered break, the
+ * auto-lunch), each assumed to sit where it is needed.
+ *
+ * Walking the day: `run` is the work since the last break. A time stamped out counts as
+ * a break only once `run >= earliestMin`; a long enough one resets `run`, a shorter one
+ * is remembered. When `run` passes `afterMin`, a break was needed in that stretch: the
+ * longest remembered short break is topped up to `minMin` (work after it continues the
+ * new stretch), else an unplaced break is used (topped up if short), else `minMin` is
+ * deducted in full. Short pauses never add up; time stamped out too early is only
+ * unworked time (flex minus), never the break.
+ */
+function breakRuleTopUp(
+  intervals: { a: number; b: number }[],
+  unplaced: number[],
+  rule: MinBreakRule,
+): number {
+  const earliest = rule.earliestMin ?? 0;
+  const free = [...unplaced];
+  let topUp = 0;
+  let run = 0;
+  let short: { len: number; runAt: number }[] = [];
   let end = -Infinity;
-  for (const s of sorted) {
-    const a = minuteOf(s.checkIn);
-    if (end !== -Infinity && a > end) longest = Math.max(longest, a - end);
-    end = Math.max(end, minuteOf(isOpen(s) ? now : (s.checkOut as number)));
+  for (const { a, b } of intervals) {
+    if (end !== -Infinity && a > end && run >= earliest) {
+      const gap = a - end;
+      if (gap >= rule.minMin) {
+        run = 0;
+        short = [];
+      } else {
+        short.push({ len: gap, runAt: run });
+      }
+    }
+    run += Math.max(0, b - Math.max(a, end));
+    end = Math.max(end, b);
+    while (run > rule.afterMin) {
+      if (short.length) {
+        // Longest short break; on a tie the latest, which leaves the shortest new stretch.
+        const best = short.reduce((x, y) =>
+          y.len > x.len || (y.len === x.len && y.runAt > x.runAt) ? y : x,
+        );
+        topUp += rule.minMin - best.len;
+        run -= best.runAt;
+        short = short
+          .filter((x) => x.runAt > best.runAt)
+          .map((x) => ({ ...x, runAt: x.runAt - best.runAt }));
+      } else {
+        const b0 = free.shift();
+        topUp += b0 === undefined ? rule.minMin : Math.max(0, rule.minMin - b0);
+        run -= rule.afterMin;
+      }
+    }
   }
-  return longest;
-}
-
-/** The minimum-break shortfall for a day: how much more break must be deducted. */
-function breakTopUp(rawMin: number, takenMin: number, rule: MinBreakRule | undefined): number {
-  if (!rule || rawMin <= rule.afterMin) return 0;
-  return Math.max(0, rule.minMin - takenMin);
+  return topUp;
 }
 
 export function validBreak(v: unknown): number | undefined {
@@ -253,7 +297,6 @@ export function workedFromSessions(
   workedMin: number;
   rule: BreakRule;
   topUpMin: number;
-  takenMin: number;
 } {
   let rawMin = 0;
   for (const s of sessions) rawMin += sessionMinutes(s, now);
@@ -270,16 +313,24 @@ export function workedFromSessions(
   } else {
     rule = sessions.length === 1 ? "short" : "none";
   }
-  // The minimum break must be ONE uninterrupted break: short pauses do not add up. A
-  // registered break per session or the auto-lunch counts as one break each.
-  const longestRegistered =
-    rule === "registered"
-      ? Math.max(0, ...sessions.map((s) => validBreak(s.breakMinutes) ?? 0))
-      : breakMin;
-  const takenMin = Math.max(longestRegistered, longestGap(sessions, now));
-  const topUpMin = breakTopUp(rawMin, takenMin, minBreak);
+  let topUpMin = 0;
+  if (minBreak) {
+    const intervals = [...sessions]
+      .sort((x, y) => x.checkIn - y.checkIn)
+      .map((s) => ({
+        a: minuteOf(s.checkIn),
+        b: minuteOf(isOpen(s) ? now : (s.checkOut as number)),
+      }));
+    const unplaced =
+      rule === "registered"
+        ? sessions.map((s) => validBreak(s.breakMinutes) ?? 0).filter((m) => m > 0)
+        : breakMin > 0
+          ? [breakMin]
+          : [];
+    topUpMin = breakRuleTopUp(intervals, unplaced, minBreak);
+  }
   breakMin += topUpMin;
-  return { rawMin, breakMin, workedMin: Math.max(0, rawMin - breakMin), rule, topUpMin, takenMin };
+  return { rawMin, breakMin, workedMin: Math.max(0, rawMin - breakMin), rule, topUpMin };
 }
 
 /**
@@ -313,7 +364,6 @@ type AdjustedWork = {
   breakMin: number;
   rule: BreakRule;
   topUpMin: number;
-  takenMin: number;
 };
 
 /**
@@ -342,8 +392,9 @@ function adjustedWork(
     breakMin = Math.max(0, cfg.lunchMinutes || 0);
     rule = "auto-lunch";
   }
-  const takenMin = breakMin;
-  const topUpMin = breakTopUp(span, takenMin, minBreak);
+  const topUpMin = minBreak
+    ? breakRuleTopUp([{ a: 0, b: span }], breakMin > 0 ? [breakMin] : [], minBreak)
+    : 0;
   breakMin += topUpMin;
   return {
     start,
@@ -352,7 +403,6 @@ function adjustedWork(
     breakMin,
     rule,
     topUpMin,
-    takenMin,
   };
 }
 
@@ -362,8 +412,17 @@ function normLine(cfg: DayConfig, normMin: number): string {
   return `Norm ${fmtDuration(normMin)} (${cfg.startTime}–${cfg.endTime}, ${lunch})`;
 }
 
-function topUpLine(rule: MinBreakRule, takenMin: number, topUpMin: number): string {
-  return `Minsta rast ${fmtDuration(rule.minMin)} efter ${fmtDuration(rule.afterMin)} arbete: längsta rasten var ${fmtDuration(takenMin)}, ${fmtDuration(topUpMin)} till dras`;
+/** The suggested rule when turned on: 30 min per 5 h of work in a row, counted from 3 h. */
+export const DEFAULT_BREAK_RULE: MinBreakRule = { afterMin: 300, minMin: 30, earliestMin: 180 };
+
+/** "Rastregel 30 min per 5 h arbete i följd (räknas efter 3 h): 15 min till dras". */
+export function describeBreakRule(rule: MinBreakRule): string {
+  const from = rule.earliestMin ? ` (räknas efter ${fmtDuration(rule.earliestMin)})` : "";
+  return `${fmtDuration(rule.minMin)} per ${fmtDuration(rule.afterMin)} arbete i följd${from}`;
+}
+
+function topUpLine(rule: MinBreakRule, topUpMin: number): string {
+  return `Rastregel ${describeBreakRule(rule)}: ${fmtDuration(topUpMin)} till dras`;
 }
 
 function breakLine(rule: BreakRule, breakMin: number, thresholdMin: number): string | null {
@@ -498,7 +557,7 @@ export function evaluateDay(
           : "ingen rast";
     say(`Justerad dag ${adj.start}–${adj.end}, ${brk}`);
     topUp = adj.topUpMin;
-    if (topUp > 0 && minBreak) say(topUpLine(minBreak, adj.takenMin, topUp));
+    if (topUp > 0 && minBreak) say(topUpLine(minBreak, topUp));
     if (adjRaw?.note) say(`Notering: ${adjRaw.note}`);
     if (done.length > 0) say("Stämplingarna den här dagen ersätts av justeringen");
     say(`Arbetat ${fmtDuration(workedMin)}`);
@@ -513,7 +572,7 @@ export function evaluateDay(
       `Stämplat ${done.map((s) => `${hmLocal(s.checkIn)}–${hmLocal(s.checkOut as number)}`).join(", ")}`,
     );
     say(breakLine(w.rule, w.breakMin - w.topUpMin, threshold));
-    if (topUp > 0 && minBreak) say(topUpLine(minBreak, w.takenMin, topUp));
+    if (topUp > 0 && minBreak) say(topUpLine(minBreak, topUp));
     say(`Arbetat ${fmtDuration(workedMin)}`);
   } else if (!scheduled) {
     status = "off";

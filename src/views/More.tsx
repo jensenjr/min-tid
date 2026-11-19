@@ -8,12 +8,89 @@ import { MoreRow, Sheet } from "../components/ui";
 import { CHANGELOG_URL, RELEASE_NOTES, fmtReleaseDate } from "../lib/releaseNotes";
 import { REPORT_STYLES, reportStyle, reportStyleSummary } from "../lib/reportStyle";
 import type { ReportingMode } from "../lib/types";
+import { DEFAULT_BREAK_RULE, describeBreakRule, fmtDuration, type MinBreakRule } from "../lib/days";
 import type { MoreSlots } from "./types";
 
 // Categories that are paid from the flex bank; every other category lowers the day's norm.
 const FLEX_CATEGORIES: AbsenceCategory[] = ["flex"];
 
-function AbsenceRulesSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+/** "Rastregel": off by default; when on, the shortfall of a required break is deducted. */
+function BreakRuleEditor({
+  rule,
+  onChange,
+}: {
+  rule: MinBreakRule | null;
+  onChange: (rule: MinBreakRule | null) => void;
+}) {
+  const r = rule ?? DEFAULT_BREAK_RULE;
+  const num = (label: string, value: number, unit: string, set: (v: number) => void) => (
+    <label className="flex items-center justify-between gap-3 text-[13px] py-1.5">
+      <span>{label}</span>
+      <span className="flex items-center gap-1.5">
+        <input
+          type="number"
+          inputMode="decimal"
+          min={0}
+          step={unit === "h" ? 0.5 : 5}
+          value={unit === "h" ? value / 60 : value}
+          onChange={(e) => {
+            const n = Number(e.target.value);
+            if (Number.isFinite(n) && n > 0) set(Math.round(unit === "h" ? n * 60 : n));
+          }}
+          className="w-[72px] rounded-[10px] bg-pc-apricot border border-pc-line px-2 py-1.5 text-right font-bold"
+        />
+        <span className="text-pc-muted w-6">{unit}</span>
+      </span>
+    </label>
+  );
+  return (
+    <div className="rounded-[16px] border border-pc-line px-4 py-3 mb-5">
+      <label className="flex items-center justify-between gap-3">
+        <span>
+          <span className="block font-bold text-[14px]">Rastregel</span>
+          <span className="block text-[12px] text-pc-muted leading-snug">
+            {rule ? describeBreakRule(rule) : "Av – ingen minsta rast dras"}
+          </span>
+        </span>
+        <input
+          type="checkbox"
+          role="switch"
+          aria-label="Rastregel"
+          checked={!!rule}
+          onChange={(e) => onChange(e.target.checked ? r : null)}
+          className="w-5 h-5 accent-[var(--pc-orange)]"
+        />
+      </label>
+      {rule && (
+        <div className="mt-2 border-t border-pc-line pt-2">
+          {num("Minsta rast", r.minMin, "min", (v) => onChange({ ...r, minMin: Math.min(v, 240) }))}
+          {num("Per arbete i följd", r.afterMin, "h", (v) => onChange({ ...r, afterMin: v }))}
+          {num("Räknas som rast efter", r.earliestMin ?? 0, "h", (v) =>
+            onChange({ ...r, earliestMin: v < r.afterMin ? v : r.earliestMin }),
+          )}
+          <p className="text-[12px] text-pc-muted leading-snug mt-2">
+            Arbetar du mer än {fmtDuration(r.afterMin)} i följd utan en rast på minst{" "}
+            {fmtDuration(r.minMin)} dras det som fattas. Stämplar du ut innan du arbetat{" "}
+            {fmtDuration(r.earliestMin ?? 0)} räknas det inte som rasten, bara som flex. Korta
+            pauser räknas inte ihop. Gäller alla dagar, även bakåt.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AbsenceRulesSheet({
+  open,
+  onClose,
+  breakRule,
+  onSetBreakRule,
+}: {
+  open: boolean;
+  onClose: () => void;
+  breakRule: MinBreakRule | null;
+  onSetBreakRule: (rule: MinBreakRule | null) => void;
+}) {
   const entries = Object.entries(ABSENCE_META) as [
     AbsenceCategory,
     { emoji: string; label: string },
@@ -41,9 +118,11 @@ function AbsenceRulesSheet({ open, onClose }: { open: boolean; onClose: () => vo
         </li>
         <li>
           <b>Lunch.</b> Schemats lunch dras bara av när du har ett enda pass längre än 5 timmar. Har
-          du stämplat ut över lunchen dras inget av. En rast du anger själv gäller alltid.
+          du stämplat ut över lunchen dras inget av. En rast du anger själv gäller alltid. Med
+          rastregeln nedan påslagen dras det som fattas av en för kort rast.
         </li>
       </ul>
+      <BreakRuleEditor rule={breakRule} onChange={onSetBreakRule} />
       <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-pc-muted mb-2">
         Kategorier
       </div>
@@ -240,6 +319,9 @@ export type MoreProps = {
   onOpenAutomation: () => void;
   /** Demo mode: sync is off and the sheet says so. */
   demo?: boolean;
+  /** "Rastregel" in Frånvaroregler; null = off. */
+  breakRule: MinBreakRule | null;
+  onSetBreakRule: (rule: MinBreakRule | null) => void;
   /** Wave 3 integration slots: travelRules (PR 8), vacation (PR 7), excelImport (PR 6). */
   slots?: MoreSlots;
 };
@@ -347,7 +429,12 @@ export default function More(p: MoreProps) {
         </div>
       </div>
 
-      <AbsenceRulesSheet open={rules} onClose={() => setRules(false)} />
+      <AbsenceRulesSheet
+        open={rules}
+        onClose={() => setRules(false)}
+        breakRule={p.breakRule}
+        onSetBreakRule={p.onSetBreakRule}
+      />
       <AboutSheet open={about} onClose={() => setAbout(false)} />
       <ReportStyleSheet
         open={style}

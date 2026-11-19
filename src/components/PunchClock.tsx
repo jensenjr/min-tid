@@ -74,6 +74,7 @@ import {
   sessionsOn,
   getAbsencesForDate,
   type DayContext,
+  type MinBreakRule,
 } from "../lib/days";
 import { computeFlex, computeWeeklyFlex } from "../lib/flex";
 import { parseVacation, vacationBalance, vacationLine } from "../lib/vacation";
@@ -283,6 +284,7 @@ export default function PunchClock() {
   const [schedules, setSchedules] = useState<SchedulePeriod[]>(boot.schedules);
   const [reportingMode, setReportingMode] = useState<ReportingMode | undefined>(boot.reportingMode);
   const [autoLunchThresholdMin, setAutoLunchThresholdMin] = useState(boot.autoLunchThresholdMin);
+  const [minBreak, setMinBreak] = useState<MinBreakRule | null>(boot.minBreak ?? null);
   const [confirmedDays, setConfirmedDays] = useState<Record<string, true>>(
     boot.confirmedDays ?? {},
   );
@@ -498,6 +500,7 @@ export default function PunchClock() {
     const ds = migrateDayStatusState(s);
     setReportingMode(ds.reportingMode);
     setAutoLunchThresholdMin(ds.autoLunchThresholdMin);
+    setMinBreak(ds.minBreak);
     setConfirmedDays(ds.confirmedDays);
     setLockedMonths(ds.lockedMonths);
     setDayAdjustments(ds.dayAdjustments);
@@ -635,6 +638,7 @@ export default function PunchClock() {
         trackingStartDate,
         scheduleExceptions,
         autoLunchThresholdMin,
+        minBreak,
         confirmedDays,
         lockedMonths,
         dayAdjustments,
@@ -660,6 +664,7 @@ export default function PunchClock() {
       trackingStartDate,
       scheduleExceptions,
       autoLunchThresholdMin,
+      minBreak,
       confirmedDays,
       lockedMonths,
       dayAdjustments,
@@ -690,6 +695,7 @@ export default function PunchClock() {
     trackingStartDate,
     scheduleExceptions,
     autoLunchThresholdMin,
+    minBreak,
     confirmedDays,
     lockedMonths,
     dayAdjustments,
@@ -1175,6 +1181,7 @@ export default function PunchClock() {
         reportingMode: resolvedMode,
         trackingStartDate,
         autoLunchThresholdMin,
+        minBreak,
         confirmedDays,
         lockedMonths,
         dayAdjustments,
@@ -1265,6 +1272,7 @@ export default function PunchClock() {
     today: todayDate,
     now: now(),
     autoLunchThresholdMin,
+    minBreak: minBreak ?? undefined,
     confirmedDays,
     lockedMonths,
     dayAdjustments,
@@ -1684,6 +1692,8 @@ export default function PunchClock() {
                     void pullNow({ manual: true });
                   }}
                   onOpenAutomation={() => setAutomationModal(true)}
+                  breakRule={minBreak}
+                  onSetBreakRule={setMinBreak}
                 />
               )}
               <div className="h-4" />

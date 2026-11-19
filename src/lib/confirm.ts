@@ -22,8 +22,10 @@ import {
   type DayContext,
   evaluateDay,
   isHm,
+  type MinBreakRule,
   resolveReportingMode,
   validBreak,
+  validMinBreak,
   validThreshold,
 } from "./days";
 import type { AuditAction, AuditEntry, DayAdjustment, LockedMonth, ReportingMode } from "./types";
@@ -160,6 +162,8 @@ export function unlockMonth(
 export type DayStatusState = {
   reportingMode: ReportingMode;
   autoLunchThresholdMin: number;
+  /** Break rule, null = off (the default; min-tid users turn it on in Frånvaroregler). */
+  minBreak: MinBreakRule | null;
   confirmedDays: Record<string, true>;
   lockedMonths: Record<string, LockedMonth>;
   dayAdjustments: Record<string, DayAdjustment>;
@@ -171,6 +175,7 @@ export type RawDayStatus = {
   reportingMode?: unknown;
   sessions?: unknown;
   autoLunchThresholdMin?: unknown;
+  minBreak?: unknown;
   confirmedDays?: unknown;
   lockedMonths?: unknown;
   dayAdjustments?: unknown;
@@ -238,6 +243,7 @@ export function migrateDayStatusState(raw: RawDayStatus): DayStatusState {
     reportingMode: resolveReportingMode(raw),
     autoLunchThresholdMin:
       validThreshold(raw.autoLunchThresholdMin) ?? DEFAULT_AUTO_LUNCH_THRESHOLD_MIN,
+    minBreak: validMinBreak(raw.minBreak) ?? null,
     confirmedDays: parseConfirmedDays(raw.confirmedDays),
     lockedMonths: parseLockedMonths(raw.lockedMonths),
     dayAdjustments: parseDayAdjustments(raw.dayAdjustments),
@@ -263,6 +269,11 @@ export function mergeDayStatusState(
       validThreshold(local.autoLunchThresholdMin) ??
       validThreshold(server.autoLunchThresholdMin) ??
       DEFAULT_AUTO_LUNCH_THRESHOLD_MIN,
+    // A local scalar: the local choice wins, also an explicit "off" (null).
+    minBreak:
+      local.minBreak !== undefined
+        ? (validMinBreak(local.minBreak) ?? null)
+        : (validMinBreak(server.minBreak) ?? null),
     confirmedDays: {
       ...parseConfirmedDays(server.confirmedDays),
       ...parseConfirmedDays(local.confirmedDays),
